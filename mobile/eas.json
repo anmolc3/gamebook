@@ -16,8 +16,8 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_URL.railway.app/api/v1",
-        "EXPO_PUBLIC_SOCKET_URL": "https://YOUR_RAILWAY_URL.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://gamebook-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_SOCKET_URL": "https://gamebook-production.up.railway.app"
       }
     },
     "production": {
@@ -25,8 +25,8 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_URL.railway.app/api/v1",
-        "EXPO_PUBLIC_SOCKET_URL": "https://YOUR_RAILWAY_URL.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://gamebook-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_SOCKET_URL": "https://gamebook-production.up.railway.app"
       }
     }
   },
