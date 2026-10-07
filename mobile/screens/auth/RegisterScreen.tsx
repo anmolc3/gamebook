@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   SafeAreaView,
   ScrollView,
@@ -63,13 +64,16 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
               style={[
                 styles.logoBadge,
                 {
-                  backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
+                  backgroundColor: 'transparent',
+                  borderColor: 'transparent',
                 },
-                theme.shadows.soft,
               ]}
             >
-              <Icon name="crown" size={36} color={theme.colors.primary} />
+              <Image
+                source={require('../../assets/icon.png')}
+                style={{ width: 84, height: 84, borderRadius: 22 }}
+                resizeMode="cover"
+              />
             </View>
             <Typography variant="headingLarge" align="center" style={styles.title}>
               Create Your Profile

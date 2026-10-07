@@ -14,6 +14,7 @@ import {
   getSoloGameInfo,
   BOT_AVATARS,
 } from '../../constants/soloGames';
+import { supportsSoloMode } from '../../constants/gameCapabilities';
 
 export type GameModeSelection = 'SOLO' | 'FRIENDS' | 'ONLINE';
 
@@ -43,22 +44,29 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
 }) => {
   const { theme } = useTheme();
 
+  const isSoloSupported = supportsSoloMode(gameId);
   const gameInfo = getSoloGameInfo(gameId);
   const gameName = gameInfo?.name || gameId;
 
-  const [selectedMode, setSelectedMode] = useState<GameModeSelection>('SOLO');
+  const [selectedMode, setSelectedMode] = useState<GameModeSelection>(
+    isSoloSupported ? 'SOLO' : 'FRIENDS'
+  );
   const [selectedDifficulty, setSelectedDifficulty] = useState<AiDifficulty>(
     gameInfo?.defaultDifficulty || 'MEDIUM'
   );
   const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
-    if (visible && gameInfo) {
-      setSelectedDifficulty(gameInfo.defaultDifficulty || 'MEDIUM');
-      setSelectedMode('SOLO');
+    if (visible) {
+      if (isSoloSupported) {
+        setSelectedDifficulty(gameInfo?.defaultDifficulty || 'MEDIUM');
+        setSelectedMode('SOLO');
+      } else {
+        setSelectedMode('FRIENDS');
+      }
       setIsStarting(false);
     }
-  }, [visible, gameId]);
+  }, [visible, gameId, isSoloSupported]);
 
   const botId = DIFFICULTY_BOT_MAP[selectedDifficulty] || 'BOT_NOVA';
   const botInfo = BOT_AVATARS[botId] || {
@@ -118,30 +126,32 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Mode Selector Tabs (Requirement 9: [ Solo ] [ Play with Friends ] [ Online ]) */}
+          {/* Mode Selector Tabs (Strict Capability: Only show Solo tab if supported) */}
           <View style={[styles.tabsRow, { backgroundColor: theme.colors.surface }]}>
-            <TouchableOpacity
-              style={[
-                styles.tabBtn,
-                selectedMode === 'SOLO' && { backgroundColor: theme.colors.surfaceElevated },
-              ]}
-              onPress={() => setSelectedMode('SOLO')}
-              activeOpacity={0.8}
-            >
-              <Text
+            {isSoloSupported && (
+              <TouchableOpacity
                 style={[
-                  styles.tabBtnText,
-                  {
-                    color:
-                      selectedMode === 'SOLO'
-                        ? theme.colors.primary
-                        : theme.colors.textSecondary,
-                  },
+                  styles.tabBtn,
+                  selectedMode === 'SOLO' && { backgroundColor: theme.colors.surfaceElevated },
                 ]}
+                onPress={() => setSelectedMode('SOLO')}
+                activeOpacity={0.8}
               >
-                Solo
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    {
+                      color:
+                        selectedMode === 'SOLO'
+                          ? theme.colors.primary
+                          : theme.colors.textSecondary,
+                    },
+                  ]}
+                >
+                  Solo
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={[

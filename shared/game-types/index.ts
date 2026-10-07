@@ -90,10 +90,13 @@ export type GameType =
 
 export type RoomStatus = 'WAITING' | 'STARTING' | 'PLAYING' | 'FINISHED';
 
+export type SupportedGameMode = 'SOLO' | 'PRIVATE' | 'MATCHMAKING';
+
 export interface GameDefinition {
   id: GameType;
   name: string;
   category: GameCategory;
+  supportedModes?: SupportedGameMode[];
   minPlayers: number;
   maxPlayers: number;
   defaultPlayers: number;
