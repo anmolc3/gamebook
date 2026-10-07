@@ -1,0 +1,429 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum PresenceStatus {
+  ONLINE
+  IN_GAME
+  AWAY
+  OFFLINE
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  GAME_INVITE
+  GAME_RESULT
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+enum GameType {
+  // Category A: Core Board Games
+  TICTACTOE
+  LUDO
+  CHESS
+  CHECKERS
+  CONNECT_FOUR
+  CARROM
+  SNAKES_AND_LADDERS
+  BACKGAMMON
+  REVERSI
+  GOMOKU
+  BATTLESHIP
+  DOMINOES
+  MANCALA
+  CHINESE_CHECKERS
+
+  // Category B: Card Games
+  CARDS
+  UNO_STYLE
+  HEARTS
+  SPADES
+  RUMMY
+  GIN_RUMMY
+  CRAZY_EIGHTS
+  GO_FISH
+  WAR
+  DURAK
+  PRESIDENT
+  BLACKJACK
+  POKER
+
+  // Category C: Casual Multiplayer
+  POOL_8_BALL
+  MINI_GOLF
+  AIR_HOCKEY
+  DARTS
+  BOWLING
+  TABLE_TENNIS
+  WORD_SEARCH
+  HANGMAN
+  MEMORY_MATCH
+  QUIZ_BATTLE
+  TRIVIA
+  WORD_BATTLE
+
+  // Category D: Fast Competitive Games
+  REACTION_TEST
+  ROCK_PAPER_SCISSORS
+  RPS_TOURNAMENT
+  NUMBER_GUESS
+  SPEED_TAP
+  COLOR_MATCH
+  MATH_BATTLE
+  QUICK_DRAW
+  WORD_SCRAMBLE
+  TYPING_RACE
+
+  // Category E: Strategy & Puzzle Games
+  SUDOKU_BATTLE
+  TWENTY_FORTY_EIGHT // 2048
+  MINESWEEPER_DUEL
+  CROSSWORD_BATTLE
+  WORDLE_DUEL
+  SEQUENCE
+  MASTERMIND
+  PATTERN_MATCH
+  PUZZLE_DUEL
+
+  // Category F: Party & Social Games
+  WOULD_YOU_RATHER
+  TRUTH_OR_DARE
+  CHARADES
+  GUESS_PICTURE
+  GUESS_WORD
+  GUESS_SONG
+  WHO_AM_I
+  IMPOSTER
+  MAFIA
+  DRAW_AND_GUESS
+  PICTIONARY
+  NEVER_HAVE_I_EVER
+  THIS_OR_THAT
+  TWO_TRUTHS_AND_A_LIE
+}
+
+enum RoomStatus {
+  WAITING
+  PLAYING
+  FINISHED
+}
+
+enum GameMode {
+  SOLO
+  MULTIPLAYER
+}
+
+enum AiDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+enum StoryMediaType {
+  IMAGE
+  VIDEO
+  TEXT
+}
+
+enum StoryPrivacy {
+  FRIENDS
+  SELECTED
+  PRIVATE
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  passwordHash String
+  role         Role      @default(USER)
+  pushToken    String?   // Expo push notification token (registered by mobile client)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  profile           Profile?
+  sentRequests      FriendRequest[]      @relation("SentRequests")
+  receivedRequests  FriendRequest[]      @relation("ReceivedRequests")
+  friendships       Friendship[]         @relation("UserFriendships")
+  friendOf          Friendship[]         @relation("FriendOfUser")
+  blockedUsers      BlockedUser[]        @relation("UserBlocks")
+  blockedBy         BlockedUser[]        @relation("BlockedByUsers")
+  conversations     ConversationMember[]
+  messages          Message[]
+  hostedRooms       GameRoom[]           @relation("HostedRooms")
+  gameParticipations GamePlayer[]
+  wonGames          GameResult[]         @relation("WonGames")
+  gameStats         GameStatistics[]
+  stories           Story[]
+  storyViews        StoryView[]
+  storyReplies      StoryReply[]
+  notifications     Notification[]
+  achievements      UserAchievement[]
+
+  @@index([username])
+  @@index([email])
+}
+
+model Profile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName     String
+  bio             String?
+  avatarUrl       String?
+  themePreference String   @default("coralMarble")
+  appearanceMode  String   @default("system")
+  isOnline        Boolean  @default(false)
+  lastSeen        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  sender   User @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@index([receiverId, status])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String
+  friendId  String
+  createdAt DateTime @default(now())
+
+  user   User @relation("UserFriendships", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendOfUser", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+  @@index([userId])
+}
+
+model BlockedUser {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker User @relation("UserBlocks", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedByUsers", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+}
+
+model ConversationMember {
+  id             String   @id @default(uuid())
+  conversationId String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  type           MessageType   @default(TEXT)
+  status         MessageStatus @default(SENT)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+}
+
+model GameRoom {
+  id         String     @id @default(uuid())
+  code       String     @unique
+  hostId     String
+  gameType   GameType
+  status     RoomStatus @default(WAITING)
+  isPrivate  Boolean    @default(true)
+  maxPlayers Int        @default(2)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  host    User         @relation("HostedRooms", fields: [hostId], references: [id])
+  players GamePlayer[]
+
+  @@index([code])
+}
+
+model GamePlayer {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  slotIndex Int
+  isReady   Boolean  @default(false)
+  score     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  room GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+model GameResult {
+  id              String       @id @default(uuid())
+  gameType        GameType
+  gameMode        GameMode     @default(MULTIPLAYER)
+  winnerId        String?
+  durationSeconds Int
+  playersData     Json
+  finalState      Json
+  // Solo-mode extras (null for multiplayer records)
+  aiDifficulty    AiDifficulty?
+  soloScore       Int?
+  aiPlayerName    String?
+  createdAt       DateTime     @default(now())
+
+  winner User? @relation("WonGames", fields: [winnerId], references: [id])
+
+  @@index([gameType, gameMode, createdAt])
+  @@index([winnerId, gameMode])
+}
+
+model GameStatistics {
+  id                String   @id @default(uuid())
+  userId            String
+  gameType          GameType
+  // Multiplayer stats
+  matchesPlayed     Int      @default(0)
+  matchesWon        Int      @default(0)
+  matchesLost       Int      @default(0)
+  currentStreak     Int      @default(0)
+  highestStreak     Int      @default(0)
+  // Solo stats (separate from competitive multiplayer)
+  soloMatchesPlayed Int      @default(0)
+  soloMatchesWon    Int      @default(0)
+  bestSoloScore     Int      @default(0)
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameType])
+}
+
+model Story {
+  id        String         @id @default(uuid())
+  userId    String
+  mediaUrl  String
+  mediaType StoryMediaType @default(IMAGE)
+  caption   String?
+  privacy   StoryPrivacy   @default(FRIENDS)
+  expiresAt DateTime
+  createdAt DateTime       @default(now())
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views   StoryView[]
+  replies StoryReply[]
+
+  @@index([expiresAt, userId])
+}
+
+model StoryView {
+  id       String   @id @default(uuid())
+  storyId  String
+  viewerId String
+  viewedAt DateTime @default(now())
+
+  story  Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  viewer User  @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, viewerId])
+}
+
+model StoryReply {
+  id        String   @id @default(uuid())
+  storyId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model Achievement {
+  id          String            @id @default(uuid())
+  key         String            @unique
+  title       String
+  description String
+  iconName    String
+  users       UserAchievement[]
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid())
+  userId        String
+  achievementId String
+  unlockedAt    DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}

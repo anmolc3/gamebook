@@ -1,0 +1,8 @@
+{
+  "name": "@gameapp/shared",
+  "version": "1.0.0",
+  "description": "Shared types, constants, and socket event contracts",
+  "main": "index.ts",
+  "types": "index.ts",
+  "private": true
+}
