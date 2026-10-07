@@ -72,7 +72,7 @@ const GAME_IMAGES: Record<string, ReturnType<typeof require>> = {
   GUESS_WORD:        require('../assets/images/Word Guess Duel Badge.webp'),
   GUESS_SONG:        require('../assets/images/Name That Tune_ Neon Sound Splash.webp'),
   WHO_AM_I:          require('../assets/images/Trivia Duel Showdown.webp'),
-  IMPOSTER:          require("../assets/images/The Imposter's Secret Crew.webp"),
+  IMPOSTER:          require('../assets/images/The Imposter Secret Crew.webp'),
   MAFIA:             require('../assets/images/Mafia vs Werewolf_ Moonlit Showdown.webp'),
   DRAW_AND_GUESS:    require('../assets/images/Draw & Guess Live Game Logo.webp'),
   PICTIONARY:        require('../assets/images/Pictionary Duel_ Colorful Sketch Showdown.webp'),
