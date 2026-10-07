@@ -9,11 +9,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0D1117"
-    },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
