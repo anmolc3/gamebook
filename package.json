@@ -5,7 +5,10 @@
   "description": "Full-stack Social Gaming Arena Platform",
   "scripts": {
     "build": "cd server && npm install && npx prisma generate && npm run build",
-    "start": "cd server && npx prisma db push --accept-data-loss && node dist/server/src/index.js"
+    "start": "cd server && npx prisma db push --accept-data-loss && node dist/server/src/index.js",
+    "server": "npm start",
+    "mobile": "cd mobile && npx expo start",
+    "mobile:web": "cd mobile && npx expo start --web"
   },
   "engines": {
     "node": ">=18"
