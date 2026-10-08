@@ -1,20 +1,39 @@
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsType from 'expo-notifications';
 import * as Device from 'expo-device';
-import Constants from 'expo-constants';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiPost } from './api';
 
+// Detect whether running inside Expo Go
+const isExpoGo =
+  Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
+  (Constants as any).appOwnership === 'expo';
+
+// Dynamically require expo-notifications only outside Expo Go (or non-Android)
+// to prevent Expo SDK 53+ fatal error:
+// "expo-notifications: Android Push notifications functionality provided by expo-notifications was removed from Expo Go"
+let Notifications: typeof NotificationsType | null = null;
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+  } catch (err) {
+    console.warn('[Notifications] Could not load expo-notifications module:', err);
+  }
+}
+
 // ─── Configure foreground notification behaviour ───────────────────────────────
 // Show alerts even when the app is in the foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (Notifications?.setNotificationHandler) {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  });
+}
 
 // ─── Notification channel IDs ─────────────────────────────────────────────────
 export const CHANNELS = {
@@ -59,6 +78,15 @@ export class NotificationService {
    * and register it with the server. Safe to call multiple times.
    */
   static async initialize(): Promise<string | null> {
+    if (isExpoGo) {
+      console.log('[Notifications] Push notifications are not supported in Expo Go (SDK 53+). Use an EAS development build for push testing.');
+      return null;
+    }
+
+    if (!Notifications) {
+      return null;
+    }
+
     // Push notifications only work on physical devices
     if (!Device.isDevice) {
       console.log('[Notifications] Push notifications are not supported on simulators/emulators.');
@@ -134,6 +162,8 @@ export class NotificationService {
   // ─── Android channel setup ────────────────────────────────────────────────────
 
   private static async createAndroidChannels(): Promise<void> {
+    if (!Notifications) return;
+
     await Promise.all([
       Notifications.setNotificationChannelAsync(CHANNELS.DEFAULT, {
         name: 'General',
@@ -192,8 +222,9 @@ export class NotificationService {
    * Returns a cleanup function.
    */
   static addForegroundListener(
-    handler: (notification: Notifications.Notification) => void
+    handler: (notification: NotificationsType.Notification) => void
   ): () => void {
+    if (!Notifications) return () => {};
     const subscription = Notifications.addNotificationReceivedListener(handler);
     return () => subscription.remove();
   }
@@ -203,8 +234,9 @@ export class NotificationService {
    * Returns a cleanup function.
    */
   static addResponseListener(
-    handler: (response: Notifications.NotificationResponse) => void
+    handler: (response: NotificationsType.NotificationResponse) => void
   ): () => void {
+    if (!Notifications) return () => {};
     const subscription = Notifications.addNotificationResponseReceivedListener(handler);
     return () => subscription.remove();
   }
@@ -213,7 +245,8 @@ export class NotificationService {
    * Get the last notification response (app opened via notification tap).
    * Useful on initial mount to handle cold-start taps.
    */
-  static async getLastNotificationResponse(): Promise<Notifications.NotificationResponse | null> {
+  static async getLastNotificationResponse(): Promise<NotificationsType.NotificationResponse | null> {
+    if (!Notifications) return null;
     return Notifications.getLastNotificationResponseAsync();
   }
 
@@ -221,6 +254,7 @@ export class NotificationService {
    * Clear the badge count (iOS / Android badge).
    */
   static async clearBadge(): Promise<void> {
+    if (!Notifications) return;
     await Notifications.setBadgeCountAsync(0);
   }
 
@@ -233,6 +267,7 @@ export class NotificationService {
     data?: NotificationData,
     delaySeconds = 0
   ): Promise<string> {
+    if (!Notifications) return '';
     return Notifications.scheduleNotificationAsync({
       content: {
         title,
