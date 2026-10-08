@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, ThemeId, AppearanceMode, getThemeGradients } from '../../theme';
@@ -71,6 +72,14 @@ const THEME_DETAILS: Record<ThemeId, ThemeDetail> = {
 export const ThemesScreen: React.FC<ThemesScreenProps> = ({ onBack }) => {
   const { theme, themeId, appearanceMode, effectiveMode, setThemeId, setAppearanceMode } =
     useTheme();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 450);
+  }, []);
 
   const appearanceOptions: {
     mode: AppearanceMode;
@@ -121,7 +130,18 @@ export const ThemesScreen: React.FC<ThemesScreenProps> = ({ onBack }) => {
         <View style={styles.headerRightPlaceholder} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
         {/* Banner Hero */}
         <LinearGradient
           colors={getThemeGradients(themeId, effectiveMode).hero}

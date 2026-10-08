@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../../components/atoms/Avatar';
@@ -59,13 +60,14 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
   const [history, setHistory] = useState<MatchHistoryItem[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, [activeTab]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       if (activeTab === 'global') {
         const res = await apiGet<{ leaderboard: LeaderboardPlayer[] }>('/games/leaderboard/global');
@@ -96,7 +98,13 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
       }
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchData(true);
   };
 
   const topThree = leaderboard.slice(0, 3);
@@ -182,7 +190,17 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
         </View>
       ) : activeTab === 'history' ? (
         /* Match History Feed */
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+            />
+          }
+        >
           {history.length === 0 ? (
             <View style={styles.emptyContainer}>
               <ClockIcon size={40} color={theme.colors.textSecondary} />
@@ -243,7 +261,17 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
         </ScrollView>
       ) : (
         /* Global & Friends Leaderboard */
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+            />
+          }
+        >
           {/* Top 3 Podium */}
           {topThree.length >= 3 && (
             <View style={styles.podiumContainer}>

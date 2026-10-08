@@ -197,11 +197,12 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     ) => {
       if (!state) return;
 
-      // Audio checks: detect token capture and home finishes
+      // Audio checks: detect token capture, opening from yard, and home finishes
       setPlayers((prevPlayers) => {
         if (prevPlayers.length > 0 && state.players) {
           let hasCapture = false;
           let hasHome = false;
+          let hasOpen = false;
           let hasMove = false;
           state.players.forEach((newP) => {
             const oldP = prevPlayers.find((p) => p.userId === newP.userId);
@@ -210,6 +211,10 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                 const oldToken = oldP.tokens.find((t) => t.id === newToken.id);
                 if (oldToken && oldToken.step !== newToken.step) {
                   hasMove = true;
+                }
+                // Token came out of yard (-1) onto track (0) -> token open!
+                if (oldToken && oldToken.step === -1 && newToken.step === 0) {
+                  hasOpen = true;
                 }
                 // Token went from track back to yard (-1) -> captured!
                 if (oldToken && oldToken.step > 0 && newToken.step === -1) {
@@ -224,6 +229,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           });
           if (hasCapture) SoundService.play('tokenCapture');
           else if (hasHome) SoundService.play('homeGoal');
+          else if (hasOpen) SoundService.play('tokenOpen');
           else if (hasMove) SoundService.play('tokenMove');
         }
         return state.players || [];
@@ -277,7 +283,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
     const unsubOver = MobileSocketService.onGameOver((payload) => {
       if (payload.roomCode === roomCode) {
-        SoundService.play('homeGoal');
+        SoundService.play('gameOver');
         setIsMatchOver(true);
         if (payload.scores) setScores(payload.scores);
         if (payload.rankings) setRankings(payload.rankings);

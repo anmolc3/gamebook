@@ -9,7 +9,12 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  Image,
+  Modal,
+  TextInput,
+  Alert,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 import { Icon, IconName } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
@@ -21,6 +26,9 @@ import {
   UserProfile,
   RelationshipState,
 } from '../../services/profile.service';
+import { ImagePickerService } from '../../services/imagePicker.service';
+import { FeedService, FeedPostItem } from '../../services/feed.service';
+import { FeedPostImage } from '../../components/organisms/SocialFeedSection';
 
 export interface ProfileScreenProps {
   userId?: string;
@@ -47,6 +55,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
+  const [isMenuModalVisible, setIsMenuModalVisible] = useState(false);
+  const [activeSlide, setActiveSlide] = useState<'posts' | 'stats'>('posts');
+
+  // Real-time Posts State for Profile
+  const [userPosts, setUserPosts] = useState<FeedPostItem[]>([]);
+  const [isLoadingPosts, setIsLoadingPosts] = useState<boolean>(false);
+  const [newPostText, setNewPostText] = useState('');
+  const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  const [isPosting, setIsPosting] = useState(false);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -66,14 +83,132 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   }, [isOwnProfile, userId]);
 
+  const loadUserPosts = useCallback(async () => {
+    try {
+      setIsLoadingPosts(true);
+      const allFeeds = await FeedService.getFeeds();
+      const targetUserId = userId || authUser?.id;
+      const filtered = allFeeds.filter(
+        (p) => p.authorId === targetUserId || (isOwnProfile && p.authorId === authUser?.id)
+      );
+      setUserPosts(filtered);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  }, [userId, authUser?.id, isOwnProfile]);
+
   useEffect(() => {
     loadProfile();
-  }, [loadProfile]);
+    loadUserPosts();
+
+    const unsubNewPost = FeedService.onNewPost((newPost) => {
+      const targetUserId = userId || authUser?.id;
+      if (newPost.authorId === targetUserId) {
+        setUserPosts((prev) => {
+          if (prev.some((p) => p.id === newPost.id)) return prev;
+          return [newPost, ...prev];
+        });
+      }
+    });
+
+    const unsubLiked = FeedService.onPostLiked((data) => {
+      setUserPosts((prev) =>
+        prev.map((p) =>
+          p.id === data.postId
+            ? { ...p, likesCount: data.likesCount, isLikedByMe: data.userId === authUser?.id ? data.isLiked : p.isLikedByMe }
+            : p
+        )
+      );
+    });
+
+    const unsubComment = FeedService.onNewComment((data) => {
+      setUserPosts((prev) =>
+        prev.map((p) =>
+          p.id === data.postId
+            ? { ...p, commentsCount: data.commentsCount, comments: [...(p.comments || []), data.comment] }
+            : p
+        )
+      );
+    });
+
+    const unsubDeleted = FeedService.onPostDeleted((data) => {
+      setUserPosts((prev) => prev.filter((p) => p.id !== data.postId));
+    });
+
+    return () => {
+      unsubNewPost();
+      unsubLiked();
+      unsubComment();
+      unsubDeleted();
+    };
+  }, [loadProfile, loadUserPosts, userId, authUser?.id]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
     loadProfile();
-  }, [loadProfile]);
+    loadUserPosts();
+  }, [loadProfile, loadUserPosts]);
+
+  const handlePickPostImage = async () => {
+    const res = await ImagePickerService.pickImageFromDevice({
+      allowsEditing: false, // allows any aspect ratio
+      quality: 0.88,
+    });
+    if (res && !res.canceled && res.uri) {
+      setNewPostImage(res.uri);
+    }
+  };
+
+  const handleCreateProfilePost = async () => {
+    if (!newPostText.trim() && !newPostImage) {
+      Alert.alert('Post Content Required', 'Please enter some text or attach an image.');
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const created = await FeedService.createPost({
+        content: newPostText.trim(),
+        imageUrl: newPostImage || undefined,
+        gameTag: '🏆 Player Highlight',
+      });
+      setUserPosts((prev) => [created, ...prev]);
+      setNewPostText('');
+      setNewPostImage(null);
+    } catch (err: any) {
+      Alert.alert('Post Failed', err.message || 'Could not publish feed post.');
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const handleToggleLike = async (postId: string) => {
+    try {
+      const updated = await FeedService.toggleLike(postId);
+      setUserPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, likesCount: updated.likesCount, isLikedByMe: updated.isLiked } : p
+        )
+      );
+    } catch {}
+  };
+
+  const handleDeletePost = (postId: string) => {
+    Alert.alert('Delete Post', 'Are you sure you want to remove this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await FeedService.deletePost(postId);
+            setUserPosts((prev) => prev.filter((p) => p.id !== postId));
+          } catch {}
+        },
+      },
+    ]);
+  };
 
   const handleProfileUpdated = (updated: UserProfile) => {
     setProfile(updated);
@@ -83,6 +218,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         bio: updated.bio,
         avatarUrl: updated.avatarUrl,
       });
+    }
+  };
+
+  const handlePickBanner = async () => {
+    const res = await ImagePickerService.pickImageFromDevice({
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+    if (res && !res.canceled && res.uri) {
+      try {
+        const updated = await ProfileService.updateMyProfile({ bannerUrl: res.uri });
+        handleProfileUpdated(updated);
+      } catch (err) {
+        console.warn('Could not update banner:', err);
+      }
     }
   };
 
@@ -160,14 +310,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           {isOwnProfile ? 'My Profile' : profile?.displayName}
         </Text>
 
-        <TouchableOpacity
-          onPress={() => setIsSettingsModalVisible(true)}
-          style={[styles.navIconButton, { backgroundColor: theme.colors.surfaceElevated }]}
-          activeOpacity={0.7}
-          accessibilityLabel="Settings"
-        >
-          <Icon name="settings" size={20} color={theme.colors.primary} />
-        </TouchableOpacity>
+        {isOwnProfile ? (
+          <TouchableOpacity
+            onPress={() => setIsMenuModalVisible(true)}
+            style={[styles.navIconButton, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Profile Menu"
+          >
+            <Icon name="menu" size={20} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.navIconButtonPlaceholder} />
+        )}
       </View>
 
       <ScrollView
@@ -182,14 +336,39 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           />
         }
       >
-        {/* Layered Profile Banner / Hero */}
-        <View style={styles.heroSection}>
-          <View
-            style={[
-              styles.heroBackgroundGlow,
-              { backgroundColor: theme.colors.primary + '14', borderColor: theme.colors.primary + '28' },
-            ]}
-          />
+        {/* Layered Profile Banner / Hero - Edge to Edge */}
+        <View style={[styles.heroSection, { borderBottomColor: theme.colors.divider }]}>
+          {profile?.bannerUrl ? (
+            <View style={styles.heroBannerImageWrap}>
+              <Image
+                source={{ uri: profile.bannerUrl }}
+                style={styles.heroBannerImage}
+                resizeMode="cover"
+              />
+              <LinearGradient
+                colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)']}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          ) : (
+            <View
+              style={[
+                styles.heroBackgroundGlow,
+                { backgroundColor: theme.colors.primary + '18' },
+              ]}
+            />
+          )}
+
+          {isOwnProfile && (
+            <TouchableOpacity
+              onPress={handlePickBanner}
+              style={styles.bannerEditBtn}
+              activeOpacity={0.8}
+              accessibilityLabel="Change Cover"
+            >
+              <Icon name="camera" size={26} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
 
           {/* Large Avatar with Presence & Edit capability */}
           <TouchableOpacity
@@ -226,27 +405,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               @{profile?.username}
             </Text>
 
-            {/* Member Since Badge */}
-            <View
-              style={[
-                styles.memberBadge,
-                { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-              ]}
-            >
+            {/* Member Since Text (No box) */}
+            <View style={styles.memberBadge}>
               <Icon name="calendar" size={13} color={theme.colors.textMuted} />
               <Text style={[styles.memberBadgeText, { color: theme.colors.textSecondary }]}>
                 {formatJoinDate(profile?.createdAt)}
               </Text>
             </View>
 
-            {/* Bio Quote */}
+            {/* Bio Quote (Flat, no box) */}
             {profile?.bio ? (
-              <View
-                style={[
-                  styles.bioBox,
-                  { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                ]}
-              >
+              <View style={styles.bioBox}>
                 <Text style={[styles.bioText, { color: theme.colors.textSecondary }]}>
                   "{profile.bio}"
                 </Text>
@@ -254,14 +423,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             ) : isOwnProfile ? (
               <TouchableOpacity
                 onPress={() => setIsEditModalVisible(true)}
-                style={[
-                  styles.addBioPlaceholder,
-                  { borderColor: theme.colors.border, borderStyle: 'dashed' },
-                ]}
+                style={styles.addBioPlaceholder}
                 activeOpacity={0.7}
               >
-                <Icon name="plus" size={14} color={theme.colors.textMuted} />
-                <Text style={[styles.addBioText, { color: theme.colors.textMuted }]}>
+                <Icon name="plus" size={14} color={theme.colors.primary} />
+                <Text style={[styles.addBioText, { color: theme.colors.primary }]}>
                   Tap to add your player bio & playstyle
                 </Text>
               </TouchableOpacity>
@@ -269,36 +435,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
         </View>
 
-        {/* Action Buttons Bar */}
-        <View style={styles.actionBar}>
-          {isOwnProfile ? (
-            <View style={styles.ownActionRow}>
-              <TouchableOpacity
-                onPress={() => setIsEditModalVisible(true)}
-                style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
-                activeOpacity={0.8}
-              >
-                <Icon name="edit" size={18} color={theme.colors.background} />
-                <Text style={[styles.primaryActionBtnText, { color: theme.colors.background }]}>
-                  Edit Profile
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setIsSettingsModalVisible(true)}
-                style={[
-                  styles.secondaryActionBtn,
-                  { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                ]}
-                activeOpacity={0.7}
-              >
-                <Icon name="settings" size={18} color={theme.colors.textPrimary} />
-                <Text style={[styles.secondaryActionBtnText, { color: theme.colors.textPrimary }]}>
-                  Settings
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
+        {/* Peer Action Buttons Bar (Only visible when viewing another user's profile) */}
+        {!isOwnProfile && (
+          <View style={[styles.actionBar, { borderBottomColor: theme.colors.divider }]}>
             <View style={styles.peerActionRow}>
               {/* Contextual Friendship Button */}
               {relationship === 'NONE' && (
@@ -381,168 +520,445 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 <Icon name="gamepad" size={20} color={theme.colors.primary} />
               </TouchableOpacity>
             </View>
-          )}
-        </View>
-
-        {/* Performance & Gaming Statistics Grid */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            Gaming Statistics
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted }]}>
-            Lifetime Record
-          </Text>
-        </View>
-
-        <View style={styles.statsGrid}>
-          {/* Matches */}
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-            ]}
-          >
-            <View style={[styles.statIconBadge, { backgroundColor: theme.colors.primary + '18' }]}>
-              <Icon name="dice" size={20} color={theme.colors.primary} />
-            </View>
-            <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
-              {profile?.stats?.totalMatches ?? 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Matches Played
-            </Text>
           </View>
+        )}
 
-          {/* Win Rate */}
-          <View
+        {/* Profile Slide Segmented Switcher: Single Divider Line, No Box */}
+        <View style={[styles.slideSwitcher, { borderBottomColor: theme.colors.divider }]}>
+          <TouchableOpacity
             style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+              styles.slideTab,
+              activeSlide === 'posts' && [
+                styles.activeSlideTab,
+                { borderBottomColor: theme.colors.primary },
+              ],
             ]}
+            onPress={() => setActiveSlide('posts')}
+            activeOpacity={0.8}
           >
-            <View style={[styles.statIconBadge, { backgroundColor: theme.colors.accent + '18' }]}>
-              <Icon name="target" size={20} color={theme.colors.accent} />
-            </View>
-            <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
-              {profile?.stats?.winRate ?? 0}%
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Win Rate
-            </Text>
-          </View>
-
-          {/* Total Wins */}
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-            ]}
-          >
-            <View style={[styles.statIconBadge, { backgroundColor: '#F59E0B18' }]}>
-              <Icon name="trophy" size={20} color="#F59E0B" />
-            </View>
-            <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
-              {profile?.stats?.totalWins ?? 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Victories
-            </Text>
-          </View>
-
-          {/* Win Streak / Friends */}
-          <View
-            style={[
-              styles.statCard,
-              { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-            ]}
-          >
-            <View style={[styles.statIconBadge, { backgroundColor: '#EF444418' }]}>
-              <Icon name="flame" size={20} color="#EF4444" />
-            </View>
-            <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
-              {profile?.stats?.highestStreak ?? 0}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
-              Best Streak
-            </Text>
-          </View>
-        </View>
-
-        {/* Trophies & Achievements Showcase */}
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-            Trophies & Badges
-          </Text>
-          <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted }]}>
-            {profile?.achievements?.length || 0} Unlocked
-          </Text>
-        </View>
-
-        <View style={styles.achievementsList}>
-          {profile?.achievements && profile.achievements.length > 0 ? (
-            profile.achievements.map((ach) => (
-              <View
-                key={ach.id}
-                style={[
-                  styles.achievementCard,
-                  { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                ]}
-              >
-                <View style={[styles.achievementIconBox, { backgroundColor: theme.colors.primary + '20' }]}>
-                  <Icon name="award" size={24} color={theme.colors.primary} />
-                </View>
-                <View style={styles.achievementMeta}>
-                  <Text style={[styles.achievementTitle, { color: theme.colors.textPrimary }]}>
-                    {ach.title}
-                  </Text>
-                  <Text style={[styles.achievementDesc, { color: theme.colors.textSecondary }]}>
-                    {ach.description}
-                  </Text>
-                </View>
-                <View style={[styles.unlockedBadge, { borderColor: theme.colors.accent, backgroundColor: theme.colors.accent + '15' }]}>
-                  <Text style={[styles.unlockedBadgeText, { color: theme.colors.accent }]}>Unlocked</Text>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View
+            <Icon
+              name="posts"
+              size={18}
+              color={activeSlide === 'posts' ? theme.colors.primary : theme.colors.textMuted}
+            />
+            <Text
               style={[
-                styles.emptyAchievementsCard,
-                { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+                styles.slideTabText,
+                {
+                  color: activeSlide === 'posts' ? theme.colors.primary : theme.colors.textSecondary,
+                  fontWeight: activeSlide === 'posts' ? '700' : '500',
+                },
               ]}
             >
-              <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
-                <Icon name="trophy" size={28} color={theme.colors.textMuted} />
-              </View>
-              <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
-                Trophy Cabinet
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
-                Compete in multiplayer Tic-Tac-Toe and Ludo matches to unlock custom badges, achievements, and ranking titles!
-              </Text>
-            </View>
-          )}
+              {isOwnProfile ? 'My Posts' : 'Posts'} ({userPosts.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.slideTab,
+              activeSlide === 'stats' && [
+                styles.activeSlideTab,
+                { borderBottomColor: theme.colors.primary },
+              ],
+            ]}
+            onPress={() => setActiveSlide('stats')}
+            activeOpacity={0.8}
+          >
+            <Icon
+              name="award"
+              size={15}
+              color={activeSlide === 'stats' ? theme.colors.primary : theme.colors.textMuted}
+            />
+            <Text
+              style={[
+                styles.slideTabText,
+                {
+                  color: activeSlide === 'stats' ? theme.colors.primary : theme.colors.textSecondary,
+                  fontWeight: activeSlide === 'stats' ? '700' : '500',
+                },
+              ]}
+            >
+              {isOwnProfile ? 'My Stats' : 'Stats'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Sign Out Action (Own Profile only) */}
-        {isOwnProfile && (
-          <View style={styles.footerSection}>
-            <TouchableOpacity
-              onPress={logout}
-              style={[
-                styles.logoutBtn,
-                { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.error + '44' },
-              ]}
-              activeOpacity={0.7}
-            >
-              <Icon name="logOut" size={18} color={theme.colors.error} />
-              <Text style={[styles.logoutBtnText, { color: theme.colors.error }]}>
-                Sign Out of Account
+        {/* SLIDE 1: POSTS */}
+        {activeSlide === 'posts' && (
+          <View style={styles.postsSlideContainer}>
+            {/* Quick Composer for own profile - Flat layout with bottom divider */}
+            {isOwnProfile && (
+              <View style={[styles.profileComposerBox, { borderBottomColor: theme.colors.divider }]}>
+                <TextInput
+                  style={[
+                    styles.profileComposerInput,
+                    {
+                      color: theme.colors.textPrimary,
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}
+                  placeholder="Share a game win, highlight, or photo..."
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={newPostText}
+                  onChangeText={setNewPostText}
+                  multiline
+                  maxLength={280}
+                />
+
+                {newPostImage && (
+                  <View style={styles.composerImagePreviewWrap}>
+                    <Image source={{ uri: newPostImage }} style={styles.composerImagePreview} resizeMode="cover" />
+                    <TouchableOpacity
+                      onPress={() => setNewPostImage(null)}
+                      style={styles.composerRemoveImageBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="close" size={13} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                <View style={styles.profileComposerFooter}>
+                  <TouchableOpacity
+                    onPress={handlePickPostImage}
+                    style={styles.composerAttachBtn}
+                    activeOpacity={0.75}
+                    accessibilityLabel="Attach Photo"
+                  >
+                    <Icon name="camera" size={26} color={theme.colors.primary} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleCreateProfilePost}
+                    disabled={isPosting}
+                    style={[
+                      styles.composerPostSubmitBtn,
+                      { backgroundColor: theme.colors.primary, opacity: isPosting ? 0.6 : 1 },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    {isPosting ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.composerPostSubmitText}>Publish Post</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Posts Stream */}
+            {isLoadingPosts ? (
+              <View style={styles.postsLoadingBox}>
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+                <Text style={[styles.postsLoadingText, { color: theme.colors.textMuted }]}>
+                  Loading posts...
+                </Text>
+              </View>
+            ) : userPosts.length === 0 ? (
+              <View style={[styles.emptyPostsBox, { borderBottomColor: theme.colors.divider }]}>
+                <Icon name="posts" size={44} color={theme.colors.textMuted} />
+                <Text style={[styles.emptyPostsTitle, { color: theme.colors.textPrimary }]}>
+                  No Posts Yet
+                </Text>
+                <Text style={[styles.emptyPostsSubtitle, { color: theme.colors.textSecondary }]}>
+                  {isOwnProfile
+                    ? 'Publish your first gaming post or photo above!'
+                    : 'This player has not shared any posts yet.'}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.postsList}>
+                {userPosts.map((post) => {
+                  const isMyPost = isOwnProfile || (authUser?.id && post.authorId === authUser.id);
+                  return (
+                    <View
+                      key={post.id}
+                      style={[
+                        styles.profilePostCard,
+                        { borderBottomColor: theme.colors.divider },
+                      ]}
+                    >
+                      <View style={styles.profilePostHeader}>
+                        <View style={styles.profilePostAuthorRow}>
+                          <Avatar
+                            displayName={post.authorName}
+                            avatarUrl={post.authorAvatar}
+                            size="sm"
+                            status="online"
+                          />
+                          <View style={{ marginLeft: 10 }}>
+                            <Text style={[styles.profilePostAuthorName, { color: theme.colors.textPrimary }]}>
+                              {post.authorName}
+                            </Text>
+                            <Text style={[styles.profilePostTime, { color: theme.colors.textMuted }]}>
+                              {post.timeAgo}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {isMyPost && (
+                          <TouchableOpacity
+                            onPress={() => handleDeletePost(post.id)}
+                            style={styles.profilePostDeleteBtn}
+                            activeOpacity={0.7}
+                          >
+                            <Icon name="close" size={14} color={theme.colors.textMuted} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+
+                      {post.content ? (
+                        <Text style={[styles.profilePostText, { color: theme.colors.textPrimary }]}>
+                          {post.content}
+                        </Text>
+                      ) : null}
+
+                      {post.imageUrl ? (
+                        <FeedPostImage uri={post.imageUrl} />
+                      ) : null}
+
+                      <View style={styles.profilePostFooter}>
+                        <TouchableOpacity
+                          onPress={() => handleToggleLike(post.id)}
+                          style={styles.profilePostActionBtn}
+                          activeOpacity={0.7}
+                        >
+                          <Icon
+                            name="heart"
+                            size={16}
+                            color={post.isLikedByMe ? '#FF4757' : theme.colors.textMuted}
+                          />
+                          <Text
+                            style={[
+                              styles.profilePostActionText,
+                              { color: post.isLikedByMe ? '#FF4757' : theme.colors.textSecondary },
+                            ]}
+                          >
+                            {post.likesCount}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <View style={styles.profilePostActionBtn}>
+                          <Icon name="chat" size={16} color={theme.colors.textMuted} />
+                          <Text style={[styles.profilePostActionText, { color: theme.colors.textSecondary }]}>
+                            {post.commentsCount}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* SLIDE 2: GAMING STATS */}
+        {activeSlide === 'stats' && (
+          <View style={styles.statsSlideContainer}>
+            {/* Overview Stats Row: Clean 4 Columns, Single Bottom Divider Line, No Boxes */}
+            <View style={[styles.statsRowContainer, { borderBottomColor: theme.colors.divider }]}>
+              <View style={styles.statColumn}>
+                <View style={[styles.statIconBadge, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <Icon name="dice" size={18} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
+                  {profile?.stats?.totalMatches ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                  Matches
+                </Text>
+              </View>
+
+              <View style={styles.statColumn}>
+                <View style={[styles.statIconBadge, { backgroundColor: theme.colors.accent + '18' }]}>
+                  <Icon name="target" size={18} color={theme.colors.accent} />
+                </View>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
+                  {profile?.stats?.winRate ?? 0}%
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                  Win Rate
+                </Text>
+              </View>
+
+              <View style={styles.statColumn}>
+                <View style={[styles.statIconBadge, { backgroundColor: '#F59E0B18' }]}>
+                  <Icon name="trophy" size={18} color="#F59E0B" />
+                </View>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
+                  {profile?.stats?.totalWins ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                  Wins
+                </Text>
+              </View>
+
+              <View style={styles.statColumn}>
+                <View style={[styles.statIconBadge, { backgroundColor: '#EF444418' }]}>
+                  <Icon name="flame" size={18} color="#EF4444" />
+                </View>
+                <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
+                  {profile?.stats?.highestStreak ?? 0}
+                </Text>
+                <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>
+                  Streak
+                </Text>
+              </View>
+            </View>
+
+            {/* Trophies & Achievements Showcase */}
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                Trophies & Badges
               </Text>
-            </TouchableOpacity>
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.textMuted }]}>
+                {profile?.achievements?.length || 0} Unlocked
+              </Text>
+            </View>
+
+            <View style={styles.achievementsList}>
+              {profile?.achievements && profile.achievements.length > 0 ? (
+                profile.achievements.map((ach) => (
+                  <View
+                    key={ach.id}
+                    style={[
+                      styles.achievementCard,
+                      { borderBottomColor: theme.colors.divider },
+                    ]}
+                  >
+                    <View style={[styles.achievementIconBox, { backgroundColor: theme.colors.primary + '20' }]}>
+                      <Icon name="award" size={22} color={theme.colors.primary} />
+                    </View>
+                    <View style={styles.achievementMeta}>
+                      <Text style={[styles.achievementTitle, { color: theme.colors.textPrimary }]}>
+                        {ach.title}
+                      </Text>
+                      <Text style={[styles.achievementDesc, { color: theme.colors.textSecondary }]}>
+                        {ach.description}
+                      </Text>
+                    </View>
+                    <View style={[styles.unlockedBadge, { backgroundColor: theme.colors.accent + '15' }]}>
+                      <Text style={[styles.unlockedBadgeText, { color: theme.colors.accent }]}>Unlocked</Text>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <View style={[styles.emptyAchievementsCard, { borderBottomColor: theme.colors.divider }]}>
+                  <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surfaceElevated }]}>
+                    <Icon name="trophy" size={26} color={theme.colors.textMuted} />
+                  </View>
+                  <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+                    Trophy Cabinet
+                  </Text>
+                  <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
+                    Compete in multiplayer matches to unlock custom badges, achievements, and ranking titles!
+                  </Text>
+                </View>
+              )}
+            </View>
           </View>
         )}
       </ScrollView>
+
+      {/* Hamburger Menu Action Sheet Modal */}
+      <Modal
+        visible={isMenuModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsMenuModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsMenuModalVisible(false)}
+        >
+          <View
+            style={[
+              styles.menuContent,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+              theme.shadows.modal,
+            ]}
+          >
+            <View style={[styles.menuGrabBar, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.menuHeaderTitle, { color: theme.colors.textPrimary }]}>
+              Profile Options
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { borderBottomColor: theme.colors.divider }]}
+              activeOpacity={0.7}
+              onPress={() => {
+                setIsMenuModalVisible(false);
+                setIsEditModalVisible(true);
+              }}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.primary + '18' }]}>
+                <Icon name="edit" size={18} color={theme.colors.primary} />
+              </View>
+              <View style={styles.menuItemTextWrap}>
+                <Text style={[styles.menuItemTitle, { color: theme.colors.textPrimary }]}>
+                  Edit Profile
+                </Text>
+                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
+                  Avatar, display name, and bio
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuItem, { borderBottomColor: theme.colors.divider }]}
+              activeOpacity={0.7}
+              onPress={() => {
+                setIsMenuModalVisible(false);
+                setIsSettingsModalVisible(true);
+              }}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.primary + '18' }]}>
+                <Icon name="settings" size={18} color={theme.colors.primary} />
+              </View>
+              <View style={styles.menuItemTextWrap}>
+                <Text style={[styles.menuItemTitle, { color: theme.colors.textPrimary }]}>
+                  Settings & Preferences
+                </Text>
+                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
+                  Themes, sound, and notifications
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              activeOpacity={0.7}
+              onPress={() => {
+                setIsMenuModalVisible(false);
+                logout();
+              }}
+            >
+              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.error + '18' }]}>
+                <Icon name="logOut" size={18} color={theme.colors.error} />
+              </View>
+              <View style={styles.menuItemTextWrap}>
+                <Text style={[styles.menuItemTitle, { color: theme.colors.error }]}>
+                  Sign Out
+                </Text>
+                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
+                  Log out of your account
+                </Text>
+              </View>
+              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Edit Profile Modal */}
       {profile && (
@@ -626,22 +1042,42 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     alignItems: 'center',
-    paddingTop: 24,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: 0,
+    paddingBottom: 18,
     position: 'relative',
+    borderBottomWidth: 1,
   },
   heroBackgroundGlow: {
     position: 'absolute',
     top: 0,
-    left: 20,
-    right: 20,
-    height: 130,
-    borderRadius: 25,
+    left: 0,
+    right: 0,
+    height: 160,
+    borderRadius: 0,
     borderWidth: 0,
   },
+  heroBannerImageWrap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 160,
+    borderRadius: 0,
+    overflow: 'hidden',
+  },
+  heroBannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerEditBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    padding: 6,
+    zIndex: 10,
+  },
   avatarContainer: {
-    marginTop: 20,
+    marginTop: 100,
     marginBottom: 12,
   },
   avatarGlowRing: {
@@ -663,6 +1099,7 @@ const styles = StyleSheet.create({
   identityContainer: {
     alignItems: 'center',
     width: '100%',
+    paddingHorizontal: 20,
   },
   displayName: {
     fontSize: 24,
@@ -679,22 +1116,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-    borderWidth: 0,
-    marginBottom: 14,
+    marginBottom: 8,
   },
   memberBadgeText: {
     fontSize: 12,
     fontWeight: '500',
   },
   bioBox: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-    borderWidth: 0,
+    paddingHorizontal: 20,
     width: '100%',
+    marginTop: 2,
   },
   bioText: {
     fontSize: 14,
@@ -703,21 +1134,20 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   addBioPlaceholder: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   addBioText: {
     fontSize: 13,
+    fontWeight: '600',
   },
   actionBar: {
     paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
   },
   ownActionRow: {
     flexDirection: 'row',
@@ -769,7 +1199,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginBottom: 12,
-    marginTop: 10,
+    marginTop: 14,
   },
   sectionTitle: {
     fontSize: 18,
@@ -780,18 +1210,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  statsGrid: {
+  statsRowContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 20,
-    gap: 12,
-    marginBottom: 24,
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
   },
-  statCard: {
-    width: '48%',
-    padding: 16,
-    borderRadius: 22,
-    borderWidth: 0,
+  statColumn: {
+    alignItems: 'center',
+    flex: 1,
   },
   statIconBadge: {
     width: 38,
@@ -799,10 +1228,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.5,
   },
@@ -812,15 +1241,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   achievementsList: {
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingHorizontal: 0,
   },
   achievementCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 22,
-    borderWidth: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
     gap: 12,
   },
   achievementIconBox: {
@@ -843,9 +1271,9 @@ const styles = StyleSheet.create({
   },
   emptyAchievementsCard: {
     alignItems: 'center',
-    padding: 24,
-    borderRadius: 20,
-    borderWidth: 0,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
   },
   emptyIconCircle: {
     width: 56,
@@ -865,23 +1293,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  footerSection: {
-    paddingHorizontal: 20,
-    marginTop: 28,
-  },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 0,
-    gap: 8,
-  },
-  logoutBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
   unlockedBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -891,5 +1302,221 @@ const styles = StyleSheet.create({
   unlockedBadgeText: {
     fontSize: 11,
     fontWeight: '700',
+  },
+  // Slide Switcher Tabs: Clean divider bar, no box
+  slideSwitcher: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+  },
+  slideTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+  },
+  activeSlideTab: {
+    borderBottomWidth: 2,
+    marginBottom: -1,
+  },
+  slideTabText: {
+    fontSize: 13,
+  },
+  postsSlideContainer: {
+    paddingHorizontal: 0,
+  },
+  statsSlideContainer: {
+    paddingTop: 0,
+  },
+  // Quick Composer on Profile: Flat, bottom divider
+  profileComposerBox: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  profileComposerInput: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 10,
+    fontSize: 13,
+    minHeight: 52,
+  },
+  composerImagePreviewWrap: {
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
+    height: 140,
+    position: 'relative',
+  },
+  composerImagePreview: {
+    width: '100%',
+    height: '100%',
+  },
+  composerRemoveImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileComposerFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  composerAttachBtn: {
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  composerPostSubmitBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  composerPostSubmitText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  postsLoadingBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 24,
+  },
+  postsLoadingText: {
+    fontSize: 13,
+  },
+  emptyPostsBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    gap: 8,
+  },
+  emptyPostsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  emptyPostsSubtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  postsList: {
+    gap: 0,
+  },
+  profilePostCard: {
+    borderBottomWidth: 1,
+    paddingVertical: 14,
+  },
+  profilePostHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  profilePostAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profilePostAuthorName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  profilePostTime: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  profilePostDeleteBtn: {
+    padding: 6,
+  },
+  profilePostText: {
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  profilePostFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    paddingHorizontal: 20,
+    marginTop: 6,
+  },
+  profilePostActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  profilePostActionText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  // Hamburger Menu Modal Sheet Styles
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  menuContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 36,
+  },
+  menuGrabBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  menuHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 14,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    gap: 14,
+  },
+  menuIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemTextWrap: {
+    flex: 1,
+  },
+  menuItemTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  menuItemDesc: {
+    fontSize: 11,
+    marginTop: 2,
   },
 });

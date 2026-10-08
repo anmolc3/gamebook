@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { Asset } from 'expo-asset';
 
 // Safely attempt to require expo-audio without ever crashing module loading
 let ExpoAudio: any = null;
@@ -10,25 +11,44 @@ try {
   ExpoAudio = null;
 }
 
+// User-provided Ludo Audio Assets from sound effect/ludo
+const LUDO_AUDIO_ASSETS: Record<string, any> = {
+  diceRoll: require('../assets/sounds/ludo/dice_roll.mp3'),
+  tokenOpen: require('../assets/sounds/ludo/token_open.mp3'),
+  tokenMove: require('../assets/sounds/ludo/token_open.mp3'),
+  tokenCapture: require('../assets/sounds/ludo/token_kill.mp3'),
+  tokenCapture2: require('../assets/sounds/ludo/token_kill_2.mp3'),
+  homeGoal: require('../assets/sounds/ludo/token_win.mp3'),
+  gameOver: require('../assets/sounds/ludo/game_over.mp3'),
+};
+
+export type SoundEffectType =
+  | 'diceRoll'
+  | 'tokenOpen'
+  | 'tokenMove'
+  | 'tokenCapture'
+  | 'tokenCapture2'
+  | 'homeGoal'
+  | 'gameOver'
+  | 'turnPing';
+
 /**
- * Procedural Audio Synthesizer for instant, zero-latency sound effects.
- * Generates uncompressed 16-bit PCM WAV data URIs mathematically.
+ * Procedural Audio Synthesizer fallback for instant, zero-latency sound effects
+ * in case audio driver or asset loading is unavailable.
  */
 function createWavUri(sampleRate: number, numSamples: number, sampleGenerator: (t: number, i: number) => number): string {
-  const byteRate = sampleRate * 2; // 1 channel, 16-bit (2 bytes per sample)
+  const byteRate = sampleRate * 2;
   const blockAlign = 2;
   const dataSize = numSamples * 2;
   const bufferSize = 44 + dataSize;
   const buffer = new Uint8Array(bufferSize);
 
-  // Helper to write ASCII strings
   const writeString = (offset: number, str: string) => {
     for (let i = 0; i < str.length; i++) {
       buffer[offset + i] = str.charCodeAt(i);
     }
   };
 
-  // Helper to write 16-bit and 32-bit LE numbers
   const writeUint16 = (offset: number, value: number) => {
     buffer[offset] = value & 0xff;
     buffer[offset + 1] = (value >> 8) & 0xff;
@@ -40,31 +60,26 @@ function createWavUri(sampleRate: number, numSamples: number, sampleGenerator: (
     buffer[offset + 3] = (value >> 24) & 0xff;
   };
 
-  // 1. RIFF chunk descriptor
   writeString(0, 'RIFF');
   writeUint32(4, 36 + dataSize);
   writeString(8, 'WAVE');
 
-  // 2. fmt sub-chunk
   writeString(12, 'fmt ');
-  writeUint32(16, 16); // SubChunk1Size (16 for PCM)
-  writeUint16(20, 1);  // AudioFormat (1 = PCM)
-  writeUint16(22, 1);  // NumChannels (1 = Mono)
+  writeUint32(16, 16);
+  writeUint16(20, 1);
+  writeUint16(22, 1);
   writeUint32(24, sampleRate);
   writeUint32(28, byteRate);
   writeUint16(32, blockAlign);
-  writeUint16(34, 16); // BitsPerSample
+  writeUint16(34, 16);
 
-  // 3. data sub-chunk
   writeString(36, 'data');
   writeUint32(40, dataSize);
 
-  // 4. PCM Samples
   let offset = 44;
   for (let i = 0; i < numSamples; i++) {
     const t = i / sampleRate;
     let sample = sampleGenerator(t, i);
-    // Clamp to -1..1
     sample = Math.max(-1, Math.min(1, sample));
     const intSample = sample < 0 ? sample * 32768 : sample * 32767;
     writeUint16(offset, Math.floor(intSample));
@@ -92,79 +107,6 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return result;
 }
 
-// ─── Sound Effect Synthesizers ──────────────────────────────────────────────────
-
-// 1. Dice Roll: Multi-click dice rattle and tumble
-function getDiceRollSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.35;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    // Envelope: quick pulses simulating dice tumbling on a board
-    const clickPositions = [0.03, 0.08, 0.14, 0.20, 0.26, 0.31];
-    let amp = 0;
-    for (const cp of clickPositions) {
-      const dt = t - cp;
-      if (dt >= 0 && dt < 0.025) {
-        amp += Math.exp(-dt * 200) * Math.sin(2 * Math.PI * (280 + (dt > 0.01 ? 120 : 0)) * dt);
-      }
-    }
-    // Subtle wooden impact body
-    const woodThump = Math.exp(-t * 12) * Math.sin(2 * Math.PI * 140 * t) * 0.35;
-    return amp * 0.8 + woodThump;
-  });
-}
-
-// 2. Token Move: Satisfying wooden pop / token tap
-function getTokenMoveSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.14;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    const freq = 520 - t * 1800; // Pitch drops from 520Hz down
-    const env = Math.exp(-t * 35);
-    return env * Math.sin(2 * Math.PI * Math.max(120, freq) * t) * 0.9;
-  });
-}
-
-// 3. Token Capture: Dramatic strike / knockout impact
-function getCaptureSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.32;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    const punch = Math.exp(-t * 22) * Math.sin(2 * Math.PI * 180 * t) * 0.8;
-    const zap = Math.exp(-t * 18) * Math.sin(2 * Math.PI * (840 - t * 1200) * t) * 0.45;
-    return punch + zap;
-  });
-}
-
-// 4. Token Home / Victory: Bright golden victory fanfare
-function getHomeGoalSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.48;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    // 3 arpeggiated bells: C5 (523Hz), E5 (659Hz), G5 (784Hz)
-    let bell = 0;
-    if (t < 0.14) {
-      bell = Math.exp(-t * 15) * Math.sin(2 * Math.PI * 523 * t);
-    } else if (t < 0.28) {
-      const dt = t - 0.14;
-      bell = Math.exp(-dt * 15) * Math.sin(2 * Math.PI * 659 * dt);
-    } else {
-      const dt = t - 0.28;
-      bell = Math.exp(-dt * 10) * Math.sin(2 * Math.PI * 784 * dt) * 1.2;
-    }
-    return bell * 0.85;
-  });
-}
-
-// 5. Turn Ping: Gentle pleasant notification chime
 function getTurnPingSoundUri(): string {
   const sampleRate = 22050;
   const duration = 0.22;
@@ -178,26 +120,39 @@ function getTurnPingSoundUri(): string {
   });
 }
 
-export type SoundEffectType = 'diceRoll' | 'tokenMove' | 'tokenCapture' | 'homeGoal' | 'turnPing';
-
 export class SoundService {
   private static players = new Map<SoundEffectType, any>();
-  private static uriCache = new Map<SoundEffectType, string>();
+  private static resolvedUris = new Map<SoundEffectType, string>();
   private static isInitialized = false;
 
-  private static getSoundUri(type: SoundEffectType): string {
-    let uri = this.uriCache.get(type);
-    if (!uri) {
-      switch (type) {
-        case 'diceRoll': uri = getDiceRollSoundUri(); break;
-        case 'tokenMove': uri = getTokenMoveSoundUri(); break;
-        case 'tokenCapture': uri = getCaptureSoundUri(); break;
-        case 'homeGoal': uri = getHomeGoalSoundUri(); break;
-        case 'turnPing': uri = getTurnPingSoundUri(); break;
-      }
-      this.uriCache.set(type, uri);
+  /**
+   * Resolves the asset URI for web or native playback
+   */
+  private static getAssetUri(type: SoundEffectType): string | null {
+    if (this.resolvedUris.has(type)) {
+      return this.resolvedUris.get(type) || null;
     }
-    return uri;
+
+    const assetModule = LUDO_AUDIO_ASSETS[type];
+    if (assetModule) {
+      try {
+        const asset = Asset.fromModule(assetModule);
+        if (asset?.uri) {
+          this.resolvedUris.set(type, asset.uri);
+          return asset.uri;
+        }
+      } catch {
+        // Module might not have resolved URI yet
+      }
+    }
+
+    if (type === 'turnPing') {
+      const pingUri = getTurnPingSoundUri();
+      this.resolvedUris.set(type, pingUri);
+      return pingUri;
+    }
+
+    return null;
   }
 
   /**
@@ -219,7 +174,7 @@ export class SoundService {
   }
 
   /**
-   * Plays a game sound effect across all platforms safely
+   * Plays a game sound effect across all platforms safely using user-provided audio
    */
   static async play(type: SoundEffectType): Promise<void> {
     try {
@@ -227,23 +182,36 @@ export class SoundService {
         await this.init();
       }
 
-      const uri = this.getSoundUri(type);
+      const assetModule = LUDO_AUDIO_ASSETS[type];
 
-      // Web platform audio fallback
+      // 1. Web platform audio playback
       if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
-        const audio = new (window as any).Audio(uri);
-        audio.volume = 0.9;
-        audio.play().catch(() => {});
-        return;
+        let uri = this.getAssetUri(type);
+        if (!uri && assetModule) {
+          try {
+            uri = Asset.fromModule(assetModule).uri;
+          } catch {}
+        }
+        if (uri) {
+          const audio = new (window as any).Audio(uri);
+          audio.volume = 0.95;
+          audio.play().catch(() => {});
+          return;
+        }
       }
 
-      // Expo modern audio (expo-audio)
+      // 2. Native Expo Audio playback (expo-audio)
       if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
         let player = this.players.get(type);
         if (!player) {
-          player = ExpoAudio.createAudioPlayer({ uri });
-          this.players.set(type, player);
+          // Use asset require module directly or resolved URI
+          const source = assetModule ? assetModule : this.getAssetUri(type);
+          if (source) {
+            player = ExpoAudio.createAudioPlayer(source);
+            this.players.set(type, player);
+          }
         }
+
         if (player) {
           if (typeof player.seekTo === 'function') {
             player.seekTo(0);
@@ -251,6 +219,16 @@ export class SoundService {
           if (typeof player.play === 'function') {
             player.play();
           }
+          return;
+        }
+      }
+
+      // 3. Fallback for turn ping or web Audio if not loaded
+      if (type === 'turnPing') {
+        const pingUri = getTurnPingSoundUri();
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+          const audio = new (window as any).Audio(pingUri);
+          audio.play().catch(() => {});
         }
       }
     } catch (err) {
@@ -268,6 +246,7 @@ export class SoundService {
         }
       }
       this.players.clear();
+      this.resolvedUris.clear();
     } catch {}
   }
 }

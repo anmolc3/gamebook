@@ -13,6 +13,7 @@ import gameRoutes from './games/game.routes';
 import storiesRoutes from './stories/stories.routes';
 import achievementsRoutes from './achievements/achievements.routes';
 import notificationsRoutes from './notifications/notifications.routes';
+import feedRoutes from './feeds/feed.routes';
 
 const app = express();
 const server = http.createServer(app);
@@ -50,6 +51,7 @@ app.use('/api/v1/games', gameRoutes);
 app.use('/api/v1/stories', storiesRoutes);
 app.use('/api/v1/achievements', achievementsRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
+app.use('/api/v1/feeds', feedRoutes);
 
 // Root API Welcome Endpoint
 app.get('/api/v1', (_req: Request, res: Response) => {

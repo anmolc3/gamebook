@@ -39,3 +39,17 @@ export async function apiPost<T>(endpoint: string, body?: any): Promise<T> {
   }
   return json;
 }
+
+export async function apiDelete<T>(endpoint: string): Promise<T> {
+  const headers = await getAuthHeaders();
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers,
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
+  }
+  return json;
+}

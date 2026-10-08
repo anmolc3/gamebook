@@ -23,6 +23,7 @@ import {
   SearchedPlayer,
 } from '../../services/friends.service';
 import { MobileSocketService } from '../../services/socket.service';
+import { SocialFeedSection } from '../../components/organisms/SocialFeedSection';
 
 export interface FriendsScreenProps {
   onBack?: () => void;
@@ -31,7 +32,7 @@ export interface FriendsScreenProps {
   onChallenge?: (userId: string, username: string) => void;
 }
 
-type TabType = 'friends' | 'requests' | 'discover';
+type TabType = 'feeds' | 'friends' | 'requests' | 'discover';
 
 export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   onBack,
@@ -42,7 +43,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   const { theme } = useTheme();
   const { user: authUser } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabType>('friends');
+  const [activeTab, setActiveTab] = useState<TabType>('feeds');
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>([]);
@@ -244,6 +245,36 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
 
       {/* Segmented Control Tabs */}
       <View style={[styles.segmentedContainer, { backgroundColor: theme.colors.surfaceElevated }]}>
+        {/* Feeds Tab */}
+        <TouchableOpacity
+          onPress={() => setActiveTab('feeds')}
+          style={[
+            styles.segmentBtn,
+            activeTab === 'feeds' && {
+              backgroundColor: theme.colors.surface,
+              borderColor: theme.colors.border,
+            },
+          ]}
+          activeOpacity={0.8}
+        >
+          <Icon
+            name="chat"
+            size={15}
+            color={activeTab === 'feeds' ? theme.colors.primary : theme.colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.segmentText,
+              {
+                color: activeTab === 'feeds' ? theme.colors.textPrimary : theme.colors.textMuted,
+                fontWeight: activeTab === 'feeds' ? '700' : '500',
+              },
+            ]}
+          >
+            Feeds
+          </Text>
+        </TouchableOpacity>
+
         {/* Friends Tab */}
         <TouchableOpacity
           onPress={() => setActiveTab('friends')}
@@ -385,6 +416,14 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
               Syncing social graph...
             </Text>
           </View>
+        ) : activeTab === 'feeds' ? (
+          /* ============================================================ */
+          /* 0. FEEDS TAB                                                 */
+          /* ============================================================ */
+          <SocialFeedSection
+            onViewProfile={onViewProfile}
+            onChallengeUser={onChallenge}
+          />
         ) : activeTab === 'friends' ? (
           /* ============================================================ */
           /* 1. FRIENDS TAB                                               */
@@ -894,7 +933,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
     borderBottomWidth: 1,
   },
   backBtn: {

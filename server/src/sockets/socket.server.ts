@@ -66,6 +66,12 @@ export function emitToRoom(roomCode: string, event: string, payload: any): void 
   }
 }
 
+export function emitToAll(event: string, payload: any): void {
+  if (io) {
+    io.emit(event, payload);
+  }
+}
+
 async function notifyFriendsPresence(userId: string, isOnline: boolean, lastSeen: Date) {
   try {
     const friendships = await prisma.friendship.findMany({

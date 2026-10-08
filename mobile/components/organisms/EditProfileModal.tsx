@@ -10,11 +10,13 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { PRESET_AVATARS, PresetAvatar } from '../atoms/AvatarPresets';
 import { ProfileService, UpdateProfilePayload, UserProfile } from '../../services/profile.service';
+import { ImagePickerService } from '../../services/imagePicker.service';
 
 export interface EditProfileModalProps {
   visible: boolean;
@@ -22,6 +24,8 @@ export interface EditProfileModalProps {
   currentProfile: UserProfile;
   onProfileUpdated: (updated: UserProfile) => void;
 }
+
+type AvatarCategory = 'All' | 'Gaming' | 'Heroes' | 'Cosmic' | 'Mythic' | 'Legends';
 
 export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   visible,
@@ -34,10 +38,36 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [displayName, setDisplayName] = useState(currentProfile.displayName || '');
   const [bio, setBio] = useState(currentProfile.bio || '');
   const [selectedAvatar, setSelectedAvatar] = useState<string>(
-    currentProfile.avatarUrl || 'cyber_ninja'
+    currentProfile.avatarUrl || 'neon_masked_gamer_avatar'
   );
+  const [selectedBanner, setSelectedBanner] = useState<string | null>(
+    currentProfile.bannerUrl || null
+  );
+  const [selectedCategory, setSelectedCategory] = useState<AvatarCategory>('All');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Pick avatar image from device local storage
+  const handlePickAvatarFromDevice = async () => {
+    const result = await ImagePickerService.pickImageFromDevice({
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result && !result.canceled && result.uri) {
+      setSelectedAvatar(result.uri);
+    }
+  };
+
+  // Pick profile background / cover image from device local storage
+  const handlePickBannerFromDevice = async () => {
+    const result = await ImagePickerService.pickImageFromDevice({
+      aspect: [16, 9],
+      quality: 0.85,
+    });
+    if (result && !result.canceled && result.uri) {
+      setSelectedBanner(result.uri);
+    }
+  };
 
   const handleSave = async () => {
     if (!displayName.trim() || displayName.trim().length < 2) {
@@ -63,10 +93,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         displayName: displayName.trim(),
         bio: bio.trim(),
         avatarUrl: selectedAvatar,
+        bannerUrl: selectedBanner,
       };
 
-      await ProfileService.updateMyProfile(payload);
-      const refreshed = await ProfileService.fetchMyProfile();
+      const refreshed = await ProfileService.updateMyProfile(payload);
       onProfileUpdated(refreshed);
       onClose();
     } catch (err: any) {
@@ -75,6 +105,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
       setIsSaving(false);
     }
   };
+
+  const filteredAvatars =
+    selectedCategory === 'All'
+      ? PRESET_AVATARS
+      : PRESET_AVATARS.filter((a) => a.category === selectedCategory);
+
+  const categories: AvatarCategory[] = ['All', 'Gaming', 'Heroes', 'Cosmic', 'Mythic', 'Legends'];
 
   return (
     <Modal
@@ -115,7 +152,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollBody}>
-            {/* Live Avatar Preview */}
+            {/* Live Avatar Preview & Device Upload Action */}
             <View style={styles.previewSection}>
               <View
                 style={[
@@ -123,15 +160,100 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   { borderColor: theme.colors.primary, backgroundColor: theme.colors.surfaceElevated },
                 ]}
               >
-                <PresetAvatar presetId={selectedAvatar} size={80} />
+                <PresetAvatar presetId={selectedAvatar} size={84} />
               </View>
-              <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary, marginTop: 10 }]}>
-                Select Character Avatar
+
+              <TouchableOpacity
+                onPress={handlePickAvatarFromDevice}
+                style={styles.deviceUploadBtn}
+                activeOpacity={0.8}
+                accessibilityLabel="Upload Custom Avatar"
+              >
+                <Icon name="camera" size={26} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Profile Cover Background Image Selector */}
+            <View style={styles.bannerPickerSection}>
+              <View style={styles.inputLabelRow}>
+                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
+                  Profile Background Image
+                </Text>
+                {selectedBanner && (
+                  <TouchableOpacity onPress={() => setSelectedBanner(null)}>
+                    <Text style={[styles.charCounter, { color: theme.colors.error }]}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {selectedBanner ? (
+                <View style={[styles.bannerPreviewWrap, { borderColor: theme.colors.border }]}>
+                  <Image source={{ uri: selectedBanner }} style={styles.bannerPreviewImg} resizeMode="cover" />
+                  <TouchableOpacity
+                    onPress={handlePickBannerFromDevice}
+                    style={styles.bannerChangeOverlayBtn}
+                    activeOpacity={0.8}
+                    accessibilityLabel="Change Background"
+                  >
+                    <Icon name="camera" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  onPress={handlePickBannerFromDevice}
+                  style={styles.bannerEmptyPlaceholder}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Add Background"
+                >
+                  <Icon name="camera" size={30} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Avatar Category Filters */}
+            <View style={{ marginTop: 16 }}>
+              <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>
+                Choose from 20 Curated Avatars
               </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoryPillsRow}
+              >
+                {categories.map((cat) => {
+                  const isCatSelected = selectedCategory === cat;
+                  return (
+                    <TouchableOpacity
+                      key={cat}
+                      onPress={() => setSelectedCategory(cat)}
+                      style={[
+                        styles.categoryPill,
+                        {
+                          backgroundColor: isCatSelected ? theme.colors.primary : theme.colors.surfaceElevated,
+                          borderColor: isCatSelected ? theme.colors.primary : theme.colors.border,
+                        },
+                      ]}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryPillText,
+                          {
+                            color: isCatSelected ? theme.colors.textOnPrimary : theme.colors.textSecondary,
+                            fontWeight: isCatSelected ? '700' : '500',
+                          },
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
 
               {/* Avatar Preset Grid */}
               <View style={styles.avatarGrid}>
-                {PRESET_AVATARS.map((preset) => {
+                {filteredAvatars.map((preset) => {
                   const isSelected = selectedAvatar === preset.id;
                   return (
                     <TouchableOpacity
@@ -147,12 +269,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                       ]}
                       activeOpacity={0.8}
                     >
-                      <PresetAvatar presetId={preset.id} size={44} />
+                      <PresetAvatar presetId={preset.id} size={50} />
                       <Text
                         style={[
                           styles.avatarOptionName,
                           {
-                            color: isSelected ? theme.colors.primary : theme.colors.textMuted,
+                            color: isSelected ? theme.colors.primary : theme.colors.textPrimary,
                             fontWeight: isSelected ? '700' : '500',
                           },
                         ]}
@@ -167,7 +289,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </View>
 
             {/* Display Name Input */}
-            <View style={styles.inputGroup}>
+            <View style={[styles.inputGroup, { marginTop: 20 }]}>
               <View style={styles.inputLabelRow}>
                 <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>
                   Display Name
@@ -253,20 +375,6 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   </>
                 )}
               </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={onClose}
-                disabled={isSaving}
-                style={[
-                  styles.cancelButton,
-                  { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                ]}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelButtonText, { color: theme.colors.textSecondary }]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
             </View>
           </ScrollView>
         </View>
@@ -282,11 +390,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    maxHeight: '90%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 1,
+    maxHeight: '92%',
     paddingBottom: 24,
   },
   headerRow: {
@@ -294,7 +401,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderBottomWidth: 1,
   },
   headerTitleContainer: {
@@ -305,77 +412,130 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   closeButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollBody: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 36,
   },
   previewSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   previewAvatarRing: {
-    padding: 4,
-    borderRadius: 999,
-    borderWidth: 2.5,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    borderWidth: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  deviceUploadBtn: {
+    padding: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerPickerSection: {
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  bannerPreviewWrap: {
+    height: 100,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    position: 'relative',
+  },
+  bannerPreviewImg: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerChangeOverlayBtn: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+    padding: 6,
+  },
+  bannerEmptyPlaceholder: {
+    height: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sectionLabel: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  categoryPillsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingBottom: 10,
+  },
+  categoryPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  categoryPillText: {
+    fontSize: 12,
   },
   avatarGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    justifyContent: 'center',
-    marginTop: 12,
+    justifyContent: 'space-between',
   },
   avatarOptionCard: {
-    width: 88,
+    width: '31%',
     alignItems: 'center',
     paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderRadius: 14,
+    paddingHorizontal: 4,
+    borderRadius: 16,
+    gap: 6,
   },
   avatarOptionName: {
     fontSize: 11,
-    marginTop: 6,
     textAlign: 'center',
   },
   inputGroup: {
-    marginBottom: 18,
+    marginBottom: 16,
   },
   inputLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 8,
   },
   inputLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   charCounter: {
-    fontSize: 12,
+    fontSize: 11,
   },
   textInput: {
-    borderWidth: 1,
+    height: 48,
     borderRadius: 14,
+    borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
+    fontSize: 14,
   },
   bioInput: {
-    height: 85,
+    height: 84,
     paddingTop: 12,
+    paddingBottom: 12,
   },
   errorBanner: {
     padding: 12,
@@ -384,34 +544,22 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
     textAlign: 'center',
   },
   actionButtons: {
-    gap: 10,
     marginTop: 8,
   },
   saveButton: {
+    height: 52,
+    borderRadius: 16,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    height: 54,
-    borderRadius: 14,
+    alignItems: 'center',
     gap: 8,
   },
   saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  cancelButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 54,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  cancelButtonText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { StoryService } from '../../services/story.service';
+import { ImagePickerService } from '../../services/imagePicker.service';
 
 interface CreateStoryModalProps {
   visible: boolean;
@@ -79,6 +80,17 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
   const [customPhotoInput, setCustomPhotoInput] = useState<string>('');
 
   const activeMood = MOODS.find((m) => m.id === selectedMood) || MOODS[0];
+
+  const handlePickLocalImage = async () => {
+    const res = await ImagePickerService.pickImageFromDevice({
+      aspect: [9, 16],
+      quality: 0.85,
+    });
+    if (res && !res.canceled && res.uri) {
+      setSelectedPhoto(res.uri);
+      setCustomPhotoInput('');
+    }
+  };
 
   const handlePublish = async () => {
     const photoToUse = customPhotoInput.trim() || selectedPhoto;
@@ -209,9 +221,19 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
 
           {/* Choose Photo Presets */}
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-              SELECT PHOTO
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary, marginBottom: 0 }]}>
+                SELECT PHOTO
+              </Text>
+              <TouchableOpacity
+                onPress={handlePickLocalImage}
+                style={{ padding: 6, alignItems: 'center', justifyContent: 'center' }}
+                activeOpacity={0.8}
+                accessibilityLabel="Upload from Device"
+              >
+                <Icon name="camera" size={26} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.rowRail}>
               {STORY_PHOTO_PRESETS.map((preset) => {
                 const isSelected = selectedPhoto === preset.url && !customPhotoInput.trim();

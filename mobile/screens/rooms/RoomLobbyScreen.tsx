@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  RefreshControl,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -47,14 +48,16 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
 
-  const loadRoom = useCallback(async () => {
+  const loadRoom = useCallback(async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
       const data = await RoomService.getRoom(roomCode);
       setRoom(data);
     } catch (err: any) {
@@ -62,8 +65,14 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       onBack();
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, [roomCode, onBack]);
+
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    loadRoom(true);
+  }, [loadRoom]);
 
   useEffect(() => {
     loadRoom();
@@ -244,7 +253,18 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
         {/* Toast Alert */}
         {toastMessage && (
           <View

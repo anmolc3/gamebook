@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image } from 'react-native';
-import Svg, { Path, Circle, Rect, Polyline, Line, G } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, Polyline, Line, G, Defs, ClipPath, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
 
 export interface IconProps {
   size?: number;
@@ -352,6 +352,69 @@ export const BotIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor'
   </Svg>
 );
 
+export const CameraIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 64 64" fill="none" accessibilityLabel={accessibilityLabel || 'Camera'}>
+    <Rect x={7} y={17} width={50} height={36} rx={7} stroke={color} strokeWidth={4} />
+    <Path d="M22 17L26 11H38L42 17" stroke={color} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+    <Circle cx={32} cy={35} r={11} stroke={color} strokeWidth={4} />
+    <Circle cx={32} cy={35} r={5} fill={color} />
+    <Circle cx={47} cy={25} r={2.5} fill={color} />
+  </Svg>
+);
+
+export const ArrowRightIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Arrow Right'}>
+    <Line x1="5" y1="12" x2="19" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    <Polyline points="12 5 19 12 12 19" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ImageIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Image'}>
+    <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" stroke={color} strokeWidth={strokeWidth} />
+    <Circle cx="8.5" cy="8.5" r="1.5" stroke={color} strokeWidth={strokeWidth} />
+    <Polyline points="21 15 16 10 5 21" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const MenuIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Menu'}>
+    <Line x1="4" y1="6" x2="20" y2="6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    <Line x1="4" y1="12" x2="20" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    <Line x1="4" y1="18" x2="20" y2="18" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+  </Svg>
+);
+
+export const PostsIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 900 800" fill="none" accessibilityLabel={accessibilityLabel || 'Posts'}>
+    <Defs>
+      <ClipPath id="postsPhotoClip">
+        <Rect x="262" y="182" width="376" height="240" rx="22" />
+      </ClipPath>
+    </Defs>
+    <G fill={color} stroke={color} strokeLinejoin="round" strokeLinecap="round">
+      {/* back card (only top and right edges peek out) */}
+      <Path d="M270 86H678A56 56 0 0 1 734 142V600" fill="none" strokeWidth={20} />
+      {/* front card */}
+      <Rect x="200" y="120" width="500" height="560" rx="56" fill="none" strokeWidth={20} />
+      {/* photo frame, sun and hills */}
+      <Rect x="262" y="182" width="376" height="240" rx="22" fill="none" strokeWidth={14} />
+      <G clipPath="url(#postsPhotoClip)" stroke="none">
+        <Circle cx="540" cy="262" r="40" />
+        <Path d="M262 400C340 310 420 340 470 372C520 332 590 312 638 352V422H262Z" />
+      </G>
+      {/* text lines */}
+      <G stroke="none">
+        <Rect x="262" y="458" width="300" height="26" rx="13" />
+        <Rect x="262" y="506" width="376" height="26" rx="13" />
+        <Rect x="262" y="554" width="210" height="26" rx="13" />
+      </G>
+      {/* heart */}
+      <Path d="M585 624C523 584 545 544 585 572C625 544 647 584 585 624Z" stroke="none" />
+    </G>
+  </Svg>
+);
+
 export type IconName =
   | 'home'
   | 'gamepad'
@@ -396,7 +459,12 @@ export type IconName =
   | 'heart'
   | 'eye'
   | 'eyeOff'
-  | 'info';
+  | 'info'
+  | 'camera'
+  | 'arrowRight'
+  | 'image'
+  | 'menu'
+  | 'posts';
 
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
@@ -444,6 +512,11 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'eye': return <EyeIcon {...props} />;
     case 'eyeOff': return <EyeOffIcon {...props} />;
     case 'info': return <InfoIcon {...props} />;
+    case 'camera': return <CameraIcon {...props} />;
+    case 'arrowRight': return <ArrowRightIcon {...props} />;
+    case 'image': return <ImageIcon {...props} />;
+    case 'menu': return <MenuIcon {...props} />;
+    case 'posts': return <PostsIcon {...props} />;
     default: return <GamepadIcon {...props} />;
   }
 };

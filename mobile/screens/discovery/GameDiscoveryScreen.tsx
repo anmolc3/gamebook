@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import {
@@ -66,13 +67,14 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   const [trending, setTrending] = useState<CatalogGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRulesGame, setSelectedRulesGame] = useState<CatalogGame | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadCatalog();
   }, [selectedCategory]);
 
-  const loadCatalog = async () => {
-    setLoading(true);
+  const loadCatalog = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const url =
         selectedCategory === 'ALL'
@@ -96,7 +98,13 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
       ]);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setIsRefreshing(true);
+    await loadCatalog(true);
   };
 
   const filteredGames = games.filter((g) => {
@@ -210,7 +218,17 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+            />
+          }
+        >
           {/* Trending Shelf (Shown on ALL view when no search query) */}
           {selectedCategory === 'ALL' && !searchQuery.trim() && trending.length > 0 && (
             <View style={styles.shelfSection}>

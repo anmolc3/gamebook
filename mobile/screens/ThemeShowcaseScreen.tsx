@@ -4,9 +4,11 @@ import {
   ScrollView,
   View,
   Text,
+  TextInput,
   StyleSheet,
   StatusBar,
   TouchableOpacity,
+  RefreshControl,
 } from 'react-native';
 import { useTheme, getThemeGradients } from '../theme';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,7 +20,9 @@ import {
   StatCard,
   InputField,
   SettingsModal,
+  NotificationsModal,
   CreateStoryModal,
+  SocialFeedSection,
 } from '../components';
 import { StoryTrayItem } from '../components/organisms/StoryBar';
 import { StoryService } from '../services/story.service';
@@ -49,12 +53,13 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   const { theme, themeId, effectiveMode } = useTheme();
   const themeGradients = getThemeGradients(themeId, effectiveMode);
   const { user } = useAuth();
-  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
+  const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>([]);
   const [isCreateStoryVisible, setIsCreateStoryVisible] = useState(false);
-  const [liveOnlineCounts, setLiveOnlineCounts] = useState<Record<string, number>>({});
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadStoryFeed = useCallback(() => {
     StoryService.getStoryFeed()
@@ -63,24 +68,20 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           setStoryTrays(trays);
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        setIsRefreshing(false);
+      });
   }, []);
 
-  const loadLiveOnline = useCallback(() => {
-    GameService.fetchLiveOnlineCounts()
-      .then((counts) => {
-        if (counts) setLiveOnlineCounts(counts);
-      })
-      .catch(() => {});
-  }, []);
+  const onRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    loadStoryFeed();
+  }, [loadStoryFeed]);
 
   useEffect(() => {
     loadStoryFeed();
-    loadLiveOnline();
-
-    const interval = setInterval(loadLiveOnline, 4000);
-    return () => clearInterval(interval);
-  }, [loadStoryFeed, loadLiveOnline]);
+  }, [loadStoryFeed]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -94,20 +95,30 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
         backgroundColor={theme.colors.background}
       />
 
-      {/* Marvie Top App Header */}
+      {/* Marvie Top App Header with Animated Notification Bell */}
       <AppHeader
         userName={user?.displayName || 'Player'}
         avatarUrl={user?.avatarUrl}
-        greeting="Good Evening"
-        onPressNotifications={() => showToast('Opening Notifications')}
-        onPressSettings={() => setSettingsModalVisible(true)}
-        onPressThemes={onPressThemes}
+        hasUnreadNotifications={hasUnreadNotifs}
+        onPressNotifications={() => {
+          setHasUnreadNotifs(false);
+          setNotificationsModalVisible(true);
+        }}
         onPressProfile={onPressProfile}
-        onPressFriends={onPressFriends}
-        onPressChat={onPressChat}
       />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
+          />
+        }
+      >
         {/* Toast Alert */}
         {toastMessage && (
           <View
@@ -156,96 +167,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           </ScrollView>
         </View>
 
-        {/* Marvie Big Feature Card (Solid Gradient Matching Active Theme) */}
-        <LinearGradient
-          colors={themeGradients.hero}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={[
-            styles.heroCard,
-            {
-              borderColor: themeGradients.heroBorder,
-              overflow: 'hidden',
-            },
-            theme.shadows.card,
-          ]}
-        >
-          <View style={styles.heroTopRow}>
-            <View
-              style={[
-                styles.heroTag,
-                { backgroundColor: theme.colors.cardTintMint },
-              ]}
-            >
-              <Icon name="trophy" size={12} color={theme.colors.primary} />
-              <Text style={[styles.heroTagText, { color: theme.colors.primary }]}>
-                MULTIPLAYER ARENA • LIVE
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.livePulseDot,
-                { backgroundColor: theme.colors.online },
-              ]}
-            />
-          </View>
-
-          <Text style={[styles.heroHeading, { color: theme.colors.textPrimary }]}>
-            Play, Compete & Conquer
-          </Text>
-          <Text style={[styles.heroSubheading, { color: theme.colors.textSecondary }]}>
-            Server-authoritative matches, instant rematches, and live friend challenges.
-          </Text>
-
-          <View style={styles.heroActionRow}>
-            <TouchableOpacity
-              onPress={() => (onPressPlay ? onPressPlay() : showToast('Public Matchmaking'))}
-              style={[
-                styles.heroPrimaryBtn,
-                { backgroundColor: theme.colors.primary },
-                theme.shadows.soft,
-              ]}
-              activeOpacity={0.82}
-            >
-              <Icon name="play" size={18} color={theme.colors.textOnPrimary} strokeWidth={2.4} />
-              <Text style={[styles.heroPrimaryBtnText, { color: theme.colors.textOnPrimary }]}>
-                Quick Match
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => (onPressDiscovery ? onPressDiscovery() : showToast('All Games'))}
-              style={[
-                styles.heroSecondaryBtnWithText,
-                {
-                  backgroundColor: theme.colors.surfaceElevated,
-                },
-              ]}
-              activeOpacity={0.75}
-            >
-              <Icon name="gamepad" size={18} color={theme.colors.textPrimary} />
-              <Text style={[styles.heroSecondaryBtnText, { color: theme.colors.textPrimary }]}>
-                71+ Games
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => (onPressLeaderboards ? onPressLeaderboards() : showToast('Leaderboards'))}
-              style={[
-                styles.heroSecondaryBtn,
-                {
-                  backgroundColor: theme.colors.surfaceElevated,
-                },
-              ]}
-              activeOpacity={0.7}
-              accessibilityLabel="Leaderboards"
-            >
-              <Icon name="trophy" size={18} color="#FFD700" />
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-
-        {/* Featured Multiplayer Games — 8 curated picks */}
+        {/* Featured Multiplayer Games — Compact 2-Column Grid */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -253,135 +175,106 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             </Text>
             <TouchableOpacity onPress={onPressDiscovery} activeOpacity={0.7}>
               <Text style={[styles.sectionSubtitle, { color: theme.colors.primary }]}>
-                All 71+ Games
+                All 71+ Games →
               </Text>
             </TouchableOpacity>
           </View>
 
-          {/* 1 — Board */}
-          <GameCard
-            title="Ludo World Arena"
-            subtitle="Classic 2–4 player board game with server-authoritative dice and tactical token navigation."
-            gameType="LUDO"
-            icon="dice"
-            playerCountText="2 - 4 Players"
-            onlineCount={liveOnlineCounts['LUDO'] ?? 0}
-            accentColor={theme.colors.accentAmber}
-            badgeText="POPULAR"
-            onPressPlay={() => (onPressPlay ? onPressPlay('LUDO') : showToast('Matchmaking Ludo Arena...'))}
-          />
+          <View style={styles.gamesGrid}>
+            <GameCard
+              compact
+              title="Ludo World"
+              gameType="LUDO"
+              icon="dice"
+              playerCountText="2-4P"
+              accentColor={theme.colors.accentAmber}
+              badgeText="POPULAR"
+              onPressPlay={() => (onPressPlay ? onPressPlay('LUDO') : showToast('Matchmaking Ludo Arena...'))}
+            />
 
-          {/* 2 — Strategy */}
-          <GameCard
-            title="Chess Grandmaster"
-            subtitle="Official 8×8 FIDE rules, server-validated legal moves, check/checkmate detection, and clock."
-            gameType="CHESS"
-            icon="trophy"
-            playerCountText="2 Players"
-            onlineCount={liveOnlineCounts['CHESS'] ?? 0}
-            accentColor="#0062FF"
-            badgeText="STRATEGY"
-            onPressPlay={() => (onPressPlay ? onPressPlay('CHESS') : showToast('Matchmaking Chess...'))}
-          />
+            <GameCard
+              compact
+              title="Chess Master"
+              gameType="CHESS"
+              icon="trophy"
+              playerCountText="2P"
+              accentColor="#0062FF"
+              badgeText="STRATEGY"
+              onPressPlay={() => (onPressPlay ? onPressPlay('CHESS') : showToast('Matchmaking Chess...'))}
+            />
 
-          {/* 3 — Casual / Arcade */}
-          <GameCard
-            title="8 Ball Pool Arena"
-            subtitle="Server-validated cue ball impulse, solid & stripe designation, and 8-ball pocket rules."
-            gameType="POOL_8_BALL"
-            icon="target"
-            playerCountText="2 Players"
-            onlineCount={liveOnlineCounts['POOL_8_BALL'] ?? 0}
-            accentColor="#3ED598"
-            badgeText="ARCADE"
-            onPressPlay={() => (onPressPlay ? onPressPlay('POOL_8_BALL') : showToast('Matchmaking 8 Ball Pool...'))}
-          />
+            <GameCard
+              compact
+              title="8 Ball Pool"
+              gameType="POOL_8_BALL"
+              icon="target"
+              playerCountText="2P"
+              accentColor="#3ED598"
+              badgeText="ARCADE"
+              onPressPlay={() => (onPressPlay ? onPressPlay('POOL_8_BALL') : showToast('Matchmaking 8 Ball Pool...'))}
+            />
 
-          {/* 4 — Card */}
-          <GameCard
-            title="Color Match Clash"
-            subtitle="108-card color and rank shedding with Skip, Reverse, Draw 2, and Wildcards."
-            gameType="UNO_STYLE"
-            icon="palette"
-            playerCountText="2 - 4 Players"
-            onlineCount={liveOnlineCounts['UNO_STYLE'] ?? 0}
-            accentColor="#EF4444"
-            badgeText="CARD HIT"
-            onPressPlay={() => (onPressPlay ? onPressPlay('UNO_STYLE') : showToast('Matchmaking Color Match...'))}
-          />
+            <GameCard
+              compact
+              title="Color Match"
+              gameType="UNO_STYLE"
+              icon="palette"
+              playerCountText="2-4P"
+              accentColor="#EF4444"
+              badgeText="CARDS"
+              onPressPlay={() => (onPressPlay ? onPressPlay('UNO_STYLE') : showToast('Matchmaking Color Match...'))}
+            />
 
-          {/* 5 — Puzzle / Word */}
-          <GameCard
-            title="Wordle Duel"
-            subtitle="5-letter secret word deduction with live letter status feedback and simultaneous turns."
-            gameType="WORDLE_DUEL"
-            icon="award"
-            playerCountText="2 Players"
-            onlineCount={liveOnlineCounts['WORDLE_DUEL'] ?? 0}
-            accentColor="#22C55E"
-            badgeText="WORD HIT"
-            onPressPlay={() => (onPressPlay ? onPressPlay('WORDLE_DUEL') : showToast('Matchmaking Wordle Duel...'))}
-          />
+            <GameCard
+              compact
+              title="Wordle Duel"
+              gameType="WORDLE_DUEL"
+              icon="award"
+              playerCountText="2P"
+              accentColor="#22C55E"
+              badgeText="WORD"
+              onPressPlay={() => (onPressPlay ? onPressPlay('WORDLE_DUEL') : showToast('Matchmaking Wordle Duel...'))}
+            />
 
-          {/* 6 — Trivia */}
-          <GameCard
-            title="Quiz Battle Arena"
-            subtitle="Rapid-fire trivia showdown across history, astronomy, science, and pop culture."
-            gameType="QUIZ_BATTLE"
-            icon="bell"
-            playerCountText="2 - 6 Players"
-            onlineCount={liveOnlineCounts['QUIZ_BATTLE'] ?? 0}
-            accentColor="#6366F1"
-            badgeText="TRIVIA"
-            onPressPlay={() => (onPressPlay ? onPressPlay('QUIZ_BATTLE') : showToast('Matchmaking Quiz Battle...'))}
-          />
-
-          {/* 7 — Party */}
-          <GameCard
-            title="Would You Rather?"
-            subtitle="Compelling A/B dilemmas with real-time voting and percentage consensus comparisons."
-            gameType="WOULD_YOU_RATHER"
-            icon="users"
-            playerCountText="2 - 8 Players"
-            onlineCount={liveOnlineCounts['WOULD_YOU_RATHER'] ?? 0}
-            accentColor="#38BDF8"
-            badgeText="PARTY"
-            onPressPlay={() => (onPressPlay ? onPressPlay('WOULD_YOU_RATHER') : showToast('Matchmaking Would You Rather...'))}
-          />
-
-          {/* 8 — Social Deduction */}
-          <GameCard
-            title="Mafia / Werewolf"
-            subtitle="Social deduction with Day discussion, public voting, and secret Night roles."
-            gameType="MAFIA"
-            icon="crown"
-            playerCountText="5 - 10 Players"
-            onlineCount={liveOnlineCounts['MAFIA'] ?? 0}
-            accentColor="#7C3AED"
-            badgeText="MYSTERY"
-            onPressPlay={() => (onPressPlay ? onPressPlay('MAFIA') : showToast('Matchmaking Mafia...'))}
-          />
-
-          {/* See All CTA */}
-          <TouchableOpacity
-            onPress={() => (onPressDiscovery ? onPressDiscovery() : showToast('Opening Game Library...'))}
-            activeOpacity={0.82}
-            style={[
-              styles.seeAllBtn,
-              {
-                backgroundColor: theme.colors.cardTintMint,
-              },
-            ]}
-          >
-            <Icon name="gamepad" size={18} color={theme.colors.primary} />
-            <Text style={[styles.seeAllBtnText, { color: theme.colors.primary }]}>
-              Browse All 71+ Multiplayer Games
-            </Text>
-            <Icon name="chevronRight" size={16} color={theme.colors.primary} strokeWidth={2.5} />
-          </TouchableOpacity>
+            <GameCard
+              compact
+              title="Quiz Battle"
+              gameType="QUIZ_BATTLE"
+              icon="bell"
+              playerCountText="2-6P"
+              accentColor="#6366F1"
+              badgeText="TRIVIA"
+              onPressPlay={() => (onPressPlay ? onPressPlay('QUIZ_BATTLE') : showToast('Matchmaking Quiz Battle...'))}
+            />
+          </View>
         </View>
 
-        {/* Join Private Room Code Input */}
+        {/* Community & Friends Social Feed on Homepage */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Icon name="users" size={18} color={theme.colors.primary} />
+              <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
+                Community & Social Feed
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onPressFriends} activeOpacity={0.7}>
+              <Text style={[styles.sectionSubtitle, { color: theme.colors.primary }]}>
+                Friends Page →
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <SocialFeedSection
+            maxPosts={4}
+            onViewProfile={onPressProfile}
+            onChallengeUser={(targetId) => {
+              if (onPressPlay) onPressPlay();
+            }}
+          />
+        </View>
+
+        {/* Join Private Room Code Input — Single Box at bottom */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -391,63 +284,62 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
               6-Letter Code
             </Text>
           </View>
-          <LinearGradient
-            colors={themeGradients.joinCode}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <View
             style={[
-              styles.joinCodeCard,
+              styles.singleJoinCodeBox,
               {
-                borderRadius: theme.radius.card,
-                borderWidth: 0,
-                overflow: 'hidden',
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
               },
               theme.shadows.card,
             ]}
           >
-            <View style={styles.codeSearchRow}>
-              <View style={{ flex: 1 }}>
-                <InputField
-                  placeholder="Enter 6-character room code..."
-                  leftIcon="search"
-                  value={searchQuery}
-                  onChangeText={(text) => setSearchQuery(text.toUpperCase())}
-                  autoCapitalize="characters"
-                  maxLength={8}
-                />
-              </View>
-              {searchQuery.trim().length >= 4 && (
-                <TouchableOpacity
-                  onPress={() => {
-                    if (onPressPlay) {
-                      onPressPlay(searchQuery.trim().toUpperCase());
-                    } else {
-                      showToast(`Joining room ${searchQuery}...`);
-                    }
-                  }}
-                  style={[
-                    styles.joinCodeBtn,
-                    { backgroundColor: theme.colors.primary },
-                    theme.shadows.soft,
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Icon name="play" size={16} color={theme.colors.textOnPrimary} strokeWidth={2.4} />
-                  <Text style={[styles.joinCodeBtnText, { color: theme.colors.textOnPrimary }]}>
-                    Join
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </LinearGradient>
+            <Icon name="search" size={20} color={theme.colors.textMuted} />
+            <TextInput
+              style={[
+                styles.inlineCodeInput,
+                { color: theme.colors.textPrimary },
+              ]}
+              placeholder="Enter 6-character room code..."
+              placeholderTextColor={theme.colors.textMuted}
+              value={searchQuery}
+              onChangeText={(text) => setSearchQuery(text.toUpperCase())}
+              autoCapitalize="characters"
+              maxLength={8}
+            />
+            {searchQuery.trim().length >= 4 && (
+              <TouchableOpacity
+                onPress={() => {
+                  if (onPressPlay) {
+                    onPressPlay(searchQuery.trim().toUpperCase());
+                  } else {
+                    showToast(`Joining room ${searchQuery}...`);
+                  }
+                }}
+                style={[
+                  styles.inlineJoinBtn,
+                  { backgroundColor: theme.colors.primary },
+                  theme.shadows.soft,
+                ]}
+                activeOpacity={0.8}
+              >
+                <Icon name="play" size={14} color={theme.colors.textOnPrimary} strokeWidth={2.4} />
+                <Text style={[styles.inlineJoinBtnText, { color: theme.colors.textOnPrimary }]}>
+                  Join
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </ScrollView>
 
-      {/* Dedicated Settings Modal Bottom Sheet */}
-      <SettingsModal
-        visible={settingsModalVisible}
-        onClose={() => setSettingsModalVisible(false)}
-        onPressOpenThemesPage={onPressThemes}
+      {/* Notifications Modal Bottom Sheet */}
+      <NotificationsModal
+        visible={notificationsModalVisible}
+        onClose={() => setNotificationsModalVisible(false)}
+        onAcceptInvite={(gameType) => {
+          if (onPressPlay) onPressPlay(gameType);
+        }}
       />
 
       {/* Add New Story Modal with Photos, Moods & Captions */}
@@ -589,27 +481,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
   },
-  joinCodeCard: {
-    padding: 16,
-    borderWidth: 0,
-  },
-  codeSearchRow: {
+  singleJoinCodeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    minHeight: 56,
+    gap: 12,
   },
-  joinCodeBtn: {
-    height: 54,
-    paddingHorizontal: 18,
-    borderRadius: 14,
+  inlineCodeInput: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    paddingVertical: 6,
+  },
+  inlineJoinBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
-  joinCodeBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
+  inlineJoinBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   statsRow: {
     flexDirection: 'row',
@@ -632,5 +531,10 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
     flex: 1,
     textAlign: 'center',
+  },
+  gamesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
 });

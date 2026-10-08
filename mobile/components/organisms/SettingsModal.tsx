@@ -32,6 +32,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const { theme, themeId, appearanceMode, effectiveMode, setThemeId, setAppearanceMode } = useTheme();
   const { user, logout } = useAuth();
+  const activeMeta = THEME_METADATA.find((m) => m.id === themeId) || THEME_METADATA[0];
 
   // Local preferences states
   const [soundEffects, setSoundEffects] = useState(true);
@@ -192,7 +193,81 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 })}
               </View>
 
-              {/* Dedicated Themes Studio Page Link */}
+              {/* Dedicated Interactive Themes Picker */}
+              <Text style={[styles.subSectionTitle, { color: theme.colors.textSecondary, marginTop: 18 }]}>
+                Color Themes
+              </Text>
+
+              <View style={styles.themesGrid}>
+                {THEME_METADATA.map((item) => {
+                  const isSelected = themeId === item.id;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      onPress={() => setThemeId(item.id)}
+                      activeOpacity={0.78}
+                      style={[
+                        styles.themeItemCard,
+                        {
+                          backgroundColor: theme.colors.surfaceElevated,
+                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                          borderWidth: isSelected ? 2 : 1,
+                        },
+                        isSelected && theme.shadows.soft,
+                      ]}
+                    >
+                      <View style={styles.themeItemLeft}>
+                        <View style={styles.themeColorCircles}>
+                          <View style={[styles.paletteCircle, { backgroundColor: item.previewColor }]} />
+                          <View style={[styles.paletteCircle, { backgroundColor: item.accentColor, marginLeft: -7 }]} />
+                        </View>
+                        <View style={styles.themeItemMeta}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text
+                              style={[
+                                styles.themeItemName,
+                                {
+                                  color: theme.colors.textPrimary,
+                                  fontWeight: isSelected ? '700' : '600',
+                                },
+                              ]}
+                            >
+                              {item.name}
+                            </Text>
+                            {isSelected && (
+                              <View style={[styles.activeThemeMiniBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+                                <Text style={[styles.activeThemeMiniText, { color: theme.colors.primary }]}>Active</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={[styles.themeItemDesc, { color: theme.colors.textSecondary }]}>
+                            {item.id === 'midnightNeutral' ? 'Modern Slate & Obsidian' :
+                             item.id === 'coralMarble' ? 'Vibrant Coral & Rose' :
+                             item.id === 'forestGold' ? 'Emerald Forest & Gold' :
+                             item.id === 'moonViolet' ? 'Moonlit Lavender & Violet' :
+                             'Deep Twilight & Indigo'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View
+                        style={[
+                          styles.themeRadioCircle,
+                          {
+                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                            backgroundColor: isSelected ? theme.colors.primary : 'transparent',
+                          },
+                        ]}
+                      >
+                        {isSelected && (
+                          <Icon name="check" size={12} color={theme.colors.textOnPrimary} strokeWidth={3} />
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               {onPressOpenThemesPage && (
                 <TouchableOpacity
                   onPress={() => {
@@ -200,148 +275,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onPressOpenThemesPage();
                   }}
                   style={[
-                    styles.openThemesBanner,
+                    styles.openStudioSecondaryBtn,
                     {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: theme.colors.primary,
+                      backgroundColor: theme.colors.surface,
+                      borderColor: theme.colors.border,
                     },
                   ]}
-                  activeOpacity={0.82}
+                  activeOpacity={0.75}
                 >
-                  <View style={styles.openThemesLeft}>
-                    <View
-                      style={[
-                        styles.openThemesIconWrap,
-                        { backgroundColor: theme.colors.primary },
-                      ]}
-                    >
-                      <Icon name="palette" size={18} color={theme.colors.textOnPrimary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.openThemesTitle, { color: theme.colors.textPrimary }]}>
-                        Theme Studio Page
-                      </Text>
-                      <Text style={[styles.openThemesSubtitle, { color: theme.colors.textSecondary }]}>
-                        Open full separate page with live component mockups & swatches
-                      </Text>
-                    </View>
-                  </View>
-                  <Icon name="chevronRight" size={18} color={theme.colors.primary} />
+                  <Icon name="palette" size={15} color={theme.colors.primary} />
+                  <Text style={[styles.openStudioSecondaryText, { color: theme.colors.primary }]}>
+                    Open Dedicated Theme Studio →
+                  </Text>
                 </TouchableOpacity>
               )}
-
-              {/* Theme Family Choices */}
-              <Text style={[styles.subSectionTitle, { color: theme.colors.textSecondary, marginTop: 18 }]}>
-                Theme Family (5 Curated Palettes)
-              </Text>
-
-              {THEME_METADATA.map((meta) => {
-                const isSelected = themeId === meta.id;
-                const sampleTheme = resolveTheme(meta.id, effectiveMode);
-
-                return (
-                  <TouchableOpacity
-                    key={meta.id}
-                    onPress={() => setThemeId(meta.id)}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.themeCard,
-                      {
-                        backgroundColor: sampleTheme.colors.surface,
-                        borderColor: isSelected
-                          ? sampleTheme.colors.primary
-                          : sampleTheme.colors.border,
-                        borderWidth: isSelected ? 2 : 1,
-                      },
-                      isSelected ? theme.shadows.card : theme.shadows.soft,
-                    ]}
-                  >
-                    <View style={styles.cardHeader}>
-                      <View style={styles.colorPills}>
-                        <View
-                          style={[
-                            styles.previewDot,
-                            { backgroundColor: sampleTheme.colors.primary },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.previewDot,
-                            { backgroundColor: sampleTheme.colors.secondary },
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.previewDot,
-                            { backgroundColor: sampleTheme.colors.accent },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.themeName, { color: sampleTheme.colors.textPrimary }]}>
-                        {meta.name}
-                      </Text>
-                      {isSelected ? (
-                        <View
-                          style={[
-                            styles.checkBadge,
-                            { backgroundColor: sampleTheme.colors.primary },
-                          ]}
-                        >
-                          <Icon name="check" size={12} color="#FFFFFF" strokeWidth={3} />
-                        </View>
-                      ) : (
-                        <View
-                          style={[
-                            styles.unselectedBadge,
-                            { borderColor: sampleTheme.colors.border },
-                          ]}
-                        />
-                      )}
-                    </View>
-
-                    {/* Miniature UI Demonstration */}
-                    <View
-                      style={[
-                        styles.miniUiPreview,
-                        {
-                          backgroundColor: sampleTheme.colors.background,
-                          borderColor: sampleTheme.colors.border,
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.miniElevatedCard,
-                          {
-                            backgroundColor: sampleTheme.colors.surfaceElevated,
-                            borderColor: sampleTheme.colors.border,
-                          },
-                        ]}
-                      >
-                        <View style={styles.miniRow}>
-                          <Icon name="gamepad" size={14} color={sampleTheme.colors.primary} />
-                          <View
-                            style={[
-                              styles.miniBar,
-                              { backgroundColor: sampleTheme.colors.textPrimary },
-                            ]}
-                          />
-                        </View>
-                        <View
-                          style={[
-                            styles.miniButton,
-                            { backgroundColor: sampleTheme.colors.primary },
-                          ]}
-                        >
-                          <Text style={[styles.miniBtnText, { color: sampleTheme.colors.textOnPrimary }]}>
-                            Play
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
 
               {/* SECTION 2: NOTIFICATIONS & ALERTS */}
               <View style={[styles.sectionHeader, { marginTop: 24 }]}>
@@ -351,107 +298,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </Text>
               </View>
 
-              {/* Notification Center Trigger Card */}
-              <TouchableOpacity
-                style={[
-                  styles.notificationCard,
-                  {
-                    backgroundColor: theme.colors.surface,
-                    borderColor: theme.colors.border,
-                  },
-                  theme.shadows.soft,
-                ]}
-                onPress={() => {
-                  if (onPressNotifications) {
-                    onPressNotifications();
-                  } else {
-                    setShowNotificationsList(!showNotificationsList);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <View style={styles.notificationCardLeft}>
-                  <View
-                    style={[
-                      styles.notificationIconBadge,
-                      { backgroundColor: theme.colors.cardTintMint },
-                    ]}
-                  >
-                    <Icon name="bell" size={20} color={theme.colors.primary} />
-                  </View>
-                  <View style={styles.notificationCardMeta}>
-                    <Text style={[styles.notificationCardTitle, { color: theme.colors.textPrimary }]}>
-                      Notifications Center
-                    </Text>
-                    <Text style={[styles.notificationCardDesc, { color: theme.colors.textSecondary }]}>
-                      {showNotificationsList ? 'Hide notification feed' : 'View recent match invites & alerts'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={[styles.notificationBadgePill, { backgroundColor: theme.colors.primary }]}>
-                  <Text style={[styles.notificationBadgeText, { color: theme.colors.textOnPrimary }]}>
-                    3 New
-                  </Text>
-                </View>
-              </TouchableOpacity>
 
-              {/* Inline Notifications List Feed */}
-              {showNotificationsList && (
-                <View
-                  style={[
-                    styles.notificationsListWrapper,
-                    {
-                      backgroundColor: theme.colors.surfaceElevated,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <View style={styles.notificationItem}>
-                    <View style={[styles.notifDot, { backgroundColor: theme.colors.primary }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.notifItemTitle, { color: theme.colors.textPrimary }]}>
-                        Game Room Invite
-                      </Text>
-                      <Text style={[styles.notifItemBody, { color: theme.colors.textSecondary }]}>
-                        Alex invited you to room #94821 in Tic-Tac-Toe Arena
-                      </Text>
-                      <Text style={[styles.notifItemTime, { color: theme.colors.textMuted }]}>
-                        5m ago
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-                  <View style={styles.notificationItem}>
-                    <View style={[styles.notifDot, { backgroundColor: '#00D2D3' }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.notifItemTitle, { color: theme.colors.textPrimary }]}>
-                        Friend Request
-                      </Text>
-                      <Text style={[styles.notifItemBody, { color: theme.colors.textSecondary }]}>
-                        Sarah_99 sent you a friend request
-                      </Text>
-                      <Text style={[styles.notifItemTime, { color: theme.colors.textMuted }]}>
-                        1h ago
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-                  <View style={styles.notificationItem}>
-                    <View style={[styles.notifDot, { backgroundColor: '#FFB020' }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.notifItemTitle, { color: theme.colors.textPrimary }]}>
-                        Turn Reminder
-                      </Text>
-                      <Text style={[styles.notifItemBody, { color: theme.colors.textSecondary }]}>
-                        It's your turn in Chess match with Marcus
-                      </Text>
-                      <Text style={[styles.notifItemTime, { color: theme.colors.textMuted }]}>
-                        3h ago
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
 
               {/* Notification Preference Toggles Group */}
               <View
@@ -830,75 +677,76 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginLeft: 6,
   },
-  themeCard: {
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 12,
+  themesGrid: {
+    gap: 8,
+    marginBottom: 8,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  colorPills: {
-    flexDirection: 'row',
-    marginRight: 10,
-  },
-  previewDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginRight: 4,
-  },
-  themeName: {
-    fontSize: 16,
-    fontWeight: '700',
-    flex: 1,
-  },
-  checkBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  unselectedBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-  },
-  miniUiPreview: {
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-  },
-  miniElevatedCard: {
+  themeItemCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 14,
   },
-  miniRow: {
+  themeItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  themeColorCircles: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  miniBar: {
-    width: 60,
-    height: 6,
-    borderRadius: 3,
-    marginLeft: 8,
-    opacity: 0.7,
+  paletteCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
-  miniButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  themeItemMeta: {
+    flex: 1,
+  },
+  themeItemName: {
+    fontSize: 14,
+  },
+  activeThemeMiniBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 6,
   },
-  miniBtnText: {
+  activeThemeMiniText: {
     fontSize: 10,
+    fontWeight: '700',
+  },
+  themeItemDesc: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  themeRadioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  openStudioSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  openStudioSecondaryText: {
+    fontSize: 12,
     fontWeight: '700',
   },
   settingsGroup: {
@@ -1071,38 +919,5 @@ const styles = StyleSheet.create({
   },
   notifItemTime: {
     fontSize: 10,
-  },
-  openThemesBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    marginTop: 14,
-    marginBottom: 6,
-    gap: 10,
-  },
-  openThemesLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-  },
-  openThemesIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  openThemesTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  openThemesSubtitle: {
-    fontSize: 11,
-    lineHeight: 15,
   },
 });

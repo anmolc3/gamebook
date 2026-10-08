@@ -39,9 +39,11 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Design kit files
+# Design kit & raw working asset files
 *.sketch
 sketch_extracted/
 /images/
 filesizes.txt
+/avatars/
+/sound effects/
 
