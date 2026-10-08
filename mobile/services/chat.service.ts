@@ -99,9 +99,15 @@ export class ChatService {
       headers,
       body: JSON.stringify({ content, type, metadata }),
     });
-    const json = await res.json();
+    const text = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(res.status === 404 ? 'Chat conversation endpoint not found (404)' : `Server error (${res.status})`);
+    }
     if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to send message');
+      throw new Error(json.error?.message || json.error || 'Failed to send message');
     }
     return json.data;
   }

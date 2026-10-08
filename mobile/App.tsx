@@ -33,6 +33,8 @@ import { StoryTrayItem } from './components/organisms/StoryBar';
 import { ThemesScreen } from './screens/themes/ThemesScreen';
 import { NotificationService, CHANNELS } from './services/notification.service';
 import { MobileSocketService } from './services/socket.service';
+import { CallProvider } from './features/call/CallContext';
+import { CallModal } from './components/organisms/CallModal';
 
 interface ConversationPeer {
   id: string;
@@ -806,6 +808,9 @@ function MainNavigator() {
           setProfileUserId(targetUserId);
         }}
       />
+
+      {/* Global Real-Time 1-on-1 Audio & Video Call Overlay */}
+      <CallModal />
     </View>
   );
 }
@@ -815,7 +820,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AuthProvider>
-          <MainNavigator />
+          <CallProvider>
+            <MainNavigator />
+          </CallProvider>
         </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>

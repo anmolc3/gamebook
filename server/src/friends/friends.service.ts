@@ -1,5 +1,5 @@
 import { prisma } from '../database/prisma';
-import { emitToUser } from '../sockets/socket.server';
+import { emitToUser, isUserOnline } from '../sockets/socket.server';
 import { PushNotificationService } from '../notifications/push.service';
 
 export class FriendsService {
@@ -33,7 +33,7 @@ export class FriendsService {
         displayName: profile?.displayName || friend.username,
         avatarUrl: profile?.avatarUrl || null,
         bio: profile?.bio || null,
-        isOnline: profile?.isOnline || false,
+        isOnline: isUserOnline(friend.id) || (profile?.isOnline ?? false),
         lastSeen: profile?.lastSeen || friend.createdAt,
         totalMatches,
         totalWins,
@@ -90,7 +90,7 @@ export class FriendsService {
           displayName: profile?.displayName || user.username,
           avatarUrl: profile?.avatarUrl || null,
           bio: profile?.bio || null,
-          isOnline: profile?.isOnline || false,
+          isOnline: isUserOnline(user.id) || (profile?.isOnline ?? false),
           totalMatches,
           totalWins,
           winRate,
@@ -258,7 +258,7 @@ export class FriendsService {
         username: request.receiver.username,
         displayName: request.receiver.profile?.displayName || request.receiver.username,
         avatarUrl: request.receiver.profile?.avatarUrl || null,
-        isOnline: request.receiver.profile?.isOnline || false,
+        isOnline: isUserOnline(request.receiver.id) || (request.receiver.profile?.isOnline ?? false),
       },
     });
 
@@ -426,7 +426,7 @@ export class FriendsService {
         displayName: user.profile?.displayName || user.username,
         avatarUrl: user.profile?.avatarUrl || null,
         bio: user.profile?.bio || null,
-        isOnline: user.profile?.isOnline || false,
+        isOnline: isUserOnline(user.id) || (user.profile?.isOnline ?? false),
         totalMatches,
         totalWins,
         winRate,
@@ -603,7 +603,7 @@ export class FriendsService {
         displayName: user.profile?.displayName || user.username,
         avatarUrl: user.profile?.avatarUrl || null,
         bio: user.profile?.bio || null,
-        isOnline: user.profile?.isOnline || false,
+        isOnline: isUserOnline(user.id) || (user.profile?.isOnline ?? false),
         totalMatches,
         totalWins,
         winRate,

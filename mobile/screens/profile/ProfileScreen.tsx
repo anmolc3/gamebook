@@ -29,6 +29,7 @@ import {
 import { ImagePickerService } from '../../services/imagePicker.service';
 import { FeedService, FeedPostItem } from '../../services/feed.service';
 import { FeedPostImage } from '../../components/organisms/SocialFeedSection';
+import { FriendsService } from '../../services/friends.service';
 
 export interface ProfileScreenProps {
   userId?: string;
@@ -246,6 +247,56 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
+  const handleSendFriendRequest = async () => {
+    if (!profile) return;
+    try {
+      await FriendsService.sendRequest(profile.id);
+      setProfile((prev) => (prev ? { ...prev, relationship: 'REQUEST_SENT' } : null));
+      Alert.alert('Request Sent', `Friend request sent to ${profile.displayName}!`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not send friend request');
+    }
+  };
+
+  const handleAcceptFriendRequest = async () => {
+    if (!profile) return;
+    try {
+      const requests = await FriendsService.fetchRequests();
+      const match = requests.incoming.find((r) => r.user.id === profile.id);
+      if (match) {
+        await FriendsService.acceptRequest(match.requestId);
+        setProfile((prev) => (prev ? { ...prev, relationship: 'FRIENDS' } : null));
+        Alert.alert('Friend Added', `You and ${profile.displayName} are now friends!`);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Could not accept friend request');
+    }
+  };
+
+  const handleRemoveFriend = () => {
+    if (!profile) return;
+    Alert.alert(
+      'Remove Friend',
+      `Are you sure you want to remove ${profile.displayName} (@${profile.username}) from your friends?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Unfriend',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await FriendsService.removeFriend(profile.id);
+              setProfile((prev) => (prev ? { ...prev, relationship: 'NONE' } : null));
+              Alert.alert('Friend Removed', `${profile.displayName} has been removed from your friends.`);
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Could not remove friend');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   if (isLoading && !profile) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
@@ -445,6 +496,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               {/* Contextual Friendship Button */}
               {relationship === 'NONE' && (
                 <TouchableOpacity
+                  onPress={handleSendFriendRequest}
                   style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
                   activeOpacity={0.8}
                 >
@@ -471,6 +523,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               {relationship === 'REQUEST_RECEIVED' && (
                 <TouchableOpacity
+                  onPress={handleAcceptFriendRequest}
                   style={[styles.primaryActionBtn, { backgroundColor: theme.colors.accent }]}
                   activeOpacity={0.8}
                 >
@@ -482,17 +535,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               )}
 
               {relationship === 'FRIENDS' && (
-                <View
+                <TouchableOpacity
+                  onPress={handleRemoveFriend}
                   style={[
                     styles.primaryActionBtn,
-                    { backgroundColor: theme.colors.accent + '22', borderColor: theme.colors.accent },
+                    { backgroundColor: theme.colors.surfaceElevated, borderColor: '#EF4444' },
                   ]}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Unfriend this player"
                 >
-                  <Icon name="userCheck" size={18} color={theme.colors.accent} />
-                  <Text style={[styles.primaryActionBtnText, { color: theme.colors.accent }]}>
-                    Friends
+                  <Icon name="userX" size={18} color="#EF4444" />
+                  <Text style={[styles.primaryActionBtnText, { color: '#EF4444' }]}>
+                    Unfriend
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
 
               {/* Direct Message Button */}

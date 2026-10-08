@@ -221,6 +221,31 @@ export class PushNotificationService {
   }
 
   /**
+   * Notify a user of an incoming audio or video call.
+   */
+  static async notifyIncomingCall(
+    recipientId: string,
+    callerName: string,
+    callType: 'audio' | 'video',
+    callId: string
+  ): Promise<void> {
+    const token = await this.getToken(recipientId, false);
+    if (!token) return;
+
+    void this.send([
+      {
+        to: token,
+        title: callType === 'video' ? `📹 Incoming Video Call` : `📞 Incoming Audio Call`,
+        body: `${callerName} is calling you...`,
+        data: { type: 'INCOMING_CALL', callType, callId, recipientId },
+        sound: 'default',
+        channelId: 'messages',
+        priority: 'high',
+      },
+    ]);
+  }
+
+  /**
    * Notify a user they unlocked an achievement.
    */
   static async notifyAchievementUnlocked(

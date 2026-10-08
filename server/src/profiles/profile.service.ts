@@ -1,4 +1,5 @@
 import { prisma } from '../database/prisma';
+import { isUserOnline } from '../sockets/socket.server';
 import { UpdateProfileInput } from './profile.validation';
 
 export class ProfileService {
@@ -43,7 +44,7 @@ export class ProfileService {
       avatarUrl: user.profile.avatarUrl,
       themePreference: user.profile.themePreference,
       appearanceMode: user.profile.appearanceMode,
-      isOnline: user.profile.isOnline,
+      isOnline: isUserOnline(user.id) || user.profile.isOnline,
       lastSeen: user.profile.lastSeen,
       createdAt: user.createdAt,
       stats: {
@@ -183,7 +184,7 @@ export class ProfileService {
       displayName: targetUser.profile.displayName,
       bio: targetUser.profile.bio,
       avatarUrl: targetUser.profile.avatarUrl,
-      isOnline: targetUser.profile.isOnline,
+      isOnline: isUserOnline(targetUser.id) || targetUser.profile.isOnline,
       lastSeen: targetUser.profile.lastSeen,
       createdAt: targetUser.createdAt,
       stats: {

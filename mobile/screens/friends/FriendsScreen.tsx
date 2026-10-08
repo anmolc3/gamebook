@@ -550,18 +550,6 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
                       >
                         <Icon name="gamepad" size={16} color={theme.colors.primary} />
                       </TouchableOpacity>
-
-                      <TouchableOpacity
-                        onPress={() => handleRemoveFriend(friend)}
-                        style={[
-                          styles.actionIconBtn,
-                          { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                        ]}
-                        activeOpacity={0.7}
-                        accessibilityLabel="More options"
-                      >
-                        <Icon name="userX" size={16} color={theme.colors.error} />
-                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 ))}

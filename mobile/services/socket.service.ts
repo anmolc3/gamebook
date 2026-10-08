@@ -17,9 +17,9 @@ export class MobileSocketService {
 
     socket = io(SOCKET_URL, {
       auth: { token },
-      transports: ['websocket'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
       reconnectionDelay: 1000,
     });
 
@@ -333,6 +333,119 @@ export class MobileSocketService {
     socket.on('game:started', callback);
     return () => {
       socket?.off('game:started', callback);
+    };
+  }
+
+  // ==========================================
+  // Real-time 1-on-1 Audio & Video Call Methods
+  // ==========================================
+
+  static initiateCall(payload: {
+    callId: string;
+    recipientId: string;
+    callType: 'audio' | 'video';
+    callerInfo: { name: string; username: string; avatarUrl: string | null };
+    conversationId?: string;
+  }): void {
+    if (socket) {
+      socket.emit('call:initiate', payload);
+    }
+  }
+
+  static acceptCall(callId: string): void {
+    if (socket) {
+      socket.emit('call:accept', { callId });
+    }
+  }
+
+  static rejectCall(callId: string, reason = 'declined'): void {
+    if (socket) {
+      socket.emit('call:reject', { callId, reason });
+    }
+  }
+
+  static endCall(callId: string, durationSeconds = 0): void {
+    if (socket) {
+      socket.emit('call:end', { callId, durationSeconds });
+    }
+  }
+
+  static sendCallMediaState(callId: string, isMuted?: boolean, isVideoOff?: boolean): void {
+    if (socket) {
+      socket.emit('call:media_state', { callId, isMuted, isVideoOff });
+    }
+  }
+
+  static sendCallSignal(callId: string, signal: any): void {
+    if (socket) {
+      socket.emit('call:signal', { callId, signal });
+    }
+  }
+
+  static onCallIncoming(
+    callback: (data: {
+      callId: string;
+      callerId: string;
+      callType: 'audio' | 'video';
+      callerInfo: { name: string; username: string; avatarUrl: string | null };
+      conversationId?: string;
+      timestamp: string;
+    }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:incoming', callback);
+    return () => {
+      socket?.off('call:incoming', callback);
+    };
+  }
+
+  static onCallAccepted(
+    callback: (data: { callId: string; timestamp: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:accepted', callback);
+    return () => {
+      socket?.off('call:accepted', callback);
+    };
+  }
+
+  static onCallRejected(
+    callback: (data: { callId: string; reason: string; byUserId?: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:rejected', callback);
+    return () => {
+      socket?.off('call:rejected', callback);
+    };
+  }
+
+  static onCallEnded(
+    callback: (data: { callId: string; durationSeconds?: number; endedBy?: string; reason?: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:ended', callback);
+    return () => {
+      socket?.off('call:ended', callback);
+    };
+  }
+
+  static onCallPeerMediaState(
+    callback: (data: { callId: string; isMuted?: boolean; isVideoOff?: boolean; userId: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:peer_media_state', callback);
+    return () => {
+      socket?.off('call:peer_media_state', callback);
+    };
+  }
+
+  static onCallSignal(
+    callback: (data: { callId: string; signal: any; fromUserId: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('call:signal', callback);
+    return () => {
+      socket?.off('call:signal', callback);
     };
   }
 }

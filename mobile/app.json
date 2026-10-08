@@ -29,6 +29,8 @@
       "permissions": [
         "POST_NOTIFICATIONS",
         "NOTIFICATIONS",
+        "CAMERA",
+        "RECORD_AUDIO",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
         "WAKE_LOCK",
@@ -38,6 +40,7 @@
     },
     "web": {},
     "plugins": [
+      "expo-camera",
       "expo-asset",
       [
         "expo-notifications",

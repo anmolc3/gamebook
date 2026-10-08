@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image } from 'react-native';
-import Svg, { Path, Circle, Rect, Polyline, Line, G, Defs, ClipPath, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, Polyline, Polygon, Line, G, Defs, ClipPath, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
 
 export interface IconProps {
   size?: number;
@@ -497,6 +497,29 @@ export const FriendsAddIcon: React.FC<IconProps> = ({ size = 24, accessibilityLa
   </Svg>
 );
 
+export const MicIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+    <Path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <Line x1="12" y1="19" x2="12" y2="23" />
+    <Line x1="8" y1="23" x2="16" y2="23" />
+  </Svg>
+);
+
+export const VolumeIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+    <Path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+  </Svg>
+);
+
+export const PhoneOffIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 11.36 11.36 0 0 0 3.53.56 2 2 0 0 1 2 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91" />
+    <Line x1="1" y1="1" x2="23" y2="23" />
+  </Svg>
+);
+
 export type IconName =
   | 'home'
   | 'gamepad'
@@ -550,7 +573,10 @@ export type IconName =
   | 'friendsAdd'
   | 'videoCall'
   | 'audioCall'
-  | 'viewOnce';
+  | 'viewOnce'
+  | 'mic'
+  | 'volume'
+  | 'phoneOff';
 
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
@@ -607,6 +633,9 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'friendsAdd': return <FriendsAddIcon {...props} />;
     case 'videoCall': return <VideoCallIcon {...props} />;
     case 'audioCall': return <AudioCallIcon {...props} />;
+    case 'mic': return <MicIcon {...props} />;
+    case 'volume': return <VolumeIcon {...props} />;
+    case 'phoneOff': return <PhoneOffIcon {...props} />;
     default: return <GamepadIcon {...props} />;
   }
 };

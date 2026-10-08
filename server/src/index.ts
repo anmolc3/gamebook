@@ -14,13 +14,15 @@ import storiesRoutes from './stories/stories.routes';
 import achievementsRoutes from './achievements/achievements.routes';
 import notificationsRoutes from './notifications/notifications.routes';
 import feedRoutes from './feeds/feed.routes';
+import uploadRoutes from './upload/upload.routes';
 
 const app = express();
 const server = http.createServer(app);
 
 // Global Middleware
 app.use(cors({ origin: ENV.CORS_ORIGIN }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Base Healthcheck Endpoint
 app.get('/health', async (_req: Request, res: Response) => {
@@ -52,6 +54,8 @@ app.use('/api/v1/stories', storiesRoutes);
 app.use('/api/v1/achievements', achievementsRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/feeds', feedRoutes);
+app.use('/api/v1/upload', uploadRoutes);
+app.use('/upload', uploadRoutes);
 
 // Root API Welcome Endpoint
 app.get('/api/v1', (_req: Request, res: Response) => {
@@ -64,10 +68,23 @@ app.get('/api/v1', (_req: Request, res: Response) => {
       auth: '/api/v1/auth',
       profiles: '/api/v1/profiles',
       friends: '/api/v1/friends',
-      chat: '/api/v1/conversations',
+      chat: '/api/v1/chat',
       rooms: '/api/v1/rooms',
       games: '/api/v1/games',
       stories: '/api/v1/stories',
+      feeds: '/api/v1/feeds',
+      upload: '/api/v1/upload',
+    },
+  });
+});
+
+// JSON 404 Fallback Handler (prevents non-JSON HTML 404 responses)
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({
+    success: false,
+    error: {
+      code: 'NOT_FOUND',
+      message: 'The requested API endpoint was not found on this server.',
     },
   });
 });

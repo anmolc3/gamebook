@@ -13,15 +13,18 @@ import {
   Modal,
   Alert,
   Image,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
+import { useCall } from '../../features/call/CallContext';
 import { ChatService, ChatMessage } from '../../services/chat.service';
 import { MobileSocketService } from '../../services/socket.service';
 import { ImagePickerService } from '../../services/imagePicker.service';
+import { RoomService, SupportedGameType } from '../../services/room.service';
 
 export interface ConversationScreenProps {
   peerId: string;
@@ -56,6 +59,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user: authUser } = useAuth();
+  const { startCall } = useCall();
   const insets = useSafeAreaInsets();
 
   const [conversationId, setConversationId] = useState<string | null>(
@@ -67,6 +71,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [pendingImage, setPendingImage] = useState<{ uri: string; base64?: string } | null>(null);
   const [isViewOnce, setIsViewOnce] = useState<boolean>(true);
@@ -80,6 +85,27 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingActiveRef = useRef<boolean>(false);
+
+  // Monitor keyboard visibility so input stays pinned directly above keyboard
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 100);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setIsKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Initialize conversation and load messages
   const initializeConversation = useCallback(async () => {
@@ -336,22 +362,29 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   };
 
-  // Send game challenge invite
-  const handleSendGameInvite = async (gameType: 'TIC_TAC_TOE' | 'LUDO') => {
+  // Send game challenge invite with real room creation on server
+  const handleSendGameInvite = async (gameType: SupportedGameType) => {
     if (!conversationId) return;
 
     try {
       setShowInviteModal(false);
-      const prefix = gameType === 'TIC_TAC_TOE' ? 'TTT' : 'LUDO';
-      const roomCode = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const gameLabel = gameType === 'TIC_TAC_TOE' ? 'Tic-Tac-Toe' : 'Ludo';
+      const serverGameType = gameType === 'TIC_TAC_TOE' ? 'TICTACTOE' : gameType;
+      // Real room creation on server
+      const room = await RoomService.createRoom(serverGameType as SupportedGameType, true, 2);
+      const roomCode = room.code;
+      const gameLabel =
+        serverGameType === 'TICTACTOE'
+          ? 'Tic-Tac-Toe'
+          : serverGameType === 'LUDO'
+          ? 'Ludo'
+          : 'Duel Match';
       const inviteContent = `Challenged you to a game of ${gameLabel}! Room code: ${roomCode}`;
 
       const newMsg = await ChatService.sendMessage(
         conversationId,
         inviteContent,
         'GAME_INVITE',
-        { gameType, roomCode, hostName: authUser?.displayName || 'Host' }
+        { gameType: serverGameType, roomCode, hostName: authUser?.displayName || 'Host' }
       );
 
       setMessages((prev) => {
@@ -430,14 +463,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 
             {/* Interactive Join / Accept Button */}
             <TouchableOpacity
-              onPress={() => {
-                if (onJoinGameRoom) {
-                  onJoinGameRoom(roomCode, gameType);
-                } else {
-                  Alert.alert(
-                    'Join Game Room',
-                    `Joining ${isTicTacToe ? 'Tic-Tac-Toe' : 'Ludo'} room: ${roomCode}.\nGame rooms will open in Phase 7!`
-                  );
+              onPress={async () => {
+                try {
+                  if (!isOwn) {
+                    await RoomService.joinRoom(roomCode).catch(() => null);
+                  }
+                  if (onJoinGameRoom) {
+                    onJoinGameRoom(roomCode, gameType);
+                  }
+                } catch (err: any) {
+                  Alert.alert('Join Game Room', err.message || 'Could not join room');
                 }
               }}
               style={[
@@ -700,14 +735,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         <View style={styles.headerRightActions}>
           <TouchableOpacity
             onPress={() => {
-              Alert.alert(
-                'Voice Call',
-                `Starting voice call with ${peerName} (@${peerUsername || 'player'})...`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Connect', onPress: () => {} },
-                ]
-              );
+              startCall(peerId, peerName, peerUsername, peerAvatarUrl, 'audio', conversationId || undefined);
             }}
             style={[styles.headerActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
             activeOpacity={0.7}
@@ -718,14 +746,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 
           <TouchableOpacity
             onPress={() => {
-              Alert.alert(
-                'Video Call',
-                `Starting HD video call with ${peerName} (@${peerUsername || 'player'})...`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Connect', onPress: () => {} },
-                ]
-              );
+              startCall(peerId, peerName, peerUsername, peerAvatarUrl, 'video', conversationId || undefined);
             }}
             style={[styles.headerActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
             activeOpacity={0.7}
@@ -747,8 +768,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 
       <KeyboardAvoidingView
         style={styles.flexFill}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
         {/* Messages Stream */}
         {isLoading ? (
@@ -852,7 +873,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             {
               backgroundColor: theme.colors.surfaceElevated,
               borderTopColor: theme.colors.border,
-              paddingBottom: Math.max(insets.bottom, 10),
+              paddingBottom: isKeyboardVisible ? 8 : Math.max(insets.bottom, 10),
             },
           ]}
         >

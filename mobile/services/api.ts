@@ -23,7 +23,7 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`Server returned non-JSON response (${res.status})`);
+    throw new Error(res.status === 404 ? `Service endpoint not found (404): ${endpoint}` : `Server error (${res.status})`);
   }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
@@ -44,7 +44,7 @@ export async function apiPost<T>(endpoint: string, body?: any): Promise<T> {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`Server returned non-JSON response (${res.status})`);
+    throw new Error(res.status === 404 ? `Service endpoint not found (404): ${endpoint}` : `Server error (${res.status})`);
   }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
@@ -64,7 +64,7 @@ export async function apiDelete<T>(endpoint: string): Promise<T> {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`Server returned non-JSON response (${res.status})`);
+    throw new Error(res.status === 404 ? `Service endpoint not found (404): ${endpoint}` : `Server error (${res.status})`);
   }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
