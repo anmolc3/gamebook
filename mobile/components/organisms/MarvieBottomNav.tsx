@@ -15,9 +15,9 @@ interface MarvieBottomNavProps {
 // Custom WebP asset icons per tab (natively supported by React Native Image)
 const NAV_IMAGES: Partial<Record<NavTab, ReturnType<typeof require>>> = {
   chatList: require('../../assets/images/chat_icon_logo.webp'),
-  friends:  require('../../assets/images/controller_friends_theme.webp'),
+  friends:  require('../../assets/images/social_icon_logo.webp'),
   profile:  require('../../assets/images/profile_icon_logo.webp'),
-  play:     require('../../assets/images/game_joystick_icon.webp'),
+  play:     require('../../assets/images/controller_friends_theme.webp'),
 };
 
 export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({

@@ -2,9 +2,9 @@ import { AiBotProfile, AiDifficulty } from './ai.interface';
 
 // Thinking delay bounds in milliseconds
 export const AI_CONFIG = {
-  MIN_DELAY_MS: 500,
-  MAX_DELAY_MS: 1100,
-  EXPERT_DEPTH_TIMEOUT_MS: 2500,
+  MIN_DELAY_MS: 1200,
+  MAX_DELAY_MS: 2200,
+  EXPERT_DEPTH_TIMEOUT_MS: 3000,
 };
 
 export const BOT_PROFILES: AiBotProfile[] = [

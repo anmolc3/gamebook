@@ -22,6 +22,7 @@ import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
 import { RoomDetails } from '../../services/room.service';
 import { ProfileService, UserProfile } from '../../services/profile.service';
+import { SoundService } from '../../services/sound.service';
 import {
   LudoColor,
   LudoPlayerState,
@@ -125,7 +126,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const [diceVisualFace, setDiceVisualFace] = useState<number>(currentDiceRoll || 1);
   const diceAnimRotate = useRef(new Animated.Value(0)).current;
   const diceAnimScale = useRef(new Animated.Value(1)).current;
-  const rollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const rollIntervalRef = useRef<any>(null);
 
   // Token animated positions map: key = `${color}_${tokenId}`
   const tokenAnimsRef = useRef<
@@ -138,7 +139,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     >
   >({});
 
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<any>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -147,6 +148,15 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
   const myPlayer = players.find((p) => p.userId === user?.id);
   const isMyTurn = turnPlayerId === user?.id && !isMatchOver;
+  const prevIsMyTurnRef = useRef<boolean>(false);
+
+  // Sound effect: Gentle ping when turn shifts to current user
+  useEffect(() => {
+    if (isMyTurn && !prevIsMyTurnRef.current) {
+      SoundService.play('turnPing');
+    }
+    prevIsMyTurnRef.current = isMyTurn;
+  }, [isMyTurn]);
 
   // Turn countdown clock
   useEffect(() => {
@@ -182,7 +192,33 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     ) => {
       if (!state) return;
 
-      setPlayers(state.players || []);
+      // Audio checks: detect token capture and home finishes
+      setPlayers((prevPlayers) => {
+        if (prevPlayers.length > 0 && state.players) {
+          let hasCapture = false;
+          let hasHome = false;
+          state.players.forEach((newP) => {
+            const oldP = prevPlayers.find((p) => p.userId === newP.userId);
+            if (oldP) {
+              newP.tokens.forEach((newToken) => {
+                const oldToken = oldP.tokens.find((t) => t.id === newToken.id);
+                // Token went from track back to yard (-1) -> captured!
+                if (oldToken && oldToken.step > 0 && newToken.step === -1) {
+                  hasCapture = true;
+                }
+                // Token reached home (56) -> finish fanfare!
+                if (oldToken && oldToken.step < 56 && newToken.step === 56) {
+                  hasHome = true;
+                }
+              });
+            }
+          });
+          if (hasCapture) SoundService.play('tokenCapture');
+          if (hasHome) SoundService.play('homeGoal');
+        }
+        return state.players || [];
+      });
+
       setTurnColor(state.turnColor || 'RED');
       setTurnPlayerId(state.turnPlayerId || '');
       setCurrentDiceRoll(state.currentDiceRoll ?? null);
@@ -220,9 +256,10 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
     const unsubState = MobileSocketService.onGameState((payload) => {
       if (payload.roomCode === roomCode) {
-        // If opponent rolled, trigger dice roll wobble
+        // If opponent rolled, trigger dice roll wobble and audio
         if (payload.state?.currentDiceRoll && payload.state.currentDiceRoll !== currentDiceRoll) {
           triggerDiceWobble(payload.state.currentDiceRoll);
+          SoundService.play('diceRoll');
         }
         applyStateUpdate(payload.state, payload.round, payload.scores);
       }
@@ -230,6 +267,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
     const unsubOver = MobileSocketService.onGameOver((payload) => {
       if (payload.roomCode === roomCode) {
+        SoundService.play('homeGoal');
         setIsMatchOver(true);
         if (payload.scores) setScores(payload.scores);
         if (payload.rankings) setRankings(payload.rankings);
@@ -308,6 +346,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const handleRollDice = async () => {
     if (!isMyTurn || hasRolled || isRolling) return;
 
+    SoundService.play('diceRoll');
     setIsRolling(true);
 
     // Rapidly change visual face during roll
@@ -350,6 +389,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       return;
     }
 
+    SoundService.play('tokenMove');
     setIsMoving(true);
     try {
       const res = await MobileSocketService.sendGameAction(roomCode, {
@@ -576,22 +616,20 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         } else {
           const anim = tokenAnimsRef.current[tokenKey];
           Animated.parallel([
-            Animated.spring(anim.pos, {
+            Animated.timing(anim.pos, {
               toValue: { x: layout.cx, y: layout.cy },
-              friction: 6,
-              tension: 50,
+              duration: 650,
               useNativeDriver: false,
             }),
             Animated.sequence([
               Animated.timing(anim.scale, {
                 toValue: 1.25,
-                duration: 140,
+                duration: 300,
                 useNativeDriver: false,
               }),
-              Animated.spring(anim.scale, {
+              Animated.timing(anim.scale, {
                 toValue: 1,
-                friction: 4,
-                tension: 40,
+                duration: 350,
                 useNativeDriver: false,
               }),
             ]),
@@ -824,20 +862,24 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       </View>
 
       {/* Up Side Players Bar (Top Side Profiles + Dice if it's Top Side Turn) */}
-      <View style={styles.sectionRow}>
+      <View style={[styles.sectionRow, styles.fixedSideRow]}>
         <View style={styles.playersSideCluster}>
           {topPlayers.map((p) => renderPlayerProfileCard(p))}
         </View>
 
-        {/* Dice moves to Up Side if it's Top Player's Turn */}
-        {isTopTurn && (
-          <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
-            {renderDiceFace(diceVisualFace, 46)}
-            <Text style={[styles.diceStatusLabel, { color: COLOR_MAP[turnColor]?.primary || theme.colors.primary }]}>
-              {isRolling ? 'Rolling...' : currentDiceRoll ? `Rolled ${currentDiceRoll}` : 'Turn'}
-            </Text>
-          </View>
-        )}
+        {/* Fixed Dice Slot on Up Side */}
+        <View style={styles.fixedSideDiceSlot}>
+          {isTopTurn ? (
+            <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
+              {renderDiceFace(diceVisualFace, 44)}
+              <View style={styles.diceTextCol}>
+                <Text style={[styles.diceStatusLabel, { color: COLOR_MAP[turnColor]?.primary || theme.colors.primary }]}>
+                  {isRolling ? 'Rolling...' : currentDiceRoll ? `Rolled ${currentDiceRoll}` : 'Turn'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
       </View>
 
       {/* Turn Banner & 20s Countdown */}
@@ -1056,47 +1098,55 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         </View>
 
         {/* Down Side Players Bar (Bottom Side Profiles + Dice if it's Bottom Side Turn) */}
-        <View style={styles.sectionRow}>
+        <View style={[styles.sectionRow, styles.fixedSideRow]}>
           <View style={styles.playersSideCluster}>
             {bottomPlayers.map((p) => renderPlayerProfileCard(p))}
           </View>
 
-          {/* Dice moves to Down Side if it's Bottom Player's Turn */}
-          {isBottomTurn && (
-            <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
-              {renderDiceFace(diceVisualFace, 50)}
-
-              {isMyTurn && !hasRolled ? (
+          {/* Fixed Dice Slot on Down Side (Tappable Dice - No Separate Button) */}
+          <View style={styles.fixedSideDiceSlot}>
+            {isBottomTurn ? (
+              <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
                 <TouchableOpacity
-                  style={[
-                    styles.sideRollButton,
-                    { backgroundColor: theme.colors.primary },
-                    isRolling && { opacity: 0.7 },
-                  ]}
+                  activeOpacity={0.7}
+                  disabled={!isMyTurn || hasRolled || isRolling}
                   onPress={handleRollDice}
-                  disabled={isRolling}
-                  activeOpacity={0.8}
+                  style={[
+                    styles.tappableDiceWrapper,
+                    isMyTurn && !hasRolled && !isRolling && [
+                      styles.tappableDicePulse,
+                      { borderColor: theme.colors.primary },
+                    ],
+                  ]}
+                  accessibilityLabel="Tap dice to roll"
                 >
-                  {isRolling ? (
-                    <ActivityIndicator size="small" color="#18080C" />
-                  ) : (
-                    <>
-                      <Icon name="dice" size={16} color="#18080C" />
-                      <Text style={styles.sideRollButtonText}>ROLL</Text>
-                    </>
-                  )}
+                  {renderDiceFace(diceVisualFace, 44)}
                 </TouchableOpacity>
-              ) : isMyTurn && hasRolled ? (
-                <Text style={[styles.diceStatusLabel, { color: theme.colors.primary }]}>
-                  {validMoves.length > 0 ? `TAP TOKEN` : 'NO MOVES'}
-                </Text>
-              ) : (
-                <Text style={[styles.diceStatusLabel, { color: theme.colors.textSecondary }]}>
-                  Rolling...
-                </Text>
-              )}
-            </View>
-          )}
+
+                <View style={styles.diceTextCol}>
+                  {isMyTurn && !hasRolled ? (
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      disabled={isRolling}
+                      onPress={handleRollDice}
+                    >
+                      <Text style={[styles.tapDiceCtaText, { color: theme.colors.primary }]}>
+                        {isRolling ? 'ROLLING...' : 'TAP DICE'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : isMyTurn && hasRolled ? (
+                    <Text style={[styles.diceStatusLabel, { color: theme.colors.primary }]}>
+                      {validMoves.length > 0 ? 'TAP TOKEN' : 'NO MOVES'}
+                    </Text>
+                  ) : (
+                    <Text style={[styles.diceStatusLabel, { color: theme.colors.textSecondary }]}>
+                      {isRolling ? 'Rolling...' : currentDiceRoll ? `Rolled ${currentDiceRoll}` : 'Turn'}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
 
@@ -1474,32 +1524,53 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
   },
+  fixedSideRow: {
+    height: 58,
+    minHeight: 58,
+    maxHeight: 58,
+  },
+  fixedSideDiceSlot: {
+    width: 104,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
   activeSideDiceBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 14,
-    gap: 8,
+    gap: 6,
   },
-  diceStatusLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    minWidth: 50,
-    textAlign: 'center',
-  },
-  sideRollButton: {
-    flexDirection: 'row',
+  diceTextCol: {
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    minWidth: 46,
+  },
+  tappableDiceWrapper: {
+    padding: 2,
     borderRadius: 10,
   },
-  sideRollButtonText: {
-    color: '#18080C',
-    fontSize: 12,
-    fontWeight: '800',
+  tappableDicePulse: {
+    borderWidth: 2,
+    shadowColor: '#3ED598',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  tapDiceCtaText: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    textAlign: 'center',
+  },
+  diceStatusLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    minWidth: 44,
+    textAlign: 'center',
   },
   turnBanner: {
     marginHorizontal: 14,

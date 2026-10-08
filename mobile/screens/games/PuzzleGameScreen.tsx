@@ -87,7 +87,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
   const [typingInput, setTypingInput] = useState<string>('');
   const [minesweeperMode, setMinesweeperMode] = useState<'REVEAL' | 'FLAG'>('REVEAL');
 
-  const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const turnTimerRef = useRef<any>(null);
 
   const isMyTurn = gameState?.turnPlayerId ? gameState?.turnPlayerId === user?.id : true;
 

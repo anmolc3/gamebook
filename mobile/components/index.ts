@@ -20,3 +20,4 @@ export * from './organisms/EditProfileModal';
 export * from './organisms/JoinRoomModal';
 export * from './organisms/SoloModeModal';
 export * from './organisms/MarvieBottomNav';
+export * from './organisms/CreateStoryModal';

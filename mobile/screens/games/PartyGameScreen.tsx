@@ -94,7 +94,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
   const [brushColor, setBrushColor] = useState<string>('#54D6FF');
   const [brushWidth, setBrushWidth] = useState<number>(3);
 
-  const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const turnTimerRef = useRef<any>(null);
 
   // --------------------------------------------------------------------------
   // Socket.IO Listeners

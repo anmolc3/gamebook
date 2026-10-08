@@ -117,7 +117,17 @@ export class SoloManager {
     }
 
     const difficulty = match.aiDifficulty || 'MEDIUM';
-    const delayMs = getThinkingDelayMs(difficulty);
+    const baseDelayMs = getThinkingDelayMs(difficulty);
+    // Add extra pacing for Ludo so player can observe turn, dice roll, and token movement with human eyes
+    let extraPacing = 0;
+    if (match.gameType === 'LUDO') {
+      if (match.state?.hasRolled) {
+        extraPacing = 1400; // Visible pause after rolling so player clearly observes dice value before token moves
+      } else {
+        extraPacing = 600; // Pause before AI rolls dice
+      }
+    }
+    const delayMs = baseDelayMs + extraPacing;
 
     // Broadcast that AI is thinking
     emitRoom(roomCode, 'solo:ai_thinking', {

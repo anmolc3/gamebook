@@ -28,6 +28,7 @@ import { LeaderboardScreen } from './screens/leaderboard/LeaderboardScreen';
 import { AchievementsModal } from './screens/discovery/AchievementsModal';
 import { StoryViewerModal } from './screens/stories/StoryViewerModal';
 import { StoryTrayItem } from './components/organisms/StoryBar';
+import { ThemesScreen } from './screens/themes/ThemesScreen';
 
 interface ConversationPeer {
   id: string;
@@ -43,6 +44,7 @@ function MainNavigator() {
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
   const [currentScreen, setCurrentScreen] = useState<
     | 'home'
+    | 'themes'
     | 'discovery'
     | 'leaderboards'
     | 'profile'
@@ -541,6 +543,7 @@ function MainNavigator() {
             }}
             onPressFriends={() => setCurrentScreen('friends')}
             onPressChat={() => setCurrentScreen('chatList')}
+            onPressThemes={() => setCurrentScreen('themes')}
             onPressPlay={(gameType) => {
               if (gameType) {
                 setSoloModalGameId(gameType);
@@ -553,6 +556,12 @@ function MainNavigator() {
             onPressDiscovery={() => setCurrentScreen('discovery')}
             onPressLeaderboards={() => setCurrentScreen('leaderboards')}
             onPressStoryTray={(tray) => setActiveStoryTray(tray)}
+          />
+        )}
+
+        {currentScreen === 'themes' && (
+          <ThemesScreen
+            onBack={() => setCurrentScreen('home')}
           />
         )}
 

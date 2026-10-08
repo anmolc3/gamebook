@@ -56,7 +56,7 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
   const [rematchOfferedByPeer, setRematchOfferedByPeer] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<any>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);

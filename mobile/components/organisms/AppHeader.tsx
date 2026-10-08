@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../atoms/Avatar';
-import { IconButton } from '../molecules/IconButton';
+import { Icon } from '../../icons';
 
 interface AppHeaderProps {
   userName: string;
@@ -10,11 +10,18 @@ interface AppHeaderProps {
   greeting?: string;
   onPressNotifications?: () => void;
   onPressSettings?: () => void;
+  onPressThemes?: () => void;
   onPressThemeToggle?: () => void;
   onPressProfile?: () => void;
   onPressFriends?: () => void;
   onPressChat?: () => void;
 }
+
+const HEADER_ICONS = {
+  chat: require('../../assets/images/chat_icon_logo.webp'),
+  friends: require('../../assets/images/friends_add_svg.webp'),
+  settings: require('../../assets/images/settings_icon_logo.webp'),
+};
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   userName,
@@ -22,6 +29,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   greeting = 'Welcome back',
   onPressNotifications,
   onPressSettings,
+  onPressThemes,
   onPressThemeToggle,
   onPressProfile,
   onPressFriends,
@@ -51,37 +59,80 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       </TouchableOpacity>
       <View style={styles.right}>
         {onPressChat && (
-          <IconButton
-            icon="chat"
+          <TouchableOpacity
             onPress={onPressChat}
-            size={40}
-            iconSize={20}
-            variant="tinted"
+            activeOpacity={0.75}
             accessibilityLabel="Direct Messages"
-            style={styles.actionBtn}
-          />
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Image
+              source={HEADER_ICONS.chat}
+              style={styles.headerIconImg}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         )}
         {onPressFriends && (
-          <IconButton
-            icon="users"
+          <TouchableOpacity
             onPress={onPressFriends}
-            size={40}
-            iconSize={20}
-            variant="tinted"
+            activeOpacity={0.75}
             accessibilityLabel="Social & Friends"
-            style={styles.actionBtn}
-          />
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Image
+              source={HEADER_ICONS.friends}
+              style={styles.headerIconImg}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
+        )}
+        {onPressThemes && (
+          <TouchableOpacity
+            onPress={onPressThemes}
+            activeOpacity={0.75}
+            accessibilityLabel="Theme Studio"
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Icon name="palette" size={17} color={theme.colors.primary} />
+          </TouchableOpacity>
         )}
         {handleSettingsPress && (
-          <IconButton
-            icon="settings"
+          <TouchableOpacity
             onPress={handleSettingsPress}
-            size={40}
-            iconSize={20}
-            variant="tinted"
+            activeOpacity={0.75}
             accessibilityLabel="Platform Settings"
-            style={styles.actionBtn}
-          />
+            style={[
+              styles.actionBtn,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Image
+              source={HEADER_ICONS.settings}
+              style={styles.headerIconImg}
+              resizeMode="contain"
+            />
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -120,6 +171,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginLeft: 4,
+  },
+  headerIconImg: {
+    width: 24,
+    height: 24,
   },
 });

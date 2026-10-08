@@ -63,7 +63,7 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
 
   // Turn Countdown
   const [secondsRemaining, setSecondsRemaining] = useState<number>(30);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<any>(null);
 
   // UI / Interaction State
   const [isRulesModalVisible, setIsRulesModalVisible] = useState<boolean>(false);

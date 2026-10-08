@@ -258,7 +258,7 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
   const [targetOpponentId, setTargetOpponentId] = useState<string>('');
   const [askRank, setAskRank] = useState<number>(14);
 
-  const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const turnTimerRef = useRef<any>(null);
   const isMyTurn = gameState?.turnPlayerId === user?.id;
 
   // Sync turn countdown

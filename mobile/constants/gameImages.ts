@@ -58,7 +58,13 @@ const GAME_IMAGES: Record<string, ReturnType<typeof require>> = {
   MEMORY_MATCH:      require('../assets/images/Glossy Corgi Memory Match Logo.webp'),
   QUIZ_BATTLE:       require('../assets/images/Quiz Battle Arena Logo.webp'),
   '2048_MULTIPLAYER':require('../assets/images/2048 Versus Race Showdown.webp'),
-  MINESWEEPER_DUEL:  require('../assets/images/Sudoku Duel_ Neon Puzzle Showdown.webp'),
+  MINESWEEPER_DUEL:  require('../assets/images/Number Guessing Duel Emblem.webp'),
+  SUDOKU_BATTLE:     require('../assets/images/Sudoku Duel_ Neon Puzzle Showdown.webp'),
+  SUDOKU:            require('../assets/images/Sudoku Duel_ Neon Puzzle Showdown.webp'),
+  CROSSWORD_BATTLE:  require('../assets/images/Word Search Race Game Badge.webp'),
+  CROSSWORD:         require('../assets/images/Word Search Race Game Badge.webp'),
+  SEQUENCE:          require('../assets/images/Glossy Card Games Casino Emblem.webp'),
+  CARD_SEQUENCE:     require('../assets/images/Glossy Card Games Casino Emblem.webp'),
   PATTERN_MATCH:     require('../assets/images/Colorful Pattern Memory Matrix Game Logo.webp'),
   MASTERMIND:        require('../assets/images/Glossy Mastermind Puzzle Board.webp'),
   WORD_SCRAMBLE:     require('../assets/images/Anagram Scramble Game Logo.webp'),
@@ -84,7 +90,9 @@ const GAME_IMAGES: Record<string, ReturnType<typeof require>> = {
 };
 
 export function getGameImage(gameType: string): ReturnType<typeof require> | null {
-  return GAME_IMAGES[gameType] ?? null;
+  if (!gameType) return null;
+  const normalized = gameType.toUpperCase().replace(/\s+/g, '_');
+  return GAME_IMAGES[normalized] ?? GAME_IMAGES[gameType] ?? null;
 }
 
 export default GAME_IMAGES;

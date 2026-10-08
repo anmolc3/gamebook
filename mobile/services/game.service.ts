@@ -74,4 +74,18 @@ export class GameService {
     }
     return json;
   }
+
+  static async fetchLiveOnlineCounts(): Promise<Record<string, number>> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/games/live-online`, {
+        method: 'GET',
+        headers,
+      });
+      const json = await res.json();
+      return json.counts || {};
+    } catch {
+      return {};
+    }
+  }
 }

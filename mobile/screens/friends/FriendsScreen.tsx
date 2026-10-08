@@ -105,7 +105,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   }, [loadData]);
 
   // Handle live search
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const searchTimeoutRef = useRef<any>(null);
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     if (searchTimeoutRef.current) {

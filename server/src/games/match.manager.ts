@@ -115,6 +115,10 @@ export class MatchManager {
   private static activeMatches = new Map<string, ActiveMatch>(); // roomCode -> ActiveMatch
   private static engines = new Map<string, () => GameEngine<any, any, any>>();
 
+  static getActiveMatches(): ActiveMatch[] {
+    return Array.from(this.activeMatches.values());
+  }
+
   static {
     // Register available game engines
     this.registerEngine('TICTACTOE', () => new TicTacToeEngine());

@@ -84,6 +84,48 @@ router.get('/catalog', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/games/live-online
+ * Fetches real active players currently in waiting rooms and matches per game
+ */
+router.get('/live-online', async (req: Request, res: Response) => {
+  try {
+    const activeRooms = await prisma.gameRoom.findMany({
+      where: {
+        status: { in: ['WAITING', 'PLAYING'] },
+      },
+      select: {
+        gameType: true,
+        players: {
+          select: { userId: true },
+        },
+      },
+    });
+
+    const counts: Record<string, number> = {};
+
+    activeRooms.forEach((r) => {
+      const gType = r.gameType;
+      const count = r.players?.length || 1;
+      counts[gType] = (counts[gType] || 0) + count;
+    });
+
+    // Also include in-memory active matches from MatchManager
+    const activeMatches = MatchManager.getActiveMatches();
+    if (activeMatches && Array.isArray(activeMatches)) {
+      activeMatches.forEach((m) => {
+        const gType = m.gameType;
+        const count = m.players?.length || 2;
+        counts[gType] = Math.max(counts[gType] || 0, count);
+      });
+    }
+
+    res.status(200).json({ counts });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to fetch live online counts' });
+  }
+});
+
+/**
  * GET /api/v1/games/leaderboard/global
  * Platform-wide global leaderboard (top players by total wins across all games)
  */

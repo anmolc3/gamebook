@@ -81,6 +81,13 @@ export class CheckersEngine
   }
 
   validateAction(state: CheckersState, playerId: string, action: CheckersAction): boolean {
+    if ((action as any)?.type === 'RESIGN') {
+      if (state.winnerId || state.isDraw) {
+        throw new Error('Game has already concluded');
+      }
+      return true;
+    }
+
     if (!action || !action.from || !action.to) {
       throw new Error('Invalid action: from [r, c] and to [r, c] are required');
     }
@@ -113,6 +120,27 @@ export class CheckersEngine
     action: CheckersAction
   ): GameActionResult<CheckersState> {
     this.validateAction(state, playerId, action);
+
+    if ((action as any)?.type === 'RESIGN') {
+      const opponentId = state.players.R === playerId ? state.players.B : state.players.R;
+      return {
+        success: true,
+        state: {
+          ...state,
+          winnerId: opponentId,
+        },
+        events: [
+          {
+            type: 'game:ended',
+            data: {
+              winnerId: opponentId,
+              resignedBy: playerId,
+              reason: 'resignation',
+            },
+          },
+        ],
+      };
+    }
 
     const currentColor: 'R' | 'B' = state.turnColor;
     const nextColor: 'R' | 'B' = currentColor === 'R' ? 'B' : 'R';

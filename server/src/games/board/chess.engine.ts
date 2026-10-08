@@ -77,6 +77,13 @@ export class ChessEngine
   }
 
   validateAction(state: ChessState, playerId: string, action: ChessAction): boolean {
+    if ((action as any)?.type === 'RESIGN') {
+      if (state.winnerId || state.isDraw) {
+        throw new Error('Game has already concluded');
+      }
+      return true;
+    }
+
     if (!action || !action.from || !action.to) {
       throw new Error('Invalid action: from [r, c] and to [r, c] are required');
     }
@@ -122,6 +129,27 @@ export class ChessEngine
 
   applyAction(state: ChessState, playerId: string, action: ChessAction): GameActionResult<ChessState> {
     this.validateAction(state, playerId, action);
+
+    if ((action as any)?.type === 'RESIGN') {
+      const opponentId = state.players.W === playerId ? state.players.B : state.players.W;
+      return {
+        success: true,
+        state: {
+          ...state,
+          winnerId: opponentId,
+        },
+        events: [
+          {
+            type: 'game:ended',
+            data: {
+              winnerId: opponentId,
+              resignedBy: playerId,
+              reason: 'resignation',
+            },
+          },
+        ],
+      };
+    }
 
     const currentColor = state.turnColor;
     const nextColor: ChessPieceColor = currentColor === 'W' ? 'B' : 'W';

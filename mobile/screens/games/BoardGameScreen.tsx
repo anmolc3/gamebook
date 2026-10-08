@@ -41,10 +41,10 @@ const BOARD_SIZE = Math.min(SCREEN_WIDTH - 28, 380);
 // SVG Chess Piece Icons
 const ChessPieceSvg: React.FC<{
   type: string;
-  color: 'w' | 'b';
+  color: 'w' | 'b' | string;
   size: number;
 }> = ({ type, color, size }) => {
-  const isWhite = color === 'w';
+  const isWhite = (color || '').toLowerCase() === 'w';
   const fill = isWhite ? '#FFFFFF' : '#111319';
   const stroke = isWhite ? '#111319' : '#E8ECEF';
   const strokeWidth = 1.2;
@@ -144,7 +144,7 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
 
   // Turn Countdown
   const [secondsRemaining, setSecondsRemaining] = useState<number>(30);
-  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownIntervalRef = useRef<any>(null);
 
   // Interaction State
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
@@ -279,8 +279,8 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
   }, [roomCode, applyStateUpdate, user?.id]);
 
   // Dispatch Action Helper
-  const dispatchAction = async (action: any) => {
-    if (!isMyTurn || isSubmitting) return;
+  const dispatchAction = async (action: any, bypassTurnCheck = false) => {
+    if ((!isMyTurn && !bypassTurnCheck) || isSubmitting) return;
     try {
       setIsSubmitting(true);
       const res = await MobileSocketService.sendGameAction(roomCode, action);
@@ -361,13 +361,19 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
   const handleChessCellPress = (row: number, col: number) => {
     if (!isMyTurn || isSubmitting || !gameState) return;
 
-    const myColor = gameState.players?.WHITE === user?.id ? 'w' : 'b';
+    // Detect player's assigned color (W or B)
+    const isWhite =
+      gameState.players?.W === user?.id ||
+      gameState.players?.WHITE === user?.id ||
+      (Array.isArray(gameState.players) && gameState.players[0] === user?.id);
+    const myColorCode = isWhite ? 'W' : 'B';
 
     if (!selectedCell) {
       const piece = gameState.board?.[row]?.[col];
       if (!piece) return;
 
-      if (piece.color !== myColor) {
+      const pieceColor = (piece.color || '').toUpperCase();
+      if (pieceColor !== myColorCode) {
         showToast("That's not your piece!");
         return;
       }
@@ -380,7 +386,7 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
       }
 
       const clickedPiece = gameState.board?.[row]?.[col];
-      if (clickedPiece && clickedPiece.color === myColor) {
+      if (clickedPiece && (clickedPiece.color || '').toUpperCase() === myColorCode) {
         // Change selection
         setSelectedCell([row, col]);
         return;
@@ -388,10 +394,11 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
 
       // Check for pawn promotion: pawn reaching row 0 (white) or row 7 (black)
       const selectedPiece = gameState.board?.[fromR]?.[fromC];
+      const isPawn = selectedPiece && (selectedPiece.type || '').toLowerCase() === 'p';
+      const isSelectedWhite = selectedPiece && (selectedPiece.color || '').toUpperCase() === 'W';
       if (
-        selectedPiece &&
-        selectedPiece.type === 'p' &&
-        ((selectedPiece.color === 'w' && row === 0) || (selectedPiece.color === 'b' && row === 7))
+        isPawn &&
+        ((isSelectedWhite && row === 0) || (!isSelectedWhite && row === 7))
       ) {
         setPromotionPendingMove({ from: [fromR, fromC], to: [row, col] });
         setSelectedCell(null);
@@ -414,25 +421,26 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
       type: 'MOVE_PIECE',
       from: promotionPendingMove.from,
       to: promotionPendingMove.to,
-      promotion: promotedType,
+      promotion: promotedType.toUpperCase(),
     });
     setPromotionPendingMove(null);
   };
 
   // Handlers for Match Options
   const handleResign = () => {
-    Alert.alert('Resign Match', 'Are you sure you want to resign this match?', [
+    Alert.alert('Leave / Resign Match', 'Are you sure you want to resign and leave this match?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Resign',
+        text: 'Resign & Leave',
         style: 'destructive',
-        onPress: () => {
-          if (gameType === 'CHESS') {
-            dispatchAction({ type: 'RESIGN' });
-          } else {
-            showToast('Leaving match...');
-            onLeave();
+        onPress: async () => {
+          try {
+            await dispatchAction({ type: 'RESIGN' }, true);
+          } catch (e) {
+            // Safe fallback if already concluded
           }
+          showToast('Leaving match...');
+          onLeave();
         },
       },
     ]);
@@ -868,7 +876,10 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
                 const isLastFrom = lastMove && lastMove.from[0] === rIdx && lastMove.from[1] === cIdx;
                 const isLastTo = lastMove && lastMove.to[0] === rIdx && lastMove.to[1] === cIdx;
                 const isKingInCheck =
-                  inCheck && cell && cell.type === 'k' && cell.color === (gameState?.turn === 'WHITE' ? 'w' : 'b');
+                  inCheck &&
+                  cell &&
+                  (cell.type || '').toLowerCase() === 'k' &&
+                  (cell.color || '').toUpperCase() === (gameState?.turnColor || gameState?.turn || '').toUpperCase();
 
                 let bgColor = isLightSquare ? '#425866' : '#23343E';
                 if (isLastFrom || isLastTo) bgColor = '#2F4B43';
@@ -1069,7 +1080,11 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
                 >
                   <ChessPieceSvg
                     type={type}
-                    color={gameState?.players?.WHITE === user?.id ? 'w' : 'b'}
+                    color={
+                      gameState?.players?.W === user?.id || gameState?.players?.WHITE === user?.id
+                        ? 'w'
+                        : 'b'
+                    }
                     size={46}
                   />
                   <Text style={styles.promoPieceLabel}>

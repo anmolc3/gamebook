@@ -21,12 +21,14 @@ export interface SettingsModalProps {
   visible: boolean;
   onClose: () => void;
   onPressNotifications?: () => void;
+  onPressOpenThemesPage?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   visible,
   onClose,
   onPressNotifications,
+  onPressOpenThemesPage,
 }) => {
   const { theme, themeId, appearanceMode, effectiveMode, setThemeId, setAppearanceMode } = useTheme();
   const { user, logout } = useAuth();
@@ -189,6 +191,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   );
                 })}
               </View>
+
+              {/* Dedicated Themes Studio Page Link */}
+              {onPressOpenThemesPage && (
+                <TouchableOpacity
+                  onPress={() => {
+                    onClose();
+                    onPressOpenThemesPage();
+                  }}
+                  style={[
+                    styles.openThemesBanner,
+                    {
+                      backgroundColor: theme.colors.surfaceElevated,
+                      borderColor: theme.colors.primary,
+                    },
+                  ]}
+                  activeOpacity={0.82}
+                >
+                  <View style={styles.openThemesLeft}>
+                    <View
+                      style={[
+                        styles.openThemesIconWrap,
+                        { backgroundColor: theme.colors.primary },
+                      ]}
+                    >
+                      <Icon name="palette" size={18} color={theme.colors.textOnPrimary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.openThemesTitle, { color: theme.colors.textPrimary }]}>
+                        Theme Studio Page
+                      </Text>
+                      <Text style={[styles.openThemesSubtitle, { color: theme.colors.textSecondary }]}>
+                        Open full separate page with live component mockups & swatches
+                      </Text>
+                    </View>
+                  </View>
+                  <Icon name="chevronRight" size={18} color={theme.colors.primary} />
+                </TouchableOpacity>
+              )}
 
               {/* Theme Family Choices */}
               <Text style={[styles.subSectionTitle, { color: theme.colors.textSecondary, marginTop: 18 }]}>
@@ -1031,5 +1071,38 @@ const styles = StyleSheet.create({
   },
   notifItemTime: {
     fontSize: 10,
+  },
+  openThemesBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    marginTop: 14,
+    marginBottom: 6,
+    gap: 10,
+  },
+  openThemesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  openThemesIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openThemesTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  openThemesSubtitle: {
+    fontSize: 11,
+    lineHeight: 15,
   },
 });

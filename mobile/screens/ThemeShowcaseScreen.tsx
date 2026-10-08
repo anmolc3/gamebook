@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -18,9 +18,11 @@ import {
   StatCard,
   InputField,
   SettingsModal,
+  CreateStoryModal,
 } from '../components';
 import { StoryTrayItem } from '../components/organisms/StoryBar';
 import { StoryService } from '../services/story.service';
+import { GameService } from '../services/game.service';
 import { Icon } from '../icons';
 
 export interface ThemeShowcaseScreenProps {
@@ -30,6 +32,7 @@ export interface ThemeShowcaseScreenProps {
   onPressPlay?: (gameType?: string) => void;
   onPressLeaderboards?: () => void;
   onPressDiscovery?: () => void;
+  onPressThemes?: () => void;
   onPressStoryTray?: (tray: StoryTrayItem) => void;
 }
 
@@ -40,6 +43,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   onPressPlay,
   onPressLeaderboards,
   onPressDiscovery,
+  onPressThemes,
   onPressStoryTray,
 }) => {
   const { theme, themeId, effectiveMode } = useTheme();
@@ -49,8 +53,10 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>([]);
+  const [isCreateStoryVisible, setIsCreateStoryVisible] = useState(false);
+  const [liveOnlineCounts, setLiveOnlineCounts] = useState<Record<string, number>>({});
 
-  useEffect(() => {
+  const loadStoryFeed = useCallback(() => {
     StoryService.getStoryFeed()
       .then((trays) => {
         if (trays && Array.isArray(trays)) {
@@ -59,6 +65,22 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
       })
       .catch(() => {});
   }, []);
+
+  const loadLiveOnline = useCallback(() => {
+    GameService.fetchLiveOnlineCounts()
+      .then((counts) => {
+        if (counts) setLiveOnlineCounts(counts);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadStoryFeed();
+    loadLiveOnline();
+
+    const interval = setInterval(loadLiveOnline, 10000);
+    return () => clearInterval(interval);
+  }, [loadStoryFeed, loadLiveOnline]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -79,6 +101,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
         greeting="Good Evening"
         onPressNotifications={() => showToast('Opening Notifications')}
         onPressSettings={() => setSettingsModalVisible(true)}
+        onPressThemes={onPressThemes}
         onPressProfile={onPressProfile}
         onPressFriends={onPressFriends}
         onPressChat={onPressChat}
@@ -115,7 +138,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             <StoryAvatar
               name="Your Story"
               isAddStory
-              onPress={() => showToast('Create new story')}
+              onPress={() => setIsCreateStoryVisible(true)}
             />
             {storyTrays.map((tray) => (
               <StoryAvatar
@@ -242,7 +265,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="LUDO"
             icon="dice"
             playerCountText="2 - 4 Players"
-            onlineCount={1420}
+            onlineCount={liveOnlineCounts['LUDO'] ?? 0}
             accentColor={theme.colors.accentAmber}
             badgeText="POPULAR"
             onPressPlay={() => (onPressPlay ? onPressPlay('LUDO') : showToast('Matchmaking Ludo Arena...'))}
@@ -255,7 +278,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="CHESS"
             icon="trophy"
             playerCountText="2 Players"
-            onlineCount={1120}
+            onlineCount={liveOnlineCounts['CHESS'] ?? 0}
             accentColor="#0062FF"
             badgeText="STRATEGY"
             onPressPlay={() => (onPressPlay ? onPressPlay('CHESS') : showToast('Matchmaking Chess...'))}
@@ -268,7 +291,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="POOL_8_BALL"
             icon="target"
             playerCountText="2 Players"
-            onlineCount={880}
+            onlineCount={liveOnlineCounts['POOL_8_BALL'] ?? 0}
             accentColor="#3ED598"
             badgeText="ARCADE"
             onPressPlay={() => (onPressPlay ? onPressPlay('POOL_8_BALL') : showToast('Matchmaking 8 Ball Pool...'))}
@@ -281,7 +304,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="UNO_STYLE"
             icon="palette"
             playerCountText="2 - 4 Players"
-            onlineCount={1680}
+            onlineCount={liveOnlineCounts['UNO_STYLE'] ?? 0}
             accentColor="#EF4444"
             badgeText="CARD HIT"
             onPressPlay={() => (onPressPlay ? onPressPlay('UNO_STYLE') : showToast('Matchmaking Color Match...'))}
@@ -294,7 +317,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="WORDLE_DUEL"
             icon="award"
             playerCountText="2 Players"
-            onlineCount={1450}
+            onlineCount={liveOnlineCounts['WORDLE_DUEL'] ?? 0}
             accentColor="#22C55E"
             badgeText="WORD HIT"
             onPressPlay={() => (onPressPlay ? onPressPlay('WORDLE_DUEL') : showToast('Matchmaking Wordle Duel...'))}
@@ -307,7 +330,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="QUIZ_BATTLE"
             icon="bell"
             playerCountText="2 - 6 Players"
-            onlineCount={1150}
+            onlineCount={liveOnlineCounts['QUIZ_BATTLE'] ?? 0}
             accentColor="#6366F1"
             badgeText="TRIVIA"
             onPressPlay={() => (onPressPlay ? onPressPlay('QUIZ_BATTLE') : showToast('Matchmaking Quiz Battle...'))}
@@ -320,7 +343,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="WOULD_YOU_RATHER"
             icon="users"
             playerCountText="2 - 8 Players"
-            onlineCount={1640}
+            onlineCount={liveOnlineCounts['WOULD_YOU_RATHER'] ?? 0}
             accentColor="#38BDF8"
             badgeText="PARTY"
             onPressPlay={() => (onPressPlay ? onPressPlay('WOULD_YOU_RATHER') : showToast('Matchmaking Would You Rather...'))}
@@ -333,7 +356,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             gameType="MAFIA"
             icon="crown"
             playerCountText="5 - 10 Players"
-            onlineCount={2100}
+            onlineCount={liveOnlineCounts['MAFIA'] ?? 0}
             accentColor="#7C3AED"
             badgeText="MYSTERY"
             onPressPlay={() => (onPressPlay ? onPressPlay('MAFIA') : showToast('Matchmaking Mafia...'))}
@@ -424,6 +447,17 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
       <SettingsModal
         visible={settingsModalVisible}
         onClose={() => setSettingsModalVisible(false)}
+        onPressOpenThemesPage={onPressThemes}
+      />
+
+      {/* Add New Story Modal with Photos, Moods & Captions */}
+      <CreateStoryModal
+        visible={isCreateStoryVisible}
+        onClose={() => setIsCreateStoryVisible(false)}
+        onStoryCreated={() => {
+          loadStoryFeed();
+          showToast('Story published! 🎉');
+        }}
       />
     </SafeAreaView>
   );

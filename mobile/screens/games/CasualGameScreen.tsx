@@ -72,7 +72,7 @@ export const CasualGameScreen: React.FC<CasualGameScreenProps> = ({
   const [shotType, setShotType] = useState<string>('TOPSPIN');
   const [bowlingSpin, setBowlingSpin] = useState<number>(0);
 
-  const turnTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const turnTimerRef = useRef<any>(null);
 
   const isMyTurn = gameState?.turnPlayerId === user?.id;
 
