@@ -87,15 +87,15 @@ export class NotificationService {
       return null;
     }
 
-    // Push notifications only work on physical devices
-    if (!Device.isDevice) {
-      console.log('[Notifications] Push notifications are not supported on simulators/emulators.');
-      return null;
-    }
-
-    // Create Android notification channels
+    // Create Android notification channels first
     if (Platform.OS === 'android') {
       await this.createAndroidChannels();
+    }
+
+    // Push token registration only works on physical devices
+    if (!Device.isDevice) {
+      console.log('[Notifications] Push token registration skipped on simulator/emulator.');
+      return null;
     }
 
     // Request permission
@@ -161,47 +161,94 @@ export class NotificationService {
 
   // ─── Android channel setup ────────────────────────────────────────────────────
 
-  private static async createAndroidChannels(): Promise<void> {
+  static async createAndroidChannels(): Promise<void> {
     if (!Notifications) return;
 
     await Promise.all([
       Notifications.setNotificationChannelAsync(CHANNELS.DEFAULT, {
         name: 'General',
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#3ED598',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.MESSAGES, {
         name: 'Messages',
         description: 'New chat messages from friends',
-        importance: Notifications.AndroidImportance.HIGH,
+        importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 100, 200, 100],
         lightColor: '#3ED598',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.SOCIAL, {
         name: 'Social',
         description: 'Friend requests and social activity',
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 200, 100, 200],
         lightColor: '#60A5FA',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.GAMES, {
         name: 'Games',
         description: 'Game invites and turn reminders',
-        importance: Notifications.AndroidImportance.HIGH,
+        importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 100, 100, 300],
         lightColor: '#F59E0B',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.ACHIEVEMENTS, {
         name: 'Achievements',
         description: 'Achievement unlocks and milestones',
-        importance: Notifications.AndroidImportance.LOW,
+        importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 500],
         lightColor: '#FFD700',
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
       }),
     ]);
+  }
+
+  /**
+   * Immediately present a notification in the device notification area / drawer.
+   */
+  static async displayLocalNotification(
+    title: string,
+    body: string,
+    data?: any,
+    channelId: string = CHANNELS.MESSAGES
+  ): Promise<void> {
+    if (!Notifications) return;
+    try {
+      if (Platform.OS === 'android') {
+        await this.createAndroidChannels();
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+          sound: 'default',
+          ...(channelId ? { channelId } : {}),
+        } as any,
+        trigger: null,
+      });
+    } catch (err) {
+      console.warn('[Notifications] Failed to display local notification:', err);
+    }
   }
 
   // ─── Token registration ───────────────────────────────────────────────────────

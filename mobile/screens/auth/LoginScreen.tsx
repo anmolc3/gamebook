@@ -4,12 +4,12 @@ import {
   Text,
   Image,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { useAuth } from '../../features/auth/AuthContext';
 import { InputField, PrimaryButton, Typography, ForgotPasswordModal } from '../../components';

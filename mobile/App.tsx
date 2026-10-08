@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform, PanResponder } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { RoomService, SupportedGameType } from './services/room.service';
@@ -30,6 +31,8 @@ import { AchievementsModal } from './screens/discovery/AchievementsModal';
 import { StoryViewerModal } from './screens/stories/StoryViewerModal';
 import { StoryTrayItem } from './components/organisms/StoryBar';
 import { ThemesScreen } from './screens/themes/ThemesScreen';
+import { NotificationService, CHANNELS } from './services/notification.service';
+import { MobileSocketService } from './services/socket.service';
 
 interface ConversationPeer {
   id: string;
@@ -91,6 +94,47 @@ function MainNavigator() {
   const [soloModalGameId, setSoloModalGameId] = useState<string | null>(null);
   const [isAchievementsModalVisible, setAchievementsModalVisible] = useState(false);
   const [activeStoryTray, setActiveStoryTray] = useState<StoryTrayItem | null>(null);
+
+  const insets = useSafeAreaInsets();
+
+  // Listen globally to incoming messages & invites over socket to post system notifications
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    MobileSocketService.connect();
+
+    const unsubscribeChat = MobileSocketService.onMessageReceived((msg: any) => {
+      // Don't duplicate notification if the user is already actively chatting with this peer
+      if (
+        currentScreen === 'conversation' &&
+        activePeer &&
+        (activePeer.id === msg.senderId || activePeer.conversationId === msg.conversationId)
+      ) {
+        return;
+      }
+
+      const senderTitle = msg.sender?.displayName || msg.sender?.username || 'New Message';
+      const previewText = msg.metadata?.isViewOnce
+        ? '📷 Sent a view-once photo'
+        : msg.content || 'Sent an attachment';
+
+      NotificationService.displayLocalNotification(
+        `💬 ${senderTitle}`,
+        previewText,
+        {
+          type: 'CHAT_MESSAGE',
+          conversationId: msg.conversationId,
+          senderId: msg.senderId,
+          senderName: senderTitle,
+        },
+        CHANNELS.MESSAGES
+      );
+    });
+
+    return () => {
+      unsubscribeChat();
+    };
+  }, [isAuthenticated, currentScreen, activePeer]);
 
   const MAIN_SWIPE_TABS: Array<'home' | 'friends' | 'discovery' | 'chatList' | 'profile'> = [
     'home',
@@ -768,11 +812,13 @@ function MainNavigator() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <MainNavigator />
-      </AuthProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <MainNavigator />
+        </AuthProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   View,
   Text,
@@ -9,6 +8,7 @@ import {
   StatusBar,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, ThemeId, AppearanceMode, getThemeGradients } from '../../theme';
 import { THEME_METADATA, resolveTheme } from '../../theme/themes';

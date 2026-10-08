@@ -9,12 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   Modal,
   Alert,
   Image,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
@@ -56,6 +56,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user: authUser } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [conversationId, setConversationId] = useState<string | null>(
     initialConversationId || null
@@ -638,7 +639,15 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[
+        styles.safeArea,
+        {
+          backgroundColor: theme.colors.background,
+          paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 20),
+        },
+      ]}
+    >
       <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
 
       {/* Screen Header */}
@@ -738,7 +747,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 
       <KeyboardAvoidingView
         style={styles.flexFill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         {/* Messages Stream */}
         {isLoading ? (
@@ -757,6 +767,8 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             inverted
             contentContainerStyle={styles.messagesList}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
           />
         )}
 
@@ -840,6 +852,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             {
               backgroundColor: theme.colors.surfaceElevated,
               borderTopColor: theme.colors.border,
+              paddingBottom: Math.max(insets.bottom, 10),
             },
           ]}
         >
@@ -1000,7 +1013,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         animationType="fade"
         onRequestClose={handleCloseViewOnce}
       >
-        <SafeAreaView style={styles.viewOnceModalContainer}>
+        <View style={styles.viewOnceModalContainer}>
           <StatusBar barStyle="light-content" />
 
           {/* Top Bar with Zero Transparency */}
@@ -1046,9 +1059,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               This one-time photo will disappear once you close this screen.
             </Text>
           </View>
-        </SafeAreaView>
+        </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 

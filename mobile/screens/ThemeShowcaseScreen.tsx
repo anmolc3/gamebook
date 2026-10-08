@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  SafeAreaView,
   ScrollView,
   View,
   Text,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, getThemeGradients } from '../theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../features/auth/AuthContext';
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 16,
-    paddingBottom: 18,
+    paddingBottom: 96,
   },
   toast: {
     flexDirection: 'row',

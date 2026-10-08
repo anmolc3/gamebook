@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { MobileAuthService, AuthUserData } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
+import { MobileSocketService } from '../../services/socket.service';
 
 interface AuthContextType {
   user: AuthUserData | null;
@@ -34,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(storedToken);
           // Re-register push token on session restore (token may have refreshed)
           NotificationService.initialize().catch(() => null);
+          MobileSocketService.connect();
         }
       } catch (err) {
         console.warn('Session expired or invalid, clearing stored token');
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await MobileAuthService.setStoredToken(data.token);
       // Register push token after successful login
       NotificationService.initialize().catch(() => null);
+      MobileSocketService.connect();
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await MobileAuthService.setStoredToken(data.token);
       // Register push token for new accounts
       NotificationService.initialize().catch(() => null);
+      MobileSocketService.connect();
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setIsLoading(true);
     try {
-      // Unregister push token before clearing auth
+      // Disconnect socket and unregister push token
+      MobileSocketService.disconnect();
       await NotificationService.unregister().catch(() => null);
       await MobileAuthService.clearStoredToken();
       setUser(null);

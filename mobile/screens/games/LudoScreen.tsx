@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Modal,
   ActivityIndicator,
@@ -13,6 +12,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Rect, Circle, Polygon, G } from 'react-native-svg';
 import { useTheme } from '../../theme';
 import { Icon, TrophyIcon } from '../../icons';

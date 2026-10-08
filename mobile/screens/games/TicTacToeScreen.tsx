@@ -4,13 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Modal,
   ActivityIndicator,
   Alert,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, CrossMarkIcon, CircleMarkIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';

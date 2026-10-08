@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, IconName } from '../../icons';
 
@@ -27,6 +28,11 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
   pendingRequestsCount = 0,
 }) => {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Dynamic bottom padding for gesture bars, 3-button navigation, and home indicators
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 14 : 8);
+  const navHeight = 58 + bottomInset;
 
   interface TabItem {
     id: NavTab;
@@ -49,6 +55,8 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
       style={[
         styles.navContainer,
         {
+          height: navHeight,
+          paddingBottom: bottomInset,
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
         },
@@ -164,12 +172,10 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
 
 const styles = StyleSheet.create({
   navContainer: {
-    height: Platform.OS === 'ios' ? 84 : 72,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     borderTopWidth: 1,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 10,
     paddingHorizontal: 12,
     position: 'absolute',
     bottom: 0,

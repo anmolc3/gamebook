@@ -12,6 +12,7 @@ interface ExpoPushMessage {
   badge?: number;
   categoryId?: string;
   channelId?: string;
+  priority?: 'default' | 'normal' | 'high';
 }
 
 interface ExpoPushTicket {
@@ -38,12 +39,11 @@ export class PushNotificationService {
 
   /**
    * Look up the stored Expo push token for a user.
-   * Returns null if the user has no registered token or is currently online
-   * (no need to send a push if they are actively connected via Socket.IO).
+   * By default skipIfOnline = false so Android notification area receives the alert.
    */
   private static async getToken(
     userId: string,
-    skipIfOnline = true
+    skipIfOnline = false
   ): Promise<string | null> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -55,7 +55,12 @@ export class PushNotificationService {
 
     if (!user?.pushToken) return null;
     if (skipIfOnline && user.profile?.isOnline) return null;
-    if (!user.pushToken.startsWith('ExponentPushToken[')) return null;
+    
+    // Accept both standard ExponentPushToken[...] and ExpoPushToken[...] formats
+    const isExpoToken =
+      user.pushToken.startsWith('ExponentPushToken[') ||
+      user.pushToken.startsWith('ExpoPushToken[');
+    if (!isExpoToken) return null;
 
     return user.pushToken;
   }
@@ -96,7 +101,10 @@ export class PushNotificationService {
    * Called by the mobile client after every successful authentication.
    */
   static async registerToken(userId: string, pushToken: string): Promise<void> {
-    if (!pushToken.startsWith('ExponentPushToken[')) {
+    const isExpoToken =
+      typeof pushToken === 'string' &&
+      (pushToken.startsWith('ExponentPushToken[') || pushToken.startsWith('ExpoPushToken['));
+    if (!isExpoToken) {
       throw new Error('Invalid Expo push token format');
     }
     await prisma.user.update({
@@ -119,14 +127,13 @@ export class PushNotificationService {
 
   /**
    * Notify a user they received a new direct message.
-   * Only fires if the recipient is OFFLINE (isOnline = false).
    */
   static async notifyNewMessage(
     recipientId: string,
     senderName: string,
     messagePreview: string
   ): Promise<void> {
-    const token = await this.getToken(recipientId, true);
+    const token = await this.getToken(recipientId, false);
     if (!token) return;
 
     void this.send([
@@ -137,6 +144,7 @@ export class PushNotificationService {
         data: { type: 'CHAT_MESSAGE', recipientId },
         sound: 'default',
         channelId: 'messages',
+        priority: 'high',
       },
     ]);
   }
@@ -148,7 +156,7 @@ export class PushNotificationService {
     recipientId: string,
     senderName: string
   ): Promise<void> {
-    const token = await this.getToken(recipientId, true);
+    const token = await this.getToken(recipientId, false);
     if (!token) return;
 
     void this.send([
@@ -159,6 +167,7 @@ export class PushNotificationService {
         data: { type: 'FRIEND_REQUEST', recipientId },
         sound: 'default',
         channelId: 'social',
+        priority: 'high',
       },
     ]);
   }
@@ -170,7 +179,7 @@ export class PushNotificationService {
     recipientId: string,
     acceptorName: string
   ): Promise<void> {
-    const token = await this.getToken(recipientId, true);
+    const token = await this.getToken(recipientId, false);
     if (!token) return;
 
     void this.send([
@@ -181,6 +190,7 @@ export class PushNotificationService {
         data: { type: 'FRIEND_ACCEPTED', recipientId },
         sound: 'default',
         channelId: 'social',
+        priority: 'high',
       },
     ]);
   }
@@ -194,7 +204,7 @@ export class PushNotificationService {
     gameName: string,
     roomCode: string
   ): Promise<void> {
-    const token = await this.getToken(recipientId, true);
+    const token = await this.getToken(recipientId, false);
     if (!token) return;
 
     void this.send([
@@ -205,6 +215,7 @@ export class PushNotificationService {
         data: { type: 'GAME_INVITE', roomCode, recipientId },
         sound: 'default',
         channelId: 'games',
+        priority: 'high',
       },
     ]);
   }
@@ -229,20 +240,20 @@ export class PushNotificationService {
         data: { type: 'ACHIEVEMENT', userId },
         sound: 'default',
         channelId: 'achievements',
+        priority: 'high',
       },
     ]);
   }
 
   /**
    * Notify a user it is their turn in a multiplayer game.
-   * Only fires when the player is offline (they're actively watching if online).
    */
   static async notifyYourTurn(
     userId: string,
     gameName: string,
     roomCode: string
   ): Promise<void> {
-    const token = await this.getToken(userId, true);
+    const token = await this.getToken(userId, false);
     if (!token) return;
 
     void this.send([
@@ -253,6 +264,7 @@ export class PushNotificationService {
         data: { type: 'YOUR_TURN', roomCode, userId },
         sound: 'default',
         channelId: 'games',
+        priority: 'high',
       },
     ]);
   }

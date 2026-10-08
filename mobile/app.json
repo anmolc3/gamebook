@@ -25,7 +25,9 @@
       },
       "package": "com.socialgaming.arena",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
+        "POST_NOTIFICATIONS",
         "NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
