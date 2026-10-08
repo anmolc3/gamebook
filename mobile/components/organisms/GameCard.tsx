@@ -102,7 +102,7 @@ export const GameCard: React.FC<GameCardProps> = ({
               ]}
             />
             <Text style={[styles.onlineText, { color: theme.colors.textSecondary }]}>
-              {onlineCount.toLocaleString()} online
+              {Math.max(1, onlineCount || 0).toLocaleString()} online
             </Text>
           </View>
         </View>

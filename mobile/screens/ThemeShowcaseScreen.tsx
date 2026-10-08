@@ -78,7 +78,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
     loadStoryFeed();
     loadLiveOnline();
 
-    const interval = setInterval(loadLiveOnline, 10000);
+    const interval = setInterval(loadLiveOnline, 4000);
     return () => clearInterval(interval);
   }, [loadStoryFeed, loadLiveOnline]);
 

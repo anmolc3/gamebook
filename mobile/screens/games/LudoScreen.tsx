@@ -150,6 +150,11 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const isMyTurn = turnPlayerId === user?.id && !isMatchOver;
   const prevIsMyTurnRef = useRef<boolean>(false);
 
+  // Initialize sound engine on mount
+  useEffect(() => {
+    SoundService.init();
+  }, []);
+
   // Sound effect: Gentle ping when turn shifts to current user
   useEffect(() => {
     if (isMyTurn && !prevIsMyTurnRef.current) {
@@ -197,11 +202,15 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         if (prevPlayers.length > 0 && state.players) {
           let hasCapture = false;
           let hasHome = false;
+          let hasMove = false;
           state.players.forEach((newP) => {
             const oldP = prevPlayers.find((p) => p.userId === newP.userId);
             if (oldP) {
               newP.tokens.forEach((newToken) => {
                 const oldToken = oldP.tokens.find((t) => t.id === newToken.id);
+                if (oldToken && oldToken.step !== newToken.step) {
+                  hasMove = true;
+                }
                 // Token went from track back to yard (-1) -> captured!
                 if (oldToken && oldToken.step > 0 && newToken.step === -1) {
                   hasCapture = true;
@@ -214,7 +223,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             }
           });
           if (hasCapture) SoundService.play('tokenCapture');
-          if (hasHome) SoundService.play('homeGoal');
+          else if (hasHome) SoundService.play('homeGoal');
+          else if (hasMove) SoundService.play('tokenMove');
         }
         return state.players || [];
       });
@@ -915,8 +925,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         </View>
       </View>
 
-      {/* Interactive Ludo Board */}
-      <ScrollView contentContainerStyle={styles.boardContainer} bounces={false}>
+      {/* Interactive Ludo Board (Fixed motionless container) */}
+      <View style={styles.boardContainer}>
         <View
           style={[
             styles.boardWrapper,
@@ -1148,7 +1158,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             ) : null}
           </View>
         </View>
-      </ScrollView>
+      </View>
 
       {/* Toast Notification */}
       {toastMessage && (
@@ -1618,8 +1628,8 @@ const styles = StyleSheet.create({
   },
   boardContainer: {
     alignItems: 'center',
-    paddingBottom: 20,
-    paddingTop: 4,
+    justifyContent: 'center',
+    paddingVertical: 4,
   },
   boardWrapper: {
     borderRadius: 22,

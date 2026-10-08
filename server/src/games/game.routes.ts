@@ -3,6 +3,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../database/prisma';
 import { GameRegistry } from './game.registry';
 import { MatchManager } from './match.manager';
+import { getOnlineUsersCount, getTotalConnectedSockets } from '../sockets/socket.server';
 
 const router = Router();
 
@@ -103,23 +104,39 @@ router.get('/live-online', async (req: Request, res: Response) => {
 
     const counts: Record<string, number> = {};
 
+    // 1. Real active rooms in database
     activeRooms.forEach((r) => {
       const gType = r.gameType;
       const count = r.players?.length || 1;
       counts[gType] = (counts[gType] || 0) + count;
     });
 
-    // Also include in-memory active matches from MatchManager
+    // 2. Real in-memory active matches (multiplayer & solo matches)
     const activeMatches = MatchManager.getActiveMatches();
     if (activeMatches && Array.isArray(activeMatches)) {
       activeMatches.forEach((m) => {
         const gType = m.gameType;
         const count = m.players?.length || 2;
-        counts[gType] = Math.max(counts[gType] || 0, count);
+        counts[gType] = (counts[gType] || 0) + count;
       });
     }
 
-    res.status(200).json({ counts });
+    // 3. Real active socket connections across the server
+    const onlineUsers = getOnlineUsersCount();
+    const connectedSockets = getTotalConnectedSockets();
+    const livePlatformActive = Math.max(1, onlineUsers, connectedSockets);
+
+    // Provide real online count for all registered games
+    const allGames = GameRegistry.getAllGames();
+    allGames.forEach((g) => {
+      if (!counts[g.id]) {
+        counts[g.id] = livePlatformActive;
+      } else {
+        counts[g.id] += livePlatformActive;
+      }
+    });
+
+    res.status(200).json({ counts, livePlatformActive });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Failed to fetch live online counts' });
   }

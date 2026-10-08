@@ -40,6 +40,14 @@ export function isUserOnline(userId: string): boolean {
   return !!sockets && sockets.size > 0;
 }
 
+export function getOnlineUsersCount(): number {
+  return activeUserSockets.size;
+}
+
+export function getTotalConnectedSockets(): number {
+  return io ? io.sockets.sockets.size : 0;
+}
+
 export function emitToUser(userId: string, event: string, payload: any): void {
   if (io) {
     io.to(`user:${userId}`).emit(event, payload);
