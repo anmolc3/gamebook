@@ -707,7 +707,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             width={size - 3}
             height={size - 3}
             rx={10}
-            fill="#30444E"
+            fill="#161922"
             stroke={COLOR_MAP[turnColor]?.primary || theme.colors.primary}
             strokeWidth={2}
           />
@@ -881,7 +881,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             {
               width: BOARD_SIZE,
               height: BOARD_SIZE,
-              backgroundColor: '#2A3C44',
+              backgroundColor: '#10131B',
             },
           ]}
         >
@@ -890,19 +890,19 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             {/* 4 Corner Yards */}
             {/* RED Yard (Top-Left: 6x6) */}
             <Rect x={0} y={0} width={CELL_SIZE * 6} height={CELL_SIZE * 6} fill={COLOR_MAP.RED.light} stroke={COLOR_MAP.RED.primary} strokeWidth={2} />
-            <Rect x={CELL_SIZE} y={CELL_SIZE} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#30444E" />
+            <Rect x={CELL_SIZE} y={CELL_SIZE} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#161922" />
 
             {/* GREEN Yard (Top-Right: 6x6) */}
             <Rect x={CELL_SIZE * 9} y={0} width={CELL_SIZE * 6} height={CELL_SIZE * 6} fill={COLOR_MAP.GREEN.light} stroke={COLOR_MAP.GREEN.primary} strokeWidth={2} />
-            <Rect x={CELL_SIZE * 10} y={CELL_SIZE} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#30444E" />
+            <Rect x={CELL_SIZE * 10} y={CELL_SIZE} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#161922" />
 
             {/* YELLOW Yard (Bottom-Right: 6x6) */}
             <Rect x={CELL_SIZE * 9} y={CELL_SIZE * 9} width={CELL_SIZE * 6} height={CELL_SIZE * 6} fill={COLOR_MAP.YELLOW.light} stroke={COLOR_MAP.YELLOW.primary} strokeWidth={2} />
-            <Rect x={CELL_SIZE * 10} y={CELL_SIZE * 10} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#30444E" />
+            <Rect x={CELL_SIZE * 10} y={CELL_SIZE * 10} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#161922" />
 
             {/* BLUE Yard (Bottom-Left: 6x6) */}
             <Rect x={0} y={CELL_SIZE * 9} width={CELL_SIZE * 6} height={CELL_SIZE * 6} fill={COLOR_MAP.BLUE.light} stroke={COLOR_MAP.BLUE.primary} strokeWidth={2} />
-            <Rect x={CELL_SIZE} y={CELL_SIZE * 10} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#30444E" />
+            <Rect x={CELL_SIZE} y={CELL_SIZE * 10} width={CELL_SIZE * 4} height={CELL_SIZE * 4} rx={16} fill="#161922" />
 
             {/* Yard Token Circles */}
             {(['RED', 'GREEN', 'YELLOW', 'BLUE'] as LudoColor[]).map((col) =>
@@ -912,7 +912,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                   cx={gx * CELL_SIZE}
                   cy={gy * CELL_SIZE}
                   r={CELL_SIZE * 0.7}
-                  fill="rgba(42, 60, 68, 0.8)"
+                  fill="rgba(16, 19, 27, 0.85)"
                   stroke={COLOR_MAP[col].primary}
                   strokeWidth={1.5}
                 />
@@ -922,8 +922,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             {/* 52 Circuit Track Cells */}
             {TRACK_COORDINATES.map(([gx, gy], idx) => {
               const isSafe = SAFE_CIRCUIT_CELLS.has(idx);
-              let cellFill = '#30444E';
-              let cellStroke = '#3D505A';
+              let cellFill = '#161922';
+              let cellStroke = '#242836';
 
               if (idx === 0) cellFill = COLOR_MAP.RED.primary;
               if (idx === 13) cellFill = COLOR_MAP.GREEN.primary;
@@ -1384,7 +1384,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   roundBadge: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
@@ -1529,7 +1529,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    backgroundColor: '#2A3C44',
+    backgroundColor: '#1E232E',
   },
   timerText: {
     fontSize: 12,
@@ -1537,7 +1537,7 @@ const styles = StyleSheet.create({
   },
   timerBarTrack: {
     height: 4,
-    backgroundColor: '#2A3C44',
+    backgroundColor: '#161922',
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -1748,13 +1748,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 10,
     borderRadius: 12,
-    backgroundColor: '#2A3C44',
+    backgroundColor: '#1E232E',
   },
   rankBadge: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#30444E',
+    backgroundColor: '#272C38',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,

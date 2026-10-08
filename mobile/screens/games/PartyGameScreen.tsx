@@ -206,7 +206,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           style={[
             styles.wyrCard,
             myVote === 'A' && styles.selectedOptionCard,
-            { backgroundColor: myVote === 'A' ? '#3D505A' : '#30444E' },
+            { backgroundColor: myVote === 'A' ? theme.colors.surfaceElevated : theme.colors.surface },
           ]}
           onPress={() => sendAction({ type: 'VOTE', choice: 'A' })}
           activeOpacity={0.8}
@@ -225,7 +225,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           style={[
             styles.wyrCard,
             myVote === 'B' && styles.selectedOptionCard,
-            { backgroundColor: myVote === 'B' ? '#3D505A' : '#2A3C44' },
+            { backgroundColor: myVote === 'B' ? theme.colors.surfaceElevated : theme.colors.surface },
           ]}
           onPress={() => sendAction({ type: 'VOTE', choice: 'B' })}
           activeOpacity={0.8}
@@ -271,7 +271,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryBadgeText}>{selectedType}</Text>
             </View>
@@ -306,7 +306,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
     return (
       <View style={styles.cardContainer}>
         {isActor ? (
-          <View style={[styles.actorCard, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.actorCard, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.actorNotice}>YOU ARE THE ACTOR!</Text>
             <Text style={styles.secretWordHighlight}>{gameState?.secretWord || '...'}</Text>
             <Text style={[styles.categoryInfo, { color: theme.colors.textSecondary }]}>
@@ -321,7 +321,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           </View>
         ) : (
           <View style={styles.guesserContainer}>
-            <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+            <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
               <Text style={styles.actorNotice}>WATCH THE ACTOR</Text>
               <Text style={[styles.categoryInfo, { color: theme.colors.textSecondary }]}>
                 Category: {gameState?.category || 'General'}
@@ -360,7 +360,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
       <View style={styles.cardContainer}>
         <View style={styles.pictureCanvasBox}>
           <Svg width={240} height={180} viewBox="0 0 240 180">
-            <Rect x="0" y="0" width="240" height="180" rx="16" fill="#2A3C44" />
+            <Rect x="0" y="0" width="240" height="180" rx="16" fill="#161922" />
             <Circle cx="120" cy="90" r={40 + (10 - level) * 4} fill="#54D6FF" opacity={0.3} />
             <Circle cx="120" cy="90" r={24} fill="#54D6FF" opacity={0.6} />
             <SvgText
@@ -410,7 +410,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
     return (
       <View style={styles.cardContainer}>
         {isClueGiver ? (
-          <View style={[styles.tabooCard, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.tabooCard, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.tabooTargetWord}>{card?.targetWord || 'TARGET'}</Text>
             <Text style={styles.tabooWarning}>DO NOT SAY THESE WORDS:</Text>
             <View style={styles.tabooChipWrap}>
@@ -443,7 +443,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           </View>
         ) : (
           <View style={styles.guesserContainer}>
-            <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+            <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
               <Text style={styles.actorNotice}>LISTEN TO CLUES</Text>
               <Text style={[styles.categoryInfo, { color: theme.colors.textSecondary }]}>
                 Recent clues: {gameState?.cluesGiven?.slice(-2).join(' • ') || 'None yet'}
@@ -484,8 +484,8 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
       <View style={styles.cardContainer}>
         <View style={styles.vinylContainer}>
           <Svg width={100} height={100} viewBox="0 0 100 100">
-            <Circle cx="50" cy="50" r="48" fill="#1C272C" stroke="#3D505A" strokeWidth="3" />
-            <Circle cx="50" cy="50" r="32" fill="#2A3C44" />
+            <Circle cx="50" cy="50" r="48" fill="#12141A" stroke="#222632" strokeWidth="3" />
+            <Circle cx="50" cy="50" r="32" fill="#161922" />
             <Circle cx="50" cy="50" r="14" fill="#54D6FF" />
             <Circle cx="50" cy="50" r="4" fill="#FFFFFF" />
           </Svg>
@@ -503,7 +503,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
               style={[
                 styles.songOptionButton,
                 myAnswer === opt && styles.selectedOptionCard,
-                { backgroundColor: myAnswer === opt ? '#3D505A' : '#30444E' },
+                { backgroundColor: myAnswer === opt ? theme.colors.surfaceElevated : theme.colors.surface },
               ]}
               onPress={() => sendAction({ type: 'ANSWER_SONG', selectedTitle: opt })}
             >
@@ -606,7 +606,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
         <View
           style={[
             styles.imposterDossier,
-            { backgroundColor: isImposter ? '#C62828' : '#2A3C44' },
+            { backgroundColor: isImposter ? '#C62828' : theme.colors.surface },
           ]}
         >
           <Text style={styles.dossierBadge}>
@@ -653,7 +653,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
                   style={[
                     styles.suspectChip,
                     gameState?.votes?.[user?.id || ''] === p.userId && styles.selectedOptionCard,
-                    { backgroundColor: '#30444E' },
+                    { backgroundColor: theme.colors.surface },
                   ]}
                   onPress={() => sendAction({ type: 'VOTE_IMPOSTER', targetUserId: p.userId })}
                 >
@@ -775,12 +775,12 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
     return (
       <View style={styles.cardContainer}>
         {isDrawer ? (
-          <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.actorNotice}>YOU ARE DRAWING</Text>
             <Text style={styles.secretWordHighlight}>{gameState?.secretPrompt || '...'}</Text>
           </View>
         ) : (
-          <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.actorNotice}>GUESS WHAT'S BEING DRAWN!</Text>
           </View>
         )}
@@ -853,12 +853,12 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
     return (
       <View style={styles.cardContainer}>
         {isDrawer ? (
-          <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.actorNotice}>PICTIONARY: YOUR WORD</Text>
             <Text style={styles.secretWordHighlight}>{gameState?.targetWord || '...'}</Text>
           </View>
         ) : (
-          <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
             <Text style={styles.actorNotice}>PICTIONARY DUEL</Text>
             <Text style={[styles.categoryInfo, { color: theme.colors.textSecondary }]}>
               Category: {gameState?.category || 'General'}
@@ -912,7 +912,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           <Text style={styles.livesText}>Fingers Up: {myLives} / 10</Text>
         </View>
 
-        <View style={[styles.promptBox, { backgroundColor: '#30444E' }]}>
+        <View style={[styles.promptBox, { backgroundColor: theme.colors.surface }]}>
           <Text style={[styles.promptContentText, { color: theme.colors.textPrimary }]}>
             {gameState?.currentPrompt || 'Loading statement...'}
           </Text>
@@ -959,7 +959,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           style={[
             styles.wyrCard,
             myChoice === 'A' && styles.selectedOptionCard,
-            { backgroundColor: '#30444E' },
+            { backgroundColor: myChoice === 'A' ? theme.colors.surfaceElevated : theme.colors.surface },
           ]}
           onPress={() => sendAction({ type: 'CHOOSE', choice: 'A' })}
         >
@@ -974,7 +974,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
           style={[
             styles.wyrCard,
             myChoice === 'B' && styles.selectedOptionCard,
-            { backgroundColor: '#2A3C44' },
+            { backgroundColor: myChoice === 'B' ? theme.colors.surfaceElevated : theme.colors.surface },
           ]}
           onPress={() => sendAction({ type: 'CHOOSE', choice: 'B' })}
         >
@@ -1005,7 +1005,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
             style={[
               styles.twoTruthsCard,
               myVote === idx && styles.selectedOptionCard,
-              { backgroundColor: '#30444E' },
+              { backgroundColor: myVote === idx ? theme.colors.surfaceElevated : theme.colors.surface },
             ]}
             onPress={() => sendAction({ type: 'VOTE_LIE', statementIndex: idx })}
           >
@@ -1072,7 +1072,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
       </View>
 
       {/* Score Summary Bar */}
-      <View style={[styles.scoresBar, { backgroundColor: '#2A3C44' }]}>
+      <View style={[styles.scoresBar, { backgroundColor: theme.colors.surface }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scoreScroll}>
           {playerList.map((p, idx) => (
             <View key={idx} style={styles.playerScoreItem}>
@@ -1094,7 +1094,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
       {/* Rematch / Game Over Modal */}
       <Modal visible={rematchModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { backgroundColor: '#2A3C44' }]}>
+          <View style={[styles.modalCard, { backgroundColor: theme.colors.surfaceElevated }]}>
             <TrophyIcon size={48} color="#FFD54F" />
             <Text style={[styles.modalTitle, { color: theme.colors.textPrimary }]}>
               Game Concluded!
@@ -1147,7 +1147,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 14,
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
   },
   backText: {
     fontSize: 14,
@@ -1165,7 +1165,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   timerBadge: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginRight: 16,
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 16,
@@ -1373,8 +1373,8 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     height: 54,
-    backgroundColor: '#2A3C44',
-    borderWidth: 1,
+    backgroundColor: '#161922',
+    borderWidth: 0,
     borderRadius: 25,
     paddingHorizontal: 18,
     fontSize: 15,

@@ -29,7 +29,7 @@ export const THEME_REGISTRY: Record<ThemeId, { light: ThemeTokens; dark: ThemeTo
 };
 
 export const THEME_METADATA: { id: ThemeId; name: string; previewColor: string; accentColor: string }[] = [
-  { id: 'midnightNeutral', name: 'Marvie Slate / Mint', previewColor: '#3ED598', accentColor: '#FFC542' },
+  { id: 'midnightNeutral', name: 'Obsidian Black / Mint', previewColor: '#3ED598', accentColor: '#FFC542' },
   { id: 'coralMarble', name: 'Marble / Coral', previewColor: '#FF575F', accentColor: '#3ED598' },
   { id: 'forestGold', name: 'Forest / Gold', previewColor: '#25C685', accentColor: '#FFC542' },
   { id: 'moonViolet', name: 'Moon / Violet', previewColor: '#755FE2', accentColor: '#3ED598' },

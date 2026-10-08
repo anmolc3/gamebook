@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   celebrationCard: {
-    backgroundColor: '#2A3C44',
+    backgroundColor: '#161922',
     width: '88%',
     borderRadius: 20,
     padding: 24,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   captionBubble: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 10,

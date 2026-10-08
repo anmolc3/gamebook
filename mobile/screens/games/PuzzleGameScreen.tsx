@@ -236,7 +236,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           })}
         </View>
         {gameState?.lastRoundWinner && (
-          <View style={[styles.bannerPill, { backgroundColor: '#30444E' }]}>
+          <View style={[styles.bannerPill, { backgroundColor: theme.colors.surface }]}>
             <Text style={{ color: '#FFC542', fontWeight: '700' }}>
               Last Round: {gameState.lastRoundWinner === 'TIE' ? 'Tie Game' : `${gameState.lastRoundWinner} won`}
             </Text>
@@ -308,7 +308,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
         </View>
         <ScrollView style={styles.historyList} horizontal showsHorizontalScrollIndicator={false}>
           {attempts.map((att: any, idx: number) => (
-            <View key={idx} style={[styles.historyBadge, { backgroundColor: att.hint === 'CORRECT' ? '#3ED598' : '#30444E' }]}>
+            <View key={idx} style={[styles.historyBadge, { backgroundColor: att.hint === 'CORRECT' ? '#3ED598' : theme.colors.surface }]}>
               <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>#{att.guess}</Text>
               <Text style={{ color: att.hint === 'HIGHER' ? '#3ED598' : '#FF565E', fontSize: 11, fontWeight: '800' }}>
                 {att.hint}
@@ -388,7 +388,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           {(eq.options || []).map((opt: number, idx: number) => (
             <TouchableOpacity
               key={idx}
-              style={[styles.mathOptionBtn, { backgroundColor: '#30444E' }]}
+              style={[styles.mathOptionBtn, { backgroundColor: theme.colors.surface }]}
               onPress={() => sendAction({ type: 'SUBMIT_ANSWER', answer: opt })}
             >
               <Text style={styles.mathOptionText}>{opt}</Text>
@@ -412,7 +412,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
         <TouchableOpacity
           style={[
             styles.quickDrawPad,
-            { backgroundColor: isBellFired ? '#FF565E' : '#30444E' },
+            { backgroundColor: isBellFired ? '#FF565E' : theme.colors.surface },
           ]}
           onPress={() => sendAction({ type: 'DRAW' })}
           activeOpacity={0.8}
@@ -491,7 +491,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
 
     return (
       <View style={styles.puzzleBox}>
-        <View style={[styles.bannerPill, { backgroundColor: '#30444E' }]}>
+        <View style={[styles.bannerPill, { backgroundColor: theme.colors.surface }]}>
           <Text style={{ color: '#FFC542', fontWeight: '700' }}>
             CATEGORY: {gameState?.category || 'GENERAL'} | LIVES: {6 - wrongs} / 6
           </Text>
@@ -549,7 +549,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
                 key={card.id}
                 style={[
                   styles.memoryCard,
-                  { backgroundColor: isFlipped ? '#30444E' : theme.colors.primary },
+                  { backgroundColor: isFlipped ? theme.colors.surface : theme.colors.primary },
                   card.isMatched && { borderColor: '#FFC542', borderWidth: 2 },
                 ]}
                 onPress={() => sendAction({ type: 'FLIP_CARD', cardId: card.id })}
@@ -586,7 +586,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           {(q.options || []).map((opt: string, idx: number) => (
             <TouchableOpacity
               key={idx}
-              style={[styles.quizOptionBtn, { backgroundColor: '#30444E' }]}
+              style={[styles.quizOptionBtn, { backgroundColor: theme.colors.surface }]}
               onPress={() => sendAction({ type: 'SELECT_OPTION', optionIndex: idx })}
             >
               <Text style={styles.quizOptionText}>{opt}</Text>
@@ -673,7 +673,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
                   key={c}
                   style={[
                     styles.mineCell,
-                    { backgroundColor: cell.isRevealed ? '#1F2C34' : '#30444E' },
+                    { backgroundColor: cell.isRevealed ? '#10131B' : theme.colors.surface },
                     cell.isFlagged && { borderColor: '#FF565E', borderWidth: 1.5 },
                   ]}
                   onPress={() => sendAction({ type: minesweeperMode, row: r, col: c })}
@@ -701,7 +701,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           {Array.from({ length: 9 }).map((_, idx) => (
             <TouchableOpacity
               key={idx}
-              style={[styles.simonPad, { backgroundColor: '#30444E' }]}
+              style={[styles.simonPad, { backgroundColor: theme.colors.surface }]}
               onPress={() => sendAction({ type: 'PRESS_PAD', index: idx })}
             >
               <Text style={{ color: '#FFFFFF', fontWeight: '800' }}>{idx + 1}</Text>
@@ -814,7 +814,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           placeholderTextColor="#64748B"
           autoCapitalize="none"
         />
-        <View style={[styles.bannerPill, { backgroundColor: '#30444E', marginTop: 8 }]}>
+        <View style={[styles.bannerPill, { backgroundColor: theme.colors.surface, marginTop: 8 }]}>
           <Text style={{ color: '#3ED598', fontWeight: '800' }}>SPEED: {wpm} WPM</Text>
         </View>
       </View>
@@ -871,7 +871,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
           >
             <InfoIcon size={18} color={theme.colors.primary} />
           </TouchableOpacity>
-          <View style={[styles.timerPill, { backgroundColor: secondsRemaining <= 3 ? '#FF565E' : '#30444E' }]}>
+          <View style={[styles.timerPill, { backgroundColor: secondsRemaining <= 3 ? '#FF565E' : theme.colors.surface }]}>
             <Text style={styles.timerText}>{secondsRemaining}s</Text>
           </View>
         </View>
@@ -940,7 +940,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
             )}
 
             <TouchableOpacity
-              style={[styles.modalBtn, { backgroundColor: '#30444E', marginTop: 6 }]}
+              style={[styles.modalBtn, { backgroundColor: theme.colors.surface, marginTop: 6 }]}
               onPress={() => {
                 setRematchModalVisible(false);
                 onLeave();
@@ -979,7 +979,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
   },
   leaveBtnText: {
     color: '#FF565E',
@@ -994,7 +994,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   roomCodePill: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -1051,7 +1051,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   vsBadge: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     width: 32,
     height: 32,
     borderRadius: 16,
@@ -1357,7 +1357,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   board2048: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#161922',
     padding: 8,
     borderRadius: 16,
     gap: 6,
@@ -1391,7 +1391,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1409,7 +1409,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 10,
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
   },
   mineModeText: {
     color: '#FFFFFF',
@@ -1458,7 +1458,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     padding: 10,
     borderRadius: 12,
   },

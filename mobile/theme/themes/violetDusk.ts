@@ -52,21 +52,21 @@ const lightColors: ColorTokens = {
 };
 
 const darkColors: ColorTokens = {
-  background: '#2A3C44',
-  backgroundSecondary: '#29172C',
-  surface: '#30444E',
-  surfaceElevated: '#384852',
-  surfacePressed: '#40525C',
+  background: '#0B0D12',
+  backgroundSecondary: '#150E18',
+  surface: '#171A22',
+  surfaceElevated: '#1F232E',
+  surfacePressed: '#272B38',
 
-  textPrimary: '#FAF1F6',
-  textSecondary: '#96A7AF',
-  textMuted: '#8D7086',
-  textDisabled: '#573F52',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#94A3B8',
+  textMuted: '#64748B',
+  textDisabled: '#475569',
   textOnPrimary: '#FFFFFF',
 
-  border: '#3D505A',
+  border: '#222632',
   borderFocus: '#D889B2',
-  divider: '#354751',
+  divider: '#1A1D27',
 
   primary: '#D889B2',
   primaryLight: '#E8A7C9',
@@ -82,12 +82,12 @@ const darkColors: ColorTokens = {
   accentBlue: '#0062FF',
   accentPurple: '#755FE2',
 
-  cardTintMint: '#286053',
-  cardTintCoral: '#623A42',
-  cardTintAmber: '#625B39',
-  cardTintOrange: '#624D3B',
-  cardTintBlue: '#163E72',
-  cardTintPurple: '#393D69',
+  cardTintMint: '#132C23',
+  cardTintCoral: '#35181E',
+  cardTintAmber: '#332714',
+  cardTintOrange: '#332014',
+  cardTintBlue: '#13213C',
+  cardTintPurple: '#221639',
 
   success: '#3ED598',
   warning: '#FFC542',
@@ -97,9 +97,9 @@ const darkColors: ColorTokens = {
   online: '#3ED598',
   inGame: '#D889B2',
   away: '#FFC542',
-  offline: '#96A7AF',
+  offline: '#64748B',
 
-  backdrop: 'rgba(0, 0, 0, 0.75)',
+  backdrop: 'rgba(0, 0, 0, 0.78)',
 };
 
 const lightShadows: ShadowTokens = {

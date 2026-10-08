@@ -956,7 +956,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   vsBadge: {
-    backgroundColor: '#30444E',
+    backgroundColor: '#1E232E',
     width: 32,
     height: 32,
     borderRadius: 16,

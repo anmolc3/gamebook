@@ -45,8 +45,8 @@ const ChessPieceSvg: React.FC<{
   size: number;
 }> = ({ type, color, size }) => {
   const isWhite = color === 'w';
-  const fill = isWhite ? '#FFFFFF' : '#141E24';
-  const stroke = isWhite ? '#2A3C44' : '#E8ECEF';
+  const fill = isWhite ? '#FFFFFF' : '#111319';
+  const stroke = isWhite ? '#111319' : '#E8ECEF';
   const strokeWidth = 1.2;
 
   switch (type.toLowerCase()) {
@@ -83,7 +83,7 @@ const ChessPieceSvg: React.FC<{
             strokeWidth={strokeWidth}
             strokeLinejoin="round"
           />
-          <Circle cx="17" cy="18" r="1.5" fill={isWhite ? '#2A3C44' : '#FFFFFF'} />
+          <Circle cx="17" cy="18" r="1.5" fill={isWhite ? '#111319' : '#FFFFFF'} />
         </Svg>
       );
     case 'b': // Bishop
@@ -91,7 +91,7 @@ const ChessPieceSvg: React.FC<{
         <Svg width={size} height={size} viewBox="0 0 45 45">
           <G fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round">
             <Path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.35.49-2.32.47-3-.5 1.35-1.46 3-2 3-2zM15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2zM25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z" />
-            <Path d="M17.5 26h10M22.5 21v10" stroke={isWhite ? '#2A3C44' : '#FFFFFF'} strokeWidth={1} />
+            <Path d="M17.5 26h10M22.5 21v10" stroke={isWhite ? '#111319' : '#FFFFFF'} strokeWidth={1} />
           </G>
         </Svg>
       );
