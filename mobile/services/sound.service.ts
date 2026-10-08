@@ -1,4 +1,14 @@
-import { Audio } from 'expo-av';
+import { Platform } from 'react-native';
+
+// Safely attempt to require expo-audio without ever crashing module loading
+let ExpoAudio: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  ExpoAudio = require('expo-audio');
+} catch (err) {
+  // expo-audio native module is not present in current client build
+  ExpoAudio = null;
+}
 
 /**
  * Procedural Audio Synthesizer for instant, zero-latency sound effects.
@@ -171,38 +181,45 @@ function getTurnPingSoundUri(): string {
 export type SoundEffectType = 'diceRoll' | 'tokenMove' | 'tokenCapture' | 'homeGoal' | 'turnPing';
 
 export class SoundService {
-  private static soundObjects = new Map<SoundEffectType, Audio.Sound>();
+  private static players = new Map<SoundEffectType, any>();
+  private static uriCache = new Map<SoundEffectType, string>();
   private static isInitialized = false;
 
   private static getSoundUri(type: SoundEffectType): string {
-    switch (type) {
-      case 'diceRoll': return getDiceRollSoundUri();
-      case 'tokenMove': return getTokenMoveSoundUri();
-      case 'tokenCapture': return getCaptureSoundUri();
-      case 'homeGoal': return getHomeGoalSoundUri();
-      case 'turnPing': return getTurnPingSoundUri();
+    let uri = this.uriCache.get(type);
+    if (!uri) {
+      switch (type) {
+        case 'diceRoll': uri = getDiceRollSoundUri(); break;
+        case 'tokenMove': uri = getTokenMoveSoundUri(); break;
+        case 'tokenCapture': uri = getCaptureSoundUri(); break;
+        case 'homeGoal': uri = getHomeGoalSoundUri(); break;
+        case 'turnPing': uri = getTurnPingSoundUri(); break;
+      }
+      this.uriCache.set(type, uri);
     }
+    return uri;
   }
 
   /**
-   * Initializes and preloads audio mode for game sound effects
+   * Initializes audio session mode if available
    */
   static async init(): Promise<void> {
     if (this.isInitialized) return;
+    this.isInitialized = true;
     try {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-      this.isInitialized = true;
-    } catch (e) {
-      console.warn('[SoundService] Could not set audio mode:', e);
+      if (ExpoAudio && typeof ExpoAudio.setAudioModeAsync === 'function') {
+        await ExpoAudio.setAudioModeAsync({
+          playsInSilentMode: true,
+          interruptionMode: 'mixWithOthers',
+        });
+      }
+    } catch {
+      // Audio session mode not required for execution
     }
   }
 
   /**
-   * Plays a game sound effect
+   * Plays a game sound effect across all platforms safely
    */
   static async play(type: SoundEffectType): Promise<void> {
     try {
@@ -210,41 +227,47 @@ export class SoundService {
         await this.init();
       }
 
-      let sound = this.soundObjects.get(type);
-      if (!sound) {
-        const uri = this.getSoundUri(type);
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri },
-          { shouldPlay: true, volume: 0.95 }
-        );
-        this.soundObjects.set(type, newSound);
+      const uri = this.getSoundUri(type);
+
+      // Web platform audio fallback
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+        const audio = new (window as any).Audio(uri);
+        audio.volume = 0.9;
+        audio.play().catch(() => {});
         return;
       }
 
-      // Replay existing sound
-      const status = await sound.getStatusAsync();
-      if (status.isLoaded) {
-        await sound.replayAsync();
-      } else {
-        const uri = this.getSoundUri(type);
-        const { sound: newSound } = await Audio.Sound.createAsync(
-          { uri },
-          { shouldPlay: true, volume: 0.95 }
-        );
-        this.soundObjects.set(type, newSound);
+      // Expo modern audio (expo-audio)
+      if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
+        let player = this.players.get(type);
+        if (!player) {
+          player = ExpoAudio.createAudioPlayer({ uri });
+          this.players.set(type, player);
+        }
+        if (player) {
+          if (typeof player.seekTo === 'function') {
+            player.seekTo(0);
+          }
+          if (typeof player.play === 'function') {
+            player.play();
+          }
+        }
       }
     } catch (err) {
-      // Audio playback should never crash the game
-      console.log('[SoundService] Audio playback notice:', err);
+      // Sound playback should never crash the game
     }
   }
 
   static async unloadAll(): Promise<void> {
     try {
-      for (const sound of this.soundObjects.values()) {
-        await sound.unloadAsync();
+      for (const player of this.players.values()) {
+        if (player && typeof player.release === 'function') {
+          player.release();
+        } else if (player && typeof player.pause === 'function') {
+          player.pause();
+        }
       }
-      this.soundObjects.clear();
+      this.players.clear();
     } catch {}
   }
 }
