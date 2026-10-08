@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -143,7 +142,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
         <View
           style={[
             styles.dialogCard,
-            { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
+            { backgroundColor: theme.colors.surfaceElevated },
           ]}
         >
           {/* Header */}
@@ -151,9 +150,11 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
             <View style={[styles.headerIconCircle, { backgroundColor: theme.colors.primary + '20' }]}>
               <Icon name="gamepad" size={24} color={theme.colors.primary} />
             </View>
-            <Text style={[styles.dialogTitle, { color: theme.colors.textPrimary }]}>
-              Multiplayer Match
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.dialogTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
+                {selectedGameType ? selectedGameType.replace(/_/g, ' ') : 'Multiplayer Match'}
+              </Text>
+            </View>
             <TouchableOpacity
               onPress={onClose}
               style={[styles.closeIconBtn, { backgroundColor: theme.colors.surface }]}
@@ -266,124 +267,6 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Game Selection Carousel (for Quick & Create) */}
-          {activeTab !== 'join' && (
-            <View>
-              <Text style={[styles.gameSelectLabel, { color: theme.colors.textSecondary }]}>
-                Choose Game:
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.gameSelectScroll}
-              >
-                {[
-                  { id: 'TICTACTOE', label: 'Tic-Tac-Toe', icon: 'target' as const, color: theme.colors.primary },
-                  { id: 'LUDO', label: 'Ludo Arena', icon: 'dice' as const, color: theme.colors.accent },
-                  { id: 'CHESS', label: 'Chess Master', icon: 'trophy' as const, color: '#0062FF' },
-                  { id: 'CHECKERS', label: 'Checkers', icon: 'crown' as const, color: '#FF575F' },
-                  { id: 'CONNECT_FOUR', label: 'Connect 4', icon: 'circleMark' as const, color: '#FFC542' },
-                  { id: 'REVERSI', label: 'Reversi', icon: 'palette' as const, color: '#3ED598' },
-                  { id: 'GOMOKU', label: 'Gomoku', icon: 'star' as const, color: '#CBD5E1' },
-                  { id: 'CARROM', label: 'Carrom Board', icon: 'target' as const, color: '#FFC542' },
-                  { id: 'SNAKES_AND_LADDERS', label: 'Snakes & Ladders', icon: 'dice' as const, color: '#3ED598' },
-                  { id: 'BATTLESHIP', label: 'Battleship', icon: 'shield' as const, color: '#0062FF' },
-                  { id: 'DOMINOES', label: 'Dominoes', icon: 'play' as const, color: '#CBD5E1' },
-                  { id: 'BACKGAMMON', label: 'Backgammon', icon: 'flame' as const, color: '#FF575F' },
-                  { id: 'MANCALA', label: 'Mancala', icon: 'award' as const, color: '#FFC542' },
-                  { id: 'CHINESE_CHECKERS', label: 'Chinese Checkers', icon: 'star' as const, color: '#3ED598' },
-                  { id: 'POOL_8_BALL', label: '8 Ball Pool', icon: 'target' as const, color: '#3ED598' },
-                  { id: 'MINI_GOLF', label: 'Mini Golf', icon: 'award' as const, color: '#22C55E' },
-                  { id: 'AIR_HOCKEY', label: 'Air Hockey', icon: 'target' as const, color: '#38BDF8' },
-                  { id: 'DARTS', label: 'Darts 501', icon: 'target' as const, color: '#FF575F' },
-                  { id: 'BOWLING', label: 'Bowling Strike', icon: 'trophy' as const, color: '#F59E0B' },
-                  { id: 'TABLE_TENNIS', label: 'Table Tennis', icon: 'play' as const, color: '#0284C7' },
-                  { id: 'UNO_STYLE', label: 'Color Clash (UNO)', icon: 'palette' as const, color: '#EF4444' },
-                  { id: 'HEARTS', label: 'Hearts', icon: 'flame' as const, color: '#DC2626' },
-                  { id: 'SPADES', label: 'Spades', icon: 'target' as const, color: '#3B82F6' },
-                  { id: 'RUMMY', label: 'Indian Rummy', icon: 'flame' as const, color: '#F59E0B' },
-                  { id: 'GIN_RUMMY', label: 'Gin Rummy', icon: 'award' as const, color: '#10B981' },
-                  { id: 'CRAZY_EIGHTS', label: 'Crazy Eights', icon: 'star' as const, color: '#8B5CF6' },
-                  { id: 'GO_FISH', label: 'Go Fish', icon: 'award' as const, color: '#06B6D4' },
-                  { id: 'WAR', label: 'War Card Duel', icon: 'shield' as const, color: '#F43F5E' },
-                  { id: 'DURAK', label: 'Durak', icon: 'shield' as const, color: '#EC4899' },
-                  { id: 'PRESIDENT', label: 'President', icon: 'crown' as const, color: '#EAB308' },
-                  { id: 'BLACKJACK', label: 'Blackjack 21', icon: 'trophy' as const, color: '#6366F1' },
-                  { id: 'POKER', label: 'Texas Hold\'em', icon: 'trophy' as const, color: '#14B8A6' },
-                  { id: 'ROCK_PAPER_SCISSORS', label: 'Rock Paper Scissors', icon: 'gamepad' as const, color: '#10B981' },
-                  { id: 'REACTION_TEST', label: 'Reaction Test', icon: 'target' as const, color: '#EF4444' },
-                  { id: 'NUMBER_GUESS', label: 'Number Guess', icon: 'award' as const, color: '#3B82F6' },
-                  { id: 'SPEED_TAP', label: 'Speed Tap Rush', icon: 'flame' as const, color: '#F59E0B' },
-                  { id: 'COLOR_MATCH', label: 'Color Match Reflex', icon: 'palette' as const, color: '#8B5CF6' },
-                  { id: 'MATH_BATTLE', label: 'Speed Math Duel', icon: 'star' as const, color: '#06B6D4' },
-                  { id: 'QUICK_DRAW', label: 'Quick Draw Western', icon: 'target' as const, color: '#DC2626' },
-                  { id: 'WORDLE_DUEL', label: 'Wordle Duel', icon: 'award' as const, color: '#22C55E' },
-                  { id: 'HANGMAN', label: 'Hangman Duel', icon: 'shield' as const, color: '#EAB308' },
-                  { id: 'MEMORY_MATCH', label: 'Memory Card Match', icon: 'target' as const, color: '#EC4899' },
-                  { id: 'QUIZ_BATTLE', label: 'Quiz Battle Arena', icon: 'bell' as const, color: '#6366F1' },
-                  { id: '2048_MULTIPLAYER', label: '2048 Versus Race', icon: 'trophy' as const, color: '#F97316' },
-                  { id: 'MINESWEEPER_DUEL', label: 'Minesweeper Duel', icon: 'shield' as const, color: '#14B8A6' },
-                  { id: 'PATTERN_MATCH', label: 'Pattern Simon Matrix', icon: 'circleMark' as const, color: '#A855F7' },
-                  { id: 'MASTERMIND', label: 'Mastermind Code', icon: 'crown' as const, color: '#3B82F6' },
-                  { id: 'WORD_SCRAMBLE', label: 'Anagram Scramble', icon: 'flame' as const, color: '#F43F5E' },
-                  { id: 'TYPING_RACE', label: 'Mobile Typing Race', icon: 'play' as const, color: '#0EA5E9' },
-                  { id: 'WOULD_YOU_RATHER', label: 'Would You Rather?', icon: 'users' as const, color: '#38BDF8' },
-                  { id: 'TRUTH_OR_DARE', label: 'Truth or Dare', icon: 'bell' as const, color: '#F59E0B' },
-                  { id: 'CHARADES', label: 'Charades Party', icon: 'play' as const, color: '#10B981' },
-                  { id: 'GUESS_PICTURE', label: 'Pixel Reveal Guess', icon: 'target' as const, color: '#8B5CF6' },
-                  { id: 'GUESS_WORD', label: 'Taboo Word Clue', icon: 'shield' as const, color: '#EF4444' },
-                  { id: 'GUESS_SONG', label: 'Name That Tune', icon: 'star' as const, color: '#EC4899' },
-                  { id: 'WHO_AM_I', label: 'Who Am I?', icon: 'award' as const, color: '#FBBF24' },
-                  { id: 'IMPOSTER', label: 'The Imposter', icon: 'shield' as const, color: '#E11D48' },
-                  { id: 'MAFIA', label: 'Mafia Werewolf', icon: 'crown' as const, color: '#7C3AED' },
-                  { id: 'DRAW_AND_GUESS', label: 'Draw & Guess', icon: 'palette' as const, color: '#06B6D4' },
-                  { id: 'PICTIONARY', label: 'Pictionary Duel', icon: 'palette' as const, color: '#F97316' },
-                  { id: 'NEVER_HAVE_I_EVER', label: 'Never Have I Ever', icon: 'flame' as const, color: '#DC2626' },
-                  { id: 'THIS_OR_THAT', label: 'This or That', icon: 'star' as const, color: '#F43F5E' },
-                  { id: 'TWO_TRUTHS_AND_A_LIE', label: '2 Truths & Lie', icon: 'award' as const, color: '#6366F1' },
-                ].map((opt) => {
-                  const isSelected = selectedGameType === opt.id;
-                  return (
-                    <TouchableOpacity
-                      key={opt.id}
-                      onPress={() => setSelectedGameType(opt.id)}
-                      style={[
-                        styles.gameOptionChip,
-                        {
-                          backgroundColor: isSelected
-                            ? opt.color + '22'
-                            : theme.colors.surface,
-                          borderColor: isSelected
-                            ? opt.color
-                            : theme.colors.border,
-                        },
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <Icon
-                        name={opt.icon}
-                        size={18}
-                        color={isSelected ? opt.color : theme.colors.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.gameOptionText,
-                          {
-                            color: isSelected
-                              ? opt.color
-                              : theme.colors.textSecondary,
-                          },
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Tab 0: Solo AI Opponent */}
           {activeTab === 'solo' && (
             <View style={styles.tabBody}>
@@ -402,14 +285,11 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                           flex: 1,
                           paddingVertical: 10,
                           borderRadius: 12,
-                          borderWidth: 1.5,
+                          borderWidth: 0,
                           alignItems: 'center',
                           backgroundColor: isSelected
                             ? theme.colors.primary
                             : theme.colors.surface,
-                          borderColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.border,
                         }}
                         onPress={() => setSoloDifficulty(diff)}
                         activeOpacity={0.8}
@@ -437,8 +317,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   flexDirection: 'row',
                   padding: 12,
                   borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: theme.colors.border,
+                  borderWidth: 0,
                   backgroundColor: theme.colors.surface,
                   alignItems: 'center',
                   gap: 12,

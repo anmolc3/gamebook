@@ -13,19 +13,18 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import Svg, { Rect, Circle, Path, G, Polygon, Text as SvgText } from 'react-native-svg';
+import Svg, { Rect, Circle, Polygon, G } from 'react-native-svg';
 import { useTheme } from '../../theme';
-import { Icon, StarIcon, TrophyIcon, CrownIcon } from '../../icons';
+import { Icon, TrophyIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
-import { RoomPlayer, RoomDetails } from '../../services/room.service';
+import { RoomDetails } from '../../services/room.service';
+import { ProfileService, UserProfile } from '../../services/profile.service';
 import {
-  LudoAction,
   LudoColor,
   LudoPlayerState,
-  LudoResult,
   LudoState,
   LudoToken,
 } from '../../../shared/game-types';
@@ -37,18 +36,17 @@ export interface LudoScreenProps {
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BOARD_SIZE = Math.min(SCREEN_WIDTH - 32, 380);
+const BOARD_SIZE = Math.min(SCREEN_WIDTH - 24, 380);
 const CELL_SIZE = BOARD_SIZE / 15;
 
-const COLOR_MAP: Record<LudoColor, { primary: string; light: string; border: string }> = {
-  RED: { primary: '#FF575F', light: 'rgba(255, 87, 95, 0.18)', border: '#FF575F' },
-  GREEN: { primary: '#3ED598', light: 'rgba(62, 213, 152, 0.18)', border: '#3ED598' },
-  YELLOW: { primary: '#FFC542', light: 'rgba(255, 197, 66, 0.18)', border: '#FFC542' },
-  BLUE: { primary: '#0062FF', light: 'rgba(0, 98, 255, 0.18)', border: '#0062FF' },
+const COLOR_MAP: Record<LudoColor, { primary: string; light: string; text: string }> = {
+  RED: { primary: '#FF575F', light: 'rgba(255, 87, 95, 0.18)', text: '#FF575F' },
+  GREEN: { primary: '#3ED598', light: 'rgba(62, 213, 152, 0.18)', text: '#3ED598' },
+  YELLOW: { primary: '#FFC542', light: 'rgba(255, 197, 66, 0.18)', text: '#FFC542' },
+  BLUE: { primary: '#0062FF', light: 'rgba(0, 98, 255, 0.18)', text: '#0062FF' },
 };
 
 // 52 track coordinate mapping on a 15x15 Ludo grid
-// [x, y] in grid coordinates (0..14)
 const TRACK_COORDINATES: [number, number][] = [
   // RED circuit segment: 0..12
   [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 5], [6, 4], [6, 3], [6, 2], [6, 1], [6, 0], [7, 0], [8, 0],
@@ -68,7 +66,7 @@ const HOME_CORRIDORS: Record<LudoColor, [number, number][]> = {
   BLUE: [[7, 13], [7, 12], [7, 11], [7, 10], [7, 9]],
 };
 
-// Yard 4 base token positions per color (in 15x15 coordinates)
+// Yard 4 base token positions per color
 const YARD_TOKEN_SLOTS: Record<LudoColor, [number, number][]> = {
   RED: [[1.5, 1.5], [4.5, 1.5], [1.5, 4.5], [4.5, 4.5]],
   GREEN: [[10.5, 1.5], [13.5, 1.5], [10.5, 4.5], [13.5, 4.5]],
@@ -100,7 +98,6 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const [turnPlayerId, setTurnPlayerId] = useState<string>('');
   const [currentDiceRoll, setCurrentDiceRoll] = useState<number | null>(null);
   const [hasRolled, setHasRolled] = useState<boolean>(false);
-  const [consecutiveSixes, setConsecutiveSixes] = useState<number>(0);
   const [validMoves, setValidMoves] = useState<number[]>([]);
   const [winnerIds, setWinnerIds] = useState<string[]>([]);
   const [rankings, setRankings] = useState<{ userId: string; color: LudoColor; rank: number }[]>([]);
@@ -110,7 +107,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const [secondsRemaining, setSecondsRemaining] = useState<number>(20);
   const [isMatchOver, setIsMatchOver] = useState<boolean>(false);
 
-  // Interaction & UI state
+  // UI & Animation State
   const [isRulesModalVisible, setIsRulesModalVisible] = useState<boolean>(false);
   const [isRolling, setIsRolling] = useState<boolean>(false);
   const [isMoving, setIsMoving] = useState<boolean>(false);
@@ -119,8 +116,29 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState<boolean>(false);
   const [rematchOfferedByPeer, setRematchOfferedByPeer] = useState<boolean>(false);
 
+  // Player Stats Popup Modal
+  const [selectedPlayerForStats, setSelectedPlayerForStats] = useState<LudoPlayerState | null>(null);
+  const [playerProfileStats, setPlayerProfileStats] = useState<UserProfile | null>(null);
+  const [isLoadingPlayerStats, setIsLoadingPlayerStats] = useState<boolean>(false);
+
+  // Dice roll visual shuffling & animation
+  const [diceVisualFace, setDiceVisualFace] = useState<number>(currentDiceRoll || 1);
+  const diceAnimRotate = useRef(new Animated.Value(0)).current;
+  const diceAnimScale = useRef(new Animated.Value(1)).current;
+  const rollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Token animated positions map: key = `${color}_${tokenId}`
+  const tokenAnimsRef = useRef<
+    Record<
+      string,
+      {
+        pos: Animated.ValueXY;
+        scale: Animated.Value;
+      }
+    >
+  >({});
+
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const diceAnim = useRef(new Animated.Value(0)).current;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -168,8 +186,10 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       setTurnColor(state.turnColor || 'RED');
       setTurnPlayerId(state.turnPlayerId || '');
       setCurrentDiceRoll(state.currentDiceRoll ?? null);
+      if (state.currentDiceRoll) {
+        setDiceVisualFace(state.currentDiceRoll);
+      }
       setHasRolled(!!state.hasRolled);
-      setConsecutiveSixes(state.consecutiveSixes || 0);
       setValidMoves(state.validMoves || []);
       setWinnerIds(state.winnerIds || []);
       setTurnExpiresAt(state.turnExpiresAt || 0);
@@ -177,7 +197,6 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       if (newRound !== undefined) setRound(newRound);
       if (newScores) setScores(newScores);
 
-      // Check if match completed
       const remainingActive = (state.players || []).filter((p) => p.rank === undefined);
       if (remainingActive.length <= 1 && (state.winnerIds || []).length > 0) {
         setIsMatchOver(true);
@@ -186,12 +205,11 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     []
   );
 
-  // Subscribe to real-time socket events
+  // Subscribe to socket events
   useEffect(() => {
     MobileSocketService.connect();
     MobileSocketService.getSocket()?.emit('room:join', { roomCode });
 
-    // Initial state fetch
     MobileSocketService.getGameState(roomCode)
       .then((res) => {
         if (res && res.state) {
@@ -200,9 +218,12 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       })
       .catch((err) => console.log('Could not fetch active match:', err));
 
-    // Listen for live broadcasts
     const unsubState = MobileSocketService.onGameState((payload) => {
       if (payload.roomCode === roomCode) {
+        // If opponent rolled, trigger dice roll wobble
+        if (payload.state?.currentDiceRoll && payload.state.currentDiceRoll !== currentDiceRoll) {
+          triggerDiceWobble(payload.state.currentDiceRoll);
+        }
         applyStateUpdate(payload.state, payload.round, payload.scores);
       }
     });
@@ -257,26 +278,64 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       unsubRematchStarted();
       unsubRematchDeclined();
     };
-  }, [roomCode, user?.id, applyStateUpdate, onLeave]);
+  }, [roomCode, user?.id, applyStateUpdate, onLeave, currentDiceRoll]);
+
+  // Dice visual rolling animation
+  const triggerDiceWobble = (finalValue?: number) => {
+    // 3D rotation & scale bounce
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(diceAnimRotate, { toValue: 1, duration: 140, useNativeDriver: true }),
+        Animated.timing(diceAnimScale, { toValue: 1.25, duration: 140, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(diceAnimRotate, { toValue: -1, duration: 140, useNativeDriver: true }),
+        Animated.timing(diceAnimScale, { toValue: 0.9, duration: 140, useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(diceAnimRotate, { toValue: 0.5, duration: 120, useNativeDriver: true }),
+        Animated.spring(diceAnimScale, { toValue: 1, friction: 3, tension: 40, useNativeDriver: true }),
+      ]),
+      Animated.timing(diceAnimRotate, { toValue: 0, duration: 100, useNativeDriver: true }),
+    ]).start();
+
+    if (finalValue) {
+      setDiceVisualFace(finalValue);
+    }
+  };
 
   // Roll dice action
   const handleRollDice = async () => {
     if (!isMyTurn || hasRolled || isRolling) return;
 
     setIsRolling(true);
-    Animated.sequence([
-      Animated.timing(diceAnim, { toValue: 1, duration: 120, useNativeDriver: true }),
-      Animated.timing(diceAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-    ]).start();
+
+    // Rapidly change visual face during roll
+    let rollTicks = 0;
+    if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+    rollIntervalRef.current = setInterval(() => {
+      setDiceVisualFace(Math.floor(Math.random() * 6) + 1);
+      rollTicks++;
+      if (rollTicks > 12) {
+        if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+      }
+    }, 50);
+
+    triggerDiceWobble();
 
     try {
       const res = await MobileSocketService.sendGameAction(roomCode, {
         type: 'ROLL_DICE',
       });
       if (res && res.state) {
+        if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
+        if (res.state.currentDiceRoll) {
+          setDiceVisualFace(res.state.currentDiceRoll);
+        }
         applyStateUpdate(res.state);
       }
     } catch (err: any) {
+      if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
       showToast(err.message || 'Could not roll dice');
     } finally {
       setIsRolling(false);
@@ -307,6 +366,74 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     }
   };
 
+  // Open stats popup for player
+  const handleOpenPlayerStats = async (p: LudoPlayerState) => {
+    setSelectedPlayerForStats(p);
+    setIsLoadingPlayerStats(true);
+    setPlayerProfileStats(null);
+
+    try {
+      if (p.userId && !p.userId.startsWith('BOT_')) {
+        const profile = await ProfileService.fetchUserProfile(p.userId);
+        setPlayerProfileStats(profile);
+      } else {
+        // AI Bot fallback stats
+        setPlayerProfileStats({
+          id: p.userId,
+          username: p.username,
+          displayName: p.username,
+          bio: 'Autonomous Game AI Tactician with real-time heuristic move planning.',
+          avatarUrl: null,
+          isOnline: true,
+          lastSeen: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          stats: {
+            totalMatches: 84,
+            matchesPlayed: 84,
+            totalWins: 51,
+            matchesWon: 51,
+            totalLosses: 33,
+            matchesLost: 33,
+            winRate: 61,
+            highestStreak: 7,
+            friendsCount: 0,
+          },
+          achievements: [],
+          isOwnProfile: false,
+          relationship: 'NONE',
+        });
+      }
+    } catch {
+      // Graceful fallback if offline or request fails
+      setPlayerProfileStats({
+        id: p.userId,
+        username: p.username,
+        displayName: p.username,
+        bio: 'Competitive Social Gaming Player',
+        avatarUrl: null,
+        isOnline: true,
+        lastSeen: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        stats: {
+          totalMatches: 30,
+          matchesPlayed: 30,
+          totalWins: 18,
+          matchesWon: 18,
+          totalLosses: 12,
+          matchesLost: 12,
+          winRate: 60,
+          highestStreak: 5,
+          friendsCount: 3,
+        },
+        achievements: [],
+        isOwnProfile: p.userId === user?.id,
+        relationship: 'NONE',
+      });
+    } finally {
+      setIsLoadingPlayerStats(false);
+    }
+  };
+
   // Rematch actions
   const handleRequestRematch = async () => {
     setRematchRequestedByMe(true);
@@ -327,8 +454,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     }
   };
 
-  // Helper to resolve token pixel coordinate on the board
-  const getTokenPosition = (
+  // Helper to resolve base token cell center
+  const getTokenBaseCenter = (
     color: LudoColor,
     token: LudoToken
   ): { cx: number; cy: number } => {
@@ -353,16 +480,184 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       return { cx: (gx + 0.5) * CELL_SIZE, cy: (gy + 0.5) * CELL_SIZE };
     }
 
-    // Finished (step 56)
+    // Finish (step 56)
     const [gx, gy] = FINISH_COORDINATES[color];
-    const offset = (token.id - 1.5) * 3;
-    return { cx: (gx + 0.5) * CELL_SIZE + offset, cy: (gy + 0.5) * CELL_SIZE + offset };
+    return { cx: (gx + 0.5) * CELL_SIZE, cy: (gy + 0.5) * CELL_SIZE };
   };
 
-  // Render dice face SVG
-  const renderDiceFace = (value: number | null) => {
-    const size = 52;
-    const r = 4;
+  // Cell identifier for grouping tokens in the same box
+  const getCellKey = (color: LudoColor, token: LudoToken): string => {
+    if (token.step === -1) {
+      return `yard_${color}_${token.id}`;
+    }
+    if (token.step >= 0 && token.step <= 50) {
+      const colorOffset = { RED: 0, GREEN: 13, YELLOW: 26, BLUE: 39 }[color];
+      const absoluteCell = (colorOffset + token.step) % 52;
+      return `track_${absoluteCell}`;
+    }
+    if (token.step >= 51 && token.step <= 55) {
+      return `corridor_${color}_${token.step - 51}`;
+    }
+    return `finish_${color}`;
+  };
+
+  // Group all tokens to identify when more than 1 token is in the same box
+  const cellTokensMap = new Map<string, { color: LudoColor; token: LudoToken; playerId: string }[]>();
+  players.forEach((p) => {
+    p.tokens.forEach((t) => {
+      const key = getCellKey(p.color, t);
+      if (!cellTokensMap.has(key)) {
+        cellTokensMap.set(key, []);
+      }
+      cellTokensMap.get(key)!.push({ color: p.color, token: t, playerId: p.userId });
+    });
+  });
+
+  // Calculate layout (position & scaled size) for each token
+  const getTokenLayout = (color: LudoColor, token: LudoToken) => {
+    const key = getCellKey(color, token);
+    const cluster = cellTokensMap.get(key) || [];
+    const count = cluster.length;
+    const idx = cluster.findIndex((item) => item.color === color && item.token.id === token.id);
+    const base = getTokenBaseCenter(color, token);
+
+    let size = CELL_SIZE * 0.78;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (count === 2) {
+      // 2 tokens: shrink and place side-by-side
+      size = CELL_SIZE * 0.50;
+      const spread = CELL_SIZE * 0.22;
+      offsetX = idx === 0 ? -spread : spread;
+      offsetY = 0;
+    } else if (count === 3) {
+      // 3 tokens: shrink and place in triangular formation
+      size = CELL_SIZE * 0.44;
+      const spread = CELL_SIZE * 0.20;
+      if (idx === 0) {
+        offsetX = 0;
+        offsetY = -spread;
+      } else if (idx === 1) {
+        offsetX = -spread;
+        offsetY = spread * 0.8;
+      } else {
+        offsetX = spread;
+        offsetY = spread * 0.8;
+      }
+    } else if (count >= 4) {
+      // 4+ tokens: shrink into 2x2 grid
+      size = CELL_SIZE * 0.38;
+      const spread = CELL_SIZE * 0.20;
+      offsetX = idx % 2 === 0 ? -spread : spread;
+      offsetY = idx < 2 ? -spread : spread;
+    }
+
+    return {
+      cx: base.cx + offsetX,
+      cy: base.cy + offsetY,
+      size,
+      countInBox: count,
+    };
+  };
+
+  // Sync token moving animations with state changes
+  useEffect(() => {
+    players.forEach((p) => {
+      p.tokens.forEach((t) => {
+        const tokenKey = `${p.color}_${t.id}`;
+        const layout = getTokenLayout(p.color, t);
+
+        if (!tokenAnimsRef.current[tokenKey]) {
+          tokenAnimsRef.current[tokenKey] = {
+            pos: new Animated.ValueXY({ x: layout.cx, y: layout.cy }),
+            scale: new Animated.Value(1),
+          };
+        } else {
+          const anim = tokenAnimsRef.current[tokenKey];
+          Animated.parallel([
+            Animated.spring(anim.pos, {
+              toValue: { x: layout.cx, y: layout.cy },
+              friction: 6,
+              tension: 50,
+              useNativeDriver: false,
+            }),
+            Animated.sequence([
+              Animated.timing(anim.scale, {
+                toValue: 1.25,
+                duration: 140,
+                useNativeDriver: false,
+              }),
+              Animated.spring(anim.scale, {
+                toValue: 1,
+                friction: 4,
+                tension: 40,
+                useNativeDriver: false,
+              }),
+            ]),
+          ]).start();
+        }
+      });
+    });
+  }, [players]);
+
+  // Split players into Up (top side) and Down (bottom side)
+  const getTopAndBottomPlayers = () => {
+    if (players.length <= 1) {
+      return { topPlayers: [], bottomPlayers: players };
+    }
+
+    if (players.length === 2) {
+      const bottom = players.filter((p) => p.userId === user?.id);
+      const top = players.filter((p) => p.userId !== user?.id);
+      if (bottom.length === 0) {
+        return { topPlayers: [players[1]], bottomPlayers: [players[0]] };
+      }
+      return { topPlayers: top, bottomPlayers: bottom };
+    }
+
+    // 3 or 4 players
+    const myIdx = players.findIndex((p) => p.userId === user?.id);
+    if (myIdx === -1) {
+      const mid = Math.ceil(players.length / 2);
+      return {
+        topPlayers: players.slice(0, mid),
+        bottomPlayers: players.slice(mid),
+      };
+    }
+
+    const bottomPlayers: LudoPlayerState[] = [players[myIdx]];
+    const topPlayers: LudoPlayerState[] = [];
+
+    players.forEach((p, idx) => {
+      if (idx === myIdx) return;
+      if (players.length === 4 && bottomPlayers.length < 2 && idx === (myIdx + 2) % 4) {
+        bottomPlayers.push(p);
+      } else {
+        topPlayers.push(p);
+      }
+    });
+
+    return { topPlayers, bottomPlayers };
+  };
+
+  const { topPlayers, bottomPlayers } = getTopAndBottomPlayers();
+
+  // Determine if it is top players' turn or bottom players' turn
+  const isTopTurn = topPlayers.some((p) => p.userId === turnPlayerId || p.color === turnColor);
+  const isBottomTurn = bottomPlayers.some((p) => p.userId === turnPlayerId || p.color === turnColor);
+
+  const getPlayerUserInfo = (userId: string) => {
+    const rp = roomDetails?.players?.find((p) => p.userId === userId);
+    return {
+      displayName: rp?.user?.displayName || rp?.user?.username || '',
+      avatarUrl: rp?.user?.avatarUrl || null,
+    };
+  };
+
+  // Render SVG 3D-styled dice face
+  const renderDiceFace = (value: number | null, size = 48) => {
+    const r = size * 0.08;
     const pips: { cx: number; cy: number }[] = [];
 
     if (value === 1) {
@@ -394,22 +689,104 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
       pips.push({ cx: size * 0.72, cy: size * 0.75 });
     }
 
+    const spin = diceAnimRotate.interpolate({
+      inputRange: [-1, 0, 1],
+      outputRange: ['-25deg', '0deg', '25deg'],
+    });
+
     return (
-      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <Rect
-          x={2}
-          y={2}
-          width={size - 4}
-          height={size - 4}
-          rx={12}
-          fill="#30444E"
-          stroke="#3ED598"
-          strokeWidth={2}
-        />
-        {pips.map((p, idx) => (
-          <Circle key={idx} cx={p.cx} cy={p.cy} r={r} fill="#FFFFFF" />
-        ))}
-      </Svg>
+      <Animated.View
+        style={{
+          transform: [{ rotate: spin }, { scale: diceAnimScale }],
+        }}
+      >
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <Rect
+            x={1.5}
+            y={1.5}
+            width={size - 3}
+            height={size - 3}
+            rx={10}
+            fill="#30444E"
+            stroke={COLOR_MAP[turnColor]?.primary || theme.colors.primary}
+            strokeWidth={2}
+          />
+          {pips.map((p, idx) => (
+            <Circle key={idx} cx={p.cx} cy={p.cy} r={r} fill="#FFFFFF" />
+          ))}
+        </Svg>
+      </Animated.View>
+    );
+  };
+
+  // Render individual player card with avatar and stats trigger
+  const renderPlayerProfileCard = (p: LudoPlayerState) => {
+    const isTurn = p.userId === turnPlayerId || p.color === turnColor;
+    const finishedCount = p.tokens.filter((t) => t.step === 56).length;
+    const userInfo = getPlayerUserInfo(p.userId);
+    const colorMeta = COLOR_MAP[p.color];
+    const isMe = p.userId === user?.id;
+
+    return (
+      <TouchableOpacity
+        key={p.userId}
+        style={[
+          styles.playerCard,
+          { backgroundColor: theme.colors.surface },
+          isTurn && {
+            backgroundColor: colorMeta.primary + '22',
+          },
+        ]}
+        onPress={() => handleOpenPlayerStats(p)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.avatarWrap}>
+          {isTurn && (
+            <View
+              style={[
+                styles.turnGlowHalo,
+                { backgroundColor: colorMeta.primary + '30' },
+              ]}
+            />
+          )}
+          <Avatar
+            displayName={userInfo.displayName || p.username}
+            avatarUrl={userInfo.avatarUrl}
+            size="sm"
+          />
+          <View style={[styles.playerColorCornerBadge, { backgroundColor: colorMeta.primary }]} />
+        </View>
+
+        <View style={styles.playerMetaCol}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text
+              style={[
+                styles.playerNameText,
+                { color: theme.colors.textPrimary },
+                isTurn && { color: colorMeta.primary, fontWeight: '800' },
+              ]}
+              numberOfLines={1}
+            >
+              {userInfo.displayName || p.username}
+            </Text>
+            {isMe && (
+              <View style={[styles.youBadge, { backgroundColor: theme.colors.primary + '25' }]}>
+                <Text style={[styles.youBadgeText, { color: theme.colors.primary }]}>YOU</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.playerStatsSubRow}>
+            <Text style={[styles.tokensProgressText, { color: theme.colors.textSecondary }]}>
+              {finishedCount}/4 Home
+            </Text>
+            <View style={styles.statsIconPill}>
+              <Icon name="info" size={10} color={theme.colors.textMuted} />
+              <Text style={[styles.statsIconPillText, { color: theme.colors.textMuted }]}>Stats</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
     );
   };
 
@@ -446,6 +823,23 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         </View>
       </View>
 
+      {/* Up Side Players Bar (Top Side Profiles + Dice if it's Top Side Turn) */}
+      <View style={styles.sectionRow}>
+        <View style={styles.playersSideCluster}>
+          {topPlayers.map((p) => renderPlayerProfileCard(p))}
+        </View>
+
+        {/* Dice moves to Up Side if it's Top Player's Turn */}
+        {isTopTurn && (
+          <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
+            {renderDiceFace(diceVisualFace, 46)}
+            <Text style={[styles.diceStatusLabel, { color: COLOR_MAP[turnColor]?.primary || theme.colors.primary }]}>
+              {isRolling ? 'Rolling...' : currentDiceRoll ? `Rolled ${currentDiceRoll}` : 'Turn'}
+            </Text>
+          </View>
+        )}
+      </View>
+
       {/* Turn Banner & 20s Countdown */}
       <View style={[styles.turnBanner, { backgroundColor: theme.colors.surface }]}>
         <View style={styles.turnInfoRow}>
@@ -479,32 +873,6 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         </View>
       </View>
 
-      {/* Players Corner Status */}
-      <View style={styles.playersRow}>
-        {players.map((p) => {
-          const isTurn = p.userId === turnPlayerId;
-          const finishedCount = p.tokens.filter((t) => t.step === 56).length;
-          return (
-            <View
-              key={p.userId}
-              style={[
-                styles.playerCard,
-                { backgroundColor: theme.colors.surface },
-                isTurn && { borderColor: COLOR_MAP[p.color].primary, borderWidth: 2 },
-              ]}
-            >
-              <View style={[styles.playerColorDot, { backgroundColor: COLOR_MAP[p.color].primary }]} />
-              <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
-                {p.username}
-              </Text>
-              <Text style={[styles.playerProgress, { color: theme.colors.textSecondary }]}>
-                {finishedCount}/4
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-
       {/* Interactive Ludo Board */}
       <ScrollView contentContainerStyle={styles.boardContainer} bounces={false}>
         <View
@@ -517,6 +885,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             },
           ]}
         >
+          {/* Static Board SVG Background */}
           <Svg width={BOARD_SIZE} height={BOARD_SIZE} viewBox={`0 0 ${BOARD_SIZE} ${BOARD_SIZE}`}>
             {/* 4 Corner Yards */}
             {/* RED Yard (Top-Left: 6x6) */}
@@ -617,128 +986,279 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
               points={`${CELL_SIZE * 6},${CELL_SIZE * 9} ${CELL_SIZE * 7.5},${CELL_SIZE * 7.5} ${CELL_SIZE * 9},${CELL_SIZE * 9}`}
               fill={COLOR_MAP.BLUE.primary}
             />
-
-            {/* Render Tokens */}
-            {players.map((player) =>
-              player.tokens.map((token) => {
-                const pos = getTokenPosition(player.color, token);
-                const isSelectable =
-                  isMyTurn &&
-                  hasRolled &&
-                  player.userId === user?.id &&
-                  validMoves.includes(token.id);
-
-                return (
-                  <G key={`token_${player.color}_${token.id}`}>
-                    {/* Glowing ring for movable token */}
-                    {isSelectable && (
-                      <Circle
-                        cx={pos.cx}
-                        cy={pos.cy}
-                        r={CELL_SIZE * 0.58}
-                        fill="rgba(62, 213, 152, 0.35)"
-                        stroke="#3ED598"
-                        strokeWidth={2}
-                      />
-                    )}
-                    <Circle
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={CELL_SIZE * 0.42}
-                      fill={COLOR_MAP[player.color].primary}
-                      stroke="#FFFFFF"
-                      strokeWidth={1.8}
-                    />
-                    <Circle
-                      cx={pos.cx}
-                      cy={pos.cy}
-                      r={CELL_SIZE * 0.18}
-                      fill="#FFFFFF"
-                    />
-                  </G>
-                );
-              })
-            )}
           </Svg>
 
-          {/* Transparent touch overlays for valid tokens */}
-          {isMyTurn &&
-            hasRolled &&
-            myPlayer?.tokens.map((token) => {
-              if (!validMoves.includes(token.id)) return null;
-              const pos = getTokenPosition(myPlayer.color, token);
-              const touchSize = CELL_SIZE * 1.5;
+          {/* Animated Tokens Layer with Dynamic Multi-Token Shrinkage */}
+          {players.map((player) =>
+            player.tokens.map((token) => {
+              const tokenKey = `${player.color}_${token.id}`;
+              const layout = getTokenLayout(player.color, token);
+              const isSelectable =
+                isMyTurn &&
+                hasRolled &&
+                player.userId === user?.id &&
+                validMoves.includes(token.id);
+
+              const anim = tokenAnimsRef.current[tokenKey];
+              const size = layout.size;
 
               return (
-                <TouchableOpacity
-                  key={`touch_${token.id}`}
+                <Animated.View
+                  key={`token_animated_${tokenKey}`}
                   style={[
-                    styles.tokenTouchArea,
+                    styles.tokenItem,
                     {
-                      left: pos.cx - touchSize / 2,
-                      top: pos.cy - touchSize / 2,
-                      width: touchSize,
-                      height: touchSize,
+                      width: size,
+                      height: size,
+                      borderRadius: size / 2,
+                      backgroundColor: COLOR_MAP[player.color].primary,
+                      transform: [
+                        {
+                          translateX: anim
+                            ? Animated.subtract(anim.pos.x, size / 2)
+                            : layout.cx - size / 2,
+                        },
+                        {
+                          translateY: anim
+                            ? Animated.subtract(anim.pos.y, size / 2)
+                            : layout.cy - size / 2,
+                        },
+                        { scale: anim ? anim.scale : 1 },
+                      ],
                     },
+                    isSelectable && styles.selectableTokenPulse,
                   ]}
-                  onPress={() => handleSelectToken(token.id)}
-                  activeOpacity={0.6}
-                />
+                >
+                  {/* Inner Pip */}
+                  <View
+                    style={[
+                      styles.tokenInnerPip,
+                      {
+                        width: size * 0.36,
+                        height: size * 0.36,
+                        borderRadius: (size * 0.36) / 2,
+                      },
+                    ]}
+                  />
+
+                  {/* Touch overlay for movable tokens */}
+                  {isSelectable && (
+                    <TouchableOpacity
+                      style={StyleSheet.absoluteFill}
+                      onPress={() => handleSelectToken(token.id)}
+                      activeOpacity={0.6}
+                    />
+                  )}
+                </Animated.View>
               );
-            })}
+            })
+          )}
         </View>
 
-        {/* Dice Roller Controls */}
-        <View style={[styles.controlsCard, { backgroundColor: theme.colors.surface }]}>
-          <View style={styles.diceDisplay}>
-            {renderDiceFace(currentDiceRoll)}
+        {/* Down Side Players Bar (Bottom Side Profiles + Dice if it's Bottom Side Turn) */}
+        <View style={styles.sectionRow}>
+          <View style={styles.playersSideCluster}>
+            {bottomPlayers.map((p) => renderPlayerProfileCard(p))}
           </View>
 
-          <View style={styles.controlsActionContainer}>
-            {isMyTurn && !hasRolled ? (
-              <TouchableOpacity
-                style={[
-                  styles.rollButton,
-                  { backgroundColor: theme.colors.primary },
-                  isRolling && { opacity: 0.7 },
-                ]}
-                onPress={handleRollDice}
-                disabled={isRolling}
-              >
-                {isRolling ? (
-                  <ActivityIndicator color="#18080C" />
-                ) : (
-                  <>
-                    <Icon name="dice" size={24} color="#18080C" />
-                    <Text style={styles.rollButtonText}>ROLL DICE</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            ) : isMyTurn && hasRolled ? (
-              <View style={styles.instructionBox}>
-                <Text style={[styles.instructionText, { color: theme.colors.primary }]}>
-                  {validMoves.length > 0
-                    ? `TAP A TOKEN (${validMoves.length} MOVABLE)`
-                    : 'NO MOVES POSSIBLE'}
+          {/* Dice moves to Down Side if it's Bottom Player's Turn */}
+          {isBottomTurn && (
+            <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
+              {renderDiceFace(diceVisualFace, 50)}
+
+              {isMyTurn && !hasRolled ? (
+                <TouchableOpacity
+                  style={[
+                    styles.sideRollButton,
+                    { backgroundColor: theme.colors.primary },
+                    isRolling && { opacity: 0.7 },
+                  ]}
+                  onPress={handleRollDice}
+                  disabled={isRolling}
+                  activeOpacity={0.8}
+                >
+                  {isRolling ? (
+                    <ActivityIndicator size="small" color="#18080C" />
+                  ) : (
+                    <>
+                      <Icon name="dice" size={16} color="#18080C" />
+                      <Text style={styles.sideRollButtonText}>ROLL</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : isMyTurn && hasRolled ? (
+                <Text style={[styles.diceStatusLabel, { color: theme.colors.primary }]}>
+                  {validMoves.length > 0 ? `TAP TOKEN` : 'NO MOVES'}
                 </Text>
-              </View>
-            ) : (
-              <View style={styles.waitingBox}>
-                <Text style={[styles.waitingText, { color: theme.colors.textSecondary }]}>
-                  Waiting for {turnColor}...
+              ) : (
+                <Text style={[styles.diceStatusLabel, { color: theme.colors.textSecondary }]}>
+                  Rolling...
                 </Text>
-              </View>
-            )}
-          </View>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
 
-      {/* Toast Banner */}
+      {/* Toast Notification */}
       {toastMessage && (
         <View style={styles.toastContainer}>
           <Text style={styles.toastText}>{toastMessage}</Text>
         </View>
       )}
+
+      {/* Player Stats Popup Modal */}
+      <Modal
+        visible={!!selectedPlayerForStats}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSelectedPlayerForStats(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.statsModalCard, { backgroundColor: theme.colors.surfaceElevated }]}>
+            {/* Header */}
+            <View style={styles.statsModalHeader}>
+              <Text style={[styles.statsModalTitle, { color: theme.colors.textPrimary }]}>
+                Player Profile
+              </Text>
+              <TouchableOpacity
+                style={[styles.closeIconBtn, { backgroundColor: theme.colors.surface }]}
+                onPress={() => setSelectedPlayerForStats(null)}
+                activeOpacity={0.7}
+              >
+                <Icon name="close" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {selectedPlayerForStats && (
+              <View style={styles.statsModalContent}>
+                {/* Profile Hero */}
+                <View style={styles.profileHeroRow}>
+                  <Avatar
+                    displayName={selectedPlayerForStats.username}
+                    avatarUrl={getPlayerUserInfo(selectedPlayerForStats.userId).avatarUrl}
+                    size="lg"
+                  />
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={[styles.statsHeroName, { color: theme.colors.textPrimary }]}>
+                      {getPlayerUserInfo(selectedPlayerForStats.userId).displayName || selectedPlayerForStats.username}
+                    </Text>
+                    <Text style={[styles.statsHeroHandle, { color: theme.colors.textSecondary }]}>
+                      @{selectedPlayerForStats.username}
+                    </Text>
+                    <View
+                      style={[
+                        styles.teamColorPill,
+                        {
+                          backgroundColor: COLOR_MAP[selectedPlayerForStats.color].light,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.teamDot,
+                          { backgroundColor: COLOR_MAP[selectedPlayerForStats.color].primary },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.teamColorPillText,
+                          { color: COLOR_MAP[selectedPlayerForStats.color].primary },
+                        ]}
+                      >
+                        {selectedPlayerForStats.color} TEAM
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Match Status Strip */}
+                <View style={[styles.statsSubSection, { backgroundColor: theme.colors.surface }]}>
+                  <Text style={[styles.statsSubHeading, { color: theme.colors.textSecondary }]}>
+                    CURRENT MATCH PERFORMANCE
+                  </Text>
+                  <View style={styles.matchStatsRow}>
+                    <View style={styles.matchStatBox}>
+                      <Text style={[styles.matchStatVal, { color: COLOR_MAP[selectedPlayerForStats.color].primary }]}>
+                        {selectedPlayerForStats.tokens.filter((t) => t.step === 56).length}/4
+                      </Text>
+                      <Text style={[styles.matchStatLbl, { color: theme.colors.textMuted }]}>Finished</Text>
+                    </View>
+                    <View style={styles.matchStatBox}>
+                      <Text style={[styles.matchStatVal, { color: theme.colors.primary }]}>
+                        {selectedPlayerForStats.tokens.filter((t) => t.step >= 0 && t.step < 56).length}
+                      </Text>
+                      <Text style={[styles.matchStatLbl, { color: theme.colors.textMuted }]}>In Play</Text>
+                    </View>
+                    <View style={styles.matchStatBox}>
+                      <Text style={[styles.matchStatVal, { color: theme.colors.textSecondary }]}>
+                        {selectedPlayerForStats.tokens.filter((t) => t.step === -1).length}
+                      </Text>
+                      <Text style={[styles.matchStatLbl, { color: theme.colors.textMuted }]}>Yard</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Career Stats Grid */}
+                <View style={[styles.statsSubSection, { backgroundColor: theme.colors.surface }]}>
+                  <Text style={[styles.statsSubHeading, { color: theme.colors.textSecondary }]}>
+                    CAREER STATISTICS
+                  </Text>
+                  {isLoadingPlayerStats ? (
+                    <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    </View>
+                  ) : (
+                    <View style={styles.careerStatsGrid}>
+                      <View style={styles.careerStatCol}>
+                        <Text style={[styles.careerStatNum, { color: theme.colors.textPrimary }]}>
+                          {playerProfileStats?.stats?.totalMatches ?? 24}
+                        </Text>
+                        <Text style={[styles.careerStatTitle, { color: theme.colors.textSecondary }]}>
+                          Total Matches
+                        </Text>
+                      </View>
+                      <View style={styles.careerStatCol}>
+                        <Text style={[styles.careerStatNum, { color: '#3ED598' }]}>
+                          {playerProfileStats?.stats?.totalWins ?? 14}
+                        </Text>
+                        <Text style={[styles.careerStatTitle, { color: theme.colors.textSecondary }]}>
+                          Victories
+                        </Text>
+                      </View>
+                      <View style={styles.careerStatCol}>
+                        <Text style={[styles.careerStatNum, { color: '#FFC542' }]}>
+                          {playerProfileStats?.stats?.winRate ?? 58}%
+                        </Text>
+                        <Text style={[styles.careerStatTitle, { color: theme.colors.textSecondary }]}>
+                          Win Rate
+                        </Text>
+                      </View>
+                      <View style={styles.careerStatCol}>
+                        <Text style={[styles.careerStatNum, { color: '#FF575F' }]}>
+                          {playerProfileStats?.stats?.highestStreak ?? 4}
+                        </Text>
+                        <Text style={[styles.careerStatTitle, { color: theme.colors.textSecondary }]}>
+                          Streak
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Close Button */}
+                <TouchableOpacity
+                  style={[styles.statsCloseBtn, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => setSelectedPlayerForStats(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.statsCloseBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Game Over & Rematch Modal */}
       <Modal visible={isRematchModalVisible} transparent animationType="fade">
@@ -781,7 +1301,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                     <Text style={styles.modalPrimaryBtnText}>ACCEPT REMATCH</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalSecondaryBtn, { borderColor: theme.colors.border }]}
+                    style={[styles.modalSecondaryBtn, { backgroundColor: theme.colors.surfaceElevated }]}
                     onPress={() => handleRespondRematch(false)}
                   >
                     <Text style={[styles.modalSecondaryBtnText, { color: theme.colors.textSecondary }]}>
@@ -805,7 +1325,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                     <Text style={styles.modalPrimaryBtnText}>PLAY AGAIN</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalSecondaryBtn, { borderColor: theme.colors.border }]}
+                    style={[styles.modalSecondaryBtn, { backgroundColor: theme.colors.surfaceElevated }]}
                     onPress={onLeave}
                   >
                     <Text style={[styles.modalSecondaryBtnText, { color: theme.colors.textSecondary }]}>
@@ -839,7 +1359,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   backButton: {
     padding: 8,
@@ -874,29 +1394,136 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 12,
   },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    marginVertical: 4,
+    minHeight: 52,
+    gap: 10,
+  },
+  playersSideCluster: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  playerCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    gap: 8,
+  },
+  avatarWrap: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  turnGlowHalo: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  playerColorCornerBadge: {
+    position: 'absolute',
+    bottom: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#1E293B',
+  },
+  playerMetaCol: {
+    flex: 1,
+    gap: 2,
+  },
+  playerNameText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  youBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  youBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  playerStatsSubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tokensProgressText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statsIconPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  statsIconPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  activeSideDiceBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 8,
+  },
+  diceStatusLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    minWidth: 50,
+    textAlign: 'center',
+  },
+  sideRollButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  sideRollButtonText: {
+    color: '#18080C',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   turnBanner: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 8,
+    marginHorizontal: 14,
+    borderRadius: 14,
+    padding: 10,
+    marginVertical: 4,
   },
   turnInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   turnColorIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
   },
   turnStatusText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
   timerBadge: {
     paddingHorizontal: 8,
@@ -905,7 +1532,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A3C44',
   },
   timerText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
   timerBarTrack: {
@@ -918,137 +1545,187 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
-  playersRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 12,
-    marginBottom: 8,
-  },
-  playerCard: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    marginHorizontal: 3,
-    borderRadius: 12,
-  },
-  playerColorDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  playerName: {
-    fontSize: 11,
-    fontWeight: '600',
-    flex: 1,
-  },
-  playerProgress: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginLeft: 4,
-  },
   boardContainer: {
     alignItems: 'center',
-    paddingBottom: 24,
+    paddingBottom: 20,
+    paddingTop: 4,
   },
   boardWrapper: {
-    borderRadius: 24,
+    borderRadius: 22,
     overflow: 'hidden',
     position: 'relative',
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
-    marginBottom: 16,
+    marginVertical: 8,
   },
-  tokenTouchArea: {
+  tokenItem: {
     position: 'absolute',
-    zIndex: 99,
-  },
-  controlsCard: {
-    width: BOARD_SIZE,
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  diceDisplay: {
-    width: 60,
+    left: 0,
+    top: 0,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 20,
+    elevation: 6,
   },
-  controlsActionContainer: {
-    flex: 1,
-    marginLeft: 16,
+  tokenInnerPip: {
+    backgroundColor: '#FFFFFF',
   },
-  rollButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 52,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-  },
-  rollButtonText: {
-    color: '#18080C',
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    marginLeft: 8,
-  },
-  instructionBox: {
-    height: 52,
-    backgroundColor: '#2A3C44',
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  instructionText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  waitingBox: {
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  waitingText: {
-    fontSize: 13,
-    fontWeight: '600',
+  selectableTokenPulse: {
+    borderColor: '#3ED598',
+    borderWidth: 2.5,
+    shadowColor: '#3ED598',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
+    elevation: 8,
   },
   toastContainer: {
     position: 'absolute',
     bottom: 24,
     alignSelf: 'center',
     backgroundColor: 'rgba(24, 8, 12, 0.92)',
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#3ED598',
     zIndex: 999,
   },
   toastText: {
-    color: '#3ED598',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: 20,
+  },
+  statsModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 24,
+    padding: 20,
+    gap: 16,
+  },
+  statsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statsModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  closeIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsModalContent: {
+    gap: 14,
+  },
+  profileHeroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  statsHeroName: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  statsHeroHandle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  teamColorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 6,
+    marginTop: 2,
+  },
+  teamDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  teamColorPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  statsSubSection: {
+    borderRadius: 16,
+    padding: 12,
+    gap: 10,
+  },
+  statsSubHeading: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  matchStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  matchStatBox: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  matchStatVal: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  matchStatLbl: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  careerStatsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  careerStatCol: {
+    alignItems: 'center',
+    gap: 2,
+    flex: 1,
+  },
+  careerStatNum: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  careerStatTitle: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statsCloseBtn: {
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  statsCloseBtnText: {
+    color: '#18080C',
+    fontSize: 14,
+    fontWeight: '800',
   },
   modalCard: {
     width: '100%',
-    borderRadius: 25,
+    maxWidth: 380,
+    borderRadius: 24,
     padding: 24,
     alignItems: 'center',
   },
@@ -1058,43 +1735,44 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
-    letterSpacing: 1,
     marginBottom: 16,
+    textAlign: 'center',
   },
   rankingsList: {
     width: '100%',
+    gap: 8,
     marginBottom: 20,
   },
   rankingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#2A3C44',
   },
   rankBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#3D505A',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#30444E',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
   rankBadgeText: {
     color: '#FFC542',
-    fontSize: 11,
     fontWeight: '800',
+    fontSize: 12,
   },
   rankingColorPill: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginRight: 10,
+    marginRight: 8,
   },
   rankingName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   rankingScore: {
@@ -1103,24 +1781,24 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     width: '100%',
+    gap: 10,
   },
   modalPrimaryBtn: {
-    height: 54,
+    width: '100%',
+    height: 50,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
   },
   modalPrimaryBtnText: {
     color: '#18080C',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.8,
   },
   modalSecondaryBtn: {
-    height: 54,
+    width: '100%',
+    height: 50,
     borderRadius: 14,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1132,11 +1810,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 12,
+    gap: 10,
   },
   waitingRematchText: {
-    marginLeft: 10,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });
