@@ -604,7 +604,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 8,
   },
   toastText: {
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   disconnectBannerCol: {
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   codeCard: {
     padding: 22,
     borderRadius: 25,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     gap: 8,
   },
@@ -704,7 +704,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderRadius: 22,
-    borderWidth: 1.5,
+    borderWidth: 0,
   },
   slotLeft: {
     flexDirection: 'row',
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 6,
   },
   readyDot: {
@@ -775,8 +775,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 22,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
+    borderWidth: 0,
     gap: 12,
   },
   emptyAvatar: {

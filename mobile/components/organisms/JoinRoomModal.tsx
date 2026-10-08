@@ -20,21 +20,36 @@ export interface JoinRoomModalProps {
   visible: boolean;
   onClose: () => void;
   onJoinedRoom: (room: RoomDetails) => void;
+  initialGameType?: SupportedGameType;
+  initialTab?: 'solo' | 'quick' | 'join' | 'create';
 }
 
 export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
   visible,
   onClose,
   onJoinedRoom,
+  initialGameType,
+  initialTab,
 }) => {
   const { theme } = useTheme();
 
-  const [activeTab, setActiveTab] = useState<'solo' | 'quick' | 'join' | 'create'>('solo');
+  const [activeTab, setActiveTab] = useState<'solo' | 'quick' | 'join' | 'create'>(
+    initialTab || 'quick'
+  );
   const [soloDifficulty, setSoloDifficulty] = useState<AiDifficulty>('MEDIUM');
   const [roomCodeInput, setRoomCodeInput] = useState('');
-  const [selectedGameType, setSelectedGameType] = useState<SupportedGameType>('TICTACTOE');
+  const [selectedGameType, setSelectedGameType] = useState<SupportedGameType>(
+    initialGameType || 'TICTACTOE'
+  );
   const [isPrivate, setIsPrivate] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+
+  React.useEffect(() => {
+    if (visible) {
+      if (initialGameType) setSelectedGameType(initialGameType);
+      if (initialTab) setActiveTab(initialTab);
+    }
+  }, [visible, initialGameType, initialTab]);
 
   const handleStartSolo = async () => {
     try {

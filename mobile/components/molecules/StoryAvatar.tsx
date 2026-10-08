@@ -6,6 +6,7 @@ import { Icon } from '../../icons';
 
 interface StoryAvatarProps {
   name: string;
+  avatarUrl?: string | null;
   hasUnviewedStory?: boolean;
   isAddStory?: boolean;
   onPress: () => void;
@@ -13,6 +14,7 @@ interface StoryAvatarProps {
 
 export const StoryAvatar: React.FC<StoryAvatarProps> = ({
   name,
+  avatarUrl,
   hasUnviewedStory = false,
   isAddStory = false,
   onPress,
@@ -40,7 +42,7 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
           },
         ]}
       >
-        <Avatar displayName={name} size="md" />
+        <Avatar displayName={name} avatarUrl={avatarUrl} size="md" />
         {isAddStory && (
           <View
             style={[

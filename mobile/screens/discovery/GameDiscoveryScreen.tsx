@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import {
@@ -23,6 +24,7 @@ import {
 import { GameRulesModal } from '../../components';
 import { apiGet } from '../../services/api';
 import { isSoloGameSupported } from '../../constants/soloGames';
+import { getGameImage } from '../../constants/gameImages';
 
 export interface CatalogGame {
   id: string;
@@ -229,37 +231,47 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.trendingScroll}
               >
-                {trending.map((tg) => (
-                  <TouchableOpacity
-                    key={tg.id}
-                    onPress={() => onSelectGame(tg.id)}
-                    activeOpacity={0.85}
-                    style={[
-                      styles.trendingCard,
-                      {
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                      },
-                    ]}
-                  >
-                    <View style={styles.trendingCardHeader}>
-                      <View style={[styles.categoryPill, { backgroundColor: theme.colors.surfaceElevated }]}>
-                        <Text style={[styles.categoryPillText, { color: theme.colors.textSecondary }]}>
-                          {tg.category}
-                        </Text>
-                      </View>
-                      <View style={styles.liveIndicator}>
-                        <View style={styles.liveDot} />
-                        <Text style={styles.liveText}>{tg.activeRooms || 2} Live</Text>
-                      </View>
-                    </View>
-
-                    <Text
-                      style={[styles.trendingName, { color: theme.colors.textPrimary }]}
-                      numberOfLines={1}
+                {trending.map((tg) => {
+                  const tgImg = getGameImage(tg.id);
+                  return (
+                    <TouchableOpacity
+                      key={tg.id}
+                      onPress={() => onSelectGame(tg.id)}
+                      activeOpacity={0.85}
+                      style={[
+                        styles.trendingCard,
+                        {
+                          backgroundColor: theme.colors.surface,
+                        },
+                        theme.shadows.soft,
+                      ]}
                     >
-                      {tg.name}
-                    </Text>
+                      <View style={styles.trendingCardHeader}>
+                        <View style={[styles.categoryPill, { backgroundColor: theme.colors.surfaceElevated }]}>
+                          <Text style={[styles.categoryPillText, { color: theme.colors.textSecondary }]}>
+                            {tg.category}
+                          </Text>
+                        </View>
+                        <View style={styles.liveIndicator}>
+                          <View style={styles.liveDot} />
+                          <Text style={styles.liveText}>{tg.activeRooms || 2} Live</Text>
+                        </View>
+                      </View>
+
+                      {tgImg && (
+                        <Image
+                          source={tgImg}
+                          style={styles.trendingThumb}
+                          resizeMode="cover"
+                        />
+                      )}
+
+                      <Text
+                        style={[styles.trendingName, { color: theme.colors.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {tg.name}
+                      </Text>
 
                     <View style={styles.trendingFooter}>
                       <Text style={[styles.playerTag, { color: theme.colors.textSecondary }]}>
@@ -287,7 +299,8 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
                       </View>
                     </View>
                   </TouchableOpacity>
-                ))}
+                );
+              })}
               </ScrollView>
             </View>
           )}
@@ -300,85 +313,78 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
             </Text>
 
             <View style={styles.gridList}>
-              {filteredGames.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  onPress={() => onSelectGame(item.id)}
-                  activeOpacity={0.85}
-                  style={[
-                    styles.gameCard,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                >
-                  <View style={styles.gameCardTop}>
-                    <View style={[styles.gameIconBadge, { backgroundColor: theme.colors.surfaceElevated }]}>
-                      <GamepadIcon size={22} color={theme.colors.primary} />
-                    </View>
-                    <View style={styles.gameMeta}>
-                      <Text
-                        style={[styles.gameCardTitle, { color: theme.colors.textPrimary }]}
-                        numberOfLines={1}
-                      >
-                        {item.name}
-                      </Text>
-                      <Text
-                        style={[styles.gameCardCategory, { color: theme.colors.textSecondary }]}
-                      >
-                        {item.category} • {item.minPlayers === item.maxPlayers ? `${item.minPlayers} Players` : `${item.minPlayers}-${item.maxPlayers} Players`} • {item.turnTimeSeconds}s
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text
-                    style={[styles.gameCardDesc, { color: theme.colors.textSecondary }]}
-                    numberOfLines={2}
+              {filteredGames.map((item) => {
+                const gameImg = getGameImage(item.id);
+                const hasSolo = isSoloGameSupported(item.id);
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => onSelectGame(item.id)}
+                    activeOpacity={0.85}
+                    style={[
+                      styles.gameCard,
+                      {
+                        backgroundColor: theme.colors.surface,
+                      },
+                      theme.shadows.card,
+                    ]}
                   >
-                    {item.description}
-                  </Text>
-
-                  <View style={styles.gameCardBottom}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <View style={styles.playersBadge}>
-                        <UsersIcon size={12} color={theme.colors.textSecondary} />
-                        <Text style={[styles.playersBadgeText, { color: theme.colors.textSecondary }]}>
-                          Multiplayer
-                        </Text>
-                      </View>
-                      {isSoloGameSupported(item.id) && (
-                        <View style={[styles.playersBadge, { backgroundColor: theme.colors.primary + '18' }]}>
-                          <BotIcon size={12} color={theme.colors.primary} />
-                          <Text style={[styles.playersBadgeText, { color: theme.colors.primary, fontWeight: '700' }]}>
-                            Solo
+                    <View style={styles.gameCoverWrap}>
+                      {gameImg ? (
+                        <Image
+                          source={gameImg}
+                          style={styles.gameCoverImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={[styles.gameCoverFallback, { backgroundColor: theme.colors.surfaceElevated }]}>
+                          <GamepadIcon size={28} color={theme.colors.primary} />
+                        </View>
+                      )}
+                      {hasSolo && (
+                        <View style={[styles.cardSoloBadge, { backgroundColor: theme.colors.primary }]}>
+                          <BotIcon size={8} color={theme.colors.textOnPrimary} />
+                          <Text style={[styles.cardSoloBadgeText, { color: theme.colors.textOnPrimary }]}>
+                            SOLO
                           </Text>
                         </View>
                       )}
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <TouchableOpacity
                         onPress={(e) => {
                           e.stopPropagation();
                           setSelectedRulesGame(item);
                         }}
-                        style={[styles.infoBtnSmall, { backgroundColor: theme.colors.surfaceElevated }]}
+                        style={[styles.infoBtnSmallOverlay, { backgroundColor: 'rgba(0,0,0,0.55)' }]}
                         activeOpacity={0.7}
                         accessibilityLabel="Game Rules"
                       >
-                        <InfoIcon size={14} color={theme.colors.primary} />
+                        <InfoIcon size={12} color="#FFFFFF" />
                       </TouchableOpacity>
-                      <View style={[styles.quickLaunchBtn, { backgroundColor: theme.colors.primary }]}>
-                        <Text style={[styles.quickLaunchText, { color: theme.colors.textOnPrimary }]}>
-                          Enter Match
+                    </View>
+
+                    <Text
+                      style={[styles.gameCardTitle, { color: theme.colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+
+                    <View style={styles.cardFooterRow}>
+                      <Text
+                        style={[styles.gameCardCategory, { color: theme.colors.textSecondary, flex: 1 }]}
+                        numberOfLines={1}
+                      >
+                        {item.category} • {item.minPlayers === item.maxPlayers ? `${item.minPlayers}P` : `${item.minPlayers}-${item.maxPlayers}P`}
+                      </Text>
+                      <View style={[styles.cardPlayPill, { backgroundColor: theme.colors.primary }]}>
+                        <Text style={[styles.cardPlayPillText, { color: theme.colors.textOnPrimary }]}>
+                          Play
                         </Text>
-                        <ChevronRightIcon size={14} color={theme.colors.textOnPrimary} strokeWidth={2.5} />
                       </View>
                     </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
         </ScrollView>
@@ -430,7 +436,7 @@ const styles = StyleSheet.create({
   searchBar: {
     height: 54,
     borderRadius: 27,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
@@ -456,7 +462,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   categoryText: {
     fontSize: 12,
@@ -499,10 +505,16 @@ const styles = StyleSheet.create({
   trendingCard: {
     width: 170,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 0,
     padding: 14,
     justifyContent: 'space-between',
     gap: 10,
+  },
+  trendingThumb: {
+    width: '100%',
+    height: 75,
+    borderRadius: 12,
+    marginVertical: 4,
   },
   trendingCardHeader: {
     flexDirection: 'row',
@@ -565,66 +577,83 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   gridList: {
-    gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14,
   },
   gameCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 16,
-    gap: 10,
+    width: '48%',
+    borderRadius: 18,
+    borderWidth: 0,
+    padding: 10,
+    gap: 8,
   },
-  gameCardTop: {
+  gameCoverWrap: {
+    width: '100%',
+    height: 105,
+    borderRadius: 14,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#1E1E2E',
+  },
+  gameCoverImage: {
+    width: '100%',
+    height: '100%',
+  },
+  gameCoverFallback: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cardSoloBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  gameIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  cardSoloBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  infoBtnSmallOverlay: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gameMeta: {
-    flex: 1,
-  },
   gameCardTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
-    marginBottom: 2,
+    marginTop: 2,
   },
   gameCardCategory: {
     fontSize: 11,
   },
-  gameCardDesc: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  gameCardBottom: {
+  cardFooterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 4,
-  },
-  playersBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 4,
   },
-  playersBadgeText: {
-    fontSize: 11,
+  cardPlayPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
-  quickLaunchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 14,
-  },
-  quickLaunchText: {
-    fontSize: 12,
-    fontWeight: '700',
+  cardPlayPillText: {
+    fontSize: 10,
+    fontWeight: '800',
   },
   infoBtnSmall: {
     width: 28,

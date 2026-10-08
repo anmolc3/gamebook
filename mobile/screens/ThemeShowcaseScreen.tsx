@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -19,6 +19,8 @@ import {
   InputField,
   SettingsModal,
 } from '../components';
+import { StoryTrayItem } from '../components/organisms/StoryBar';
+import { StoryService } from '../services/story.service';
 import { Icon } from '../icons';
 
 export interface ThemeShowcaseScreenProps {
@@ -28,7 +30,7 @@ export interface ThemeShowcaseScreenProps {
   onPressPlay?: (gameType?: string) => void;
   onPressLeaderboards?: () => void;
   onPressDiscovery?: () => void;
-  onPressStory?: () => void;
+  onPressStoryTray?: (tray: StoryTrayItem) => void;
 }
 
 export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
@@ -38,7 +40,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   onPressPlay,
   onPressLeaderboards,
   onPressDiscovery,
-  onPressStory,
+  onPressStoryTray,
 }) => {
   const { theme, themeId, effectiveMode } = useTheme();
   const themeGradients = getThemeGradients(themeId, effectiveMode);
@@ -46,6 +48,17 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   const [settingsModalVisible, setSettingsModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>([]);
+
+  useEffect(() => {
+    StoryService.getStoryFeed()
+      .then((trays) => {
+        if (trays && Array.isArray(trays)) {
+          setStoryTrays(trays);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -91,14 +104,11 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           </View>
         )}
 
-        {/* 24h Ephemeral Story Rail */}
+        {/* Real Active Stories Rail */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
               Active Stories
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-              24h Ephemeral
             </Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storyRail}>
@@ -107,26 +117,19 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
               isAddStory
               onPress={() => showToast('Create new story')}
             />
-            <StoryAvatar
-              name="Elena"
-              hasUnviewedStory
-              onPress={() => showToast("Viewing Elena's story")}
-            />
-            <StoryAvatar
-              name="Marcus"
-              hasUnviewedStory
-              onPress={() => showToast("Viewing Marcus's story")}
-            />
-            <StoryAvatar
-              name="Sophie"
-              hasUnviewedStory={false}
-              onPress={() => showToast("Viewing Sophie's story")}
-            />
-            <StoryAvatar
-              name="Devon"
-              hasUnviewedStory={false}
-              onPress={() => showToast("Viewing Devon's story")}
-            />
+            {storyTrays.map((tray) => (
+              <StoryAvatar
+                key={tray.userId}
+                name={tray.displayName || tray.username}
+                avatarUrl={tray.avatarUrl}
+                hasUnviewedStory={!tray.allViewed}
+                onPress={() =>
+                  onPressStoryTray
+                    ? onPressStoryTray(tray)
+                    : showToast(`Viewing ${tray.displayName}'s story`)
+                }
+              />
+            ))}
           </ScrollView>
         </View>
 
@@ -193,7 +196,6 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
                 styles.heroSecondaryBtnWithText,
                 {
                   backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
                 },
               ]}
               activeOpacity={0.75}
@@ -210,7 +212,6 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
                 styles.heroSecondaryBtn,
                 {
                   backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
                 },
               ]}
               activeOpacity={0.7}
@@ -221,43 +222,7 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           </View>
         </LinearGradient>
 
-        {/* Marvie Statistics Cards Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Player Performance
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-              Ranked Stats
-            </Text>
-          </View>
-
-          <View style={styles.statsRow}>
-            <StatCard
-              label="Matches"
-              value="128"
-              icon="gamepad"
-              accentColor={theme.colors.accentMint}
-              trendText="Active"
-            />
-            <View style={{ width: 10 }} />
-            <StatCard
-              label="Win Rate"
-              value="68%"
-              icon="target"
-              accentColor={theme.colors.accentAmber}
-              trendText="Top 15%"
-            />
-            <View style={{ width: 10 }} />
-            <StatCard
-              label="Trophies"
-              value="42"
-              icon="trophy"
-              accentColor={theme.colors.accentCoral}
-              trendText="+3 Today"
-            />
-          </View>
-        </View>        {/* Featured Multiplayer Games — 8 curated picks */}
+        {/* Featured Multiplayer Games — 8 curated picks */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
@@ -381,7 +346,6 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             style={[
               styles.seeAllBtn,
               {
-                borderColor: theme.colors.primary,
                 backgroundColor: theme.colors.cardTintMint,
               },
             ]}
@@ -411,8 +375,8 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
             style={[
               styles.joinCodeCard,
               {
-                borderColor: themeGradients.joinCodeBorder,
                 borderRadius: theme.radius.card,
+                borderWidth: 0,
                 overflow: 'hidden',
               },
               theme.shadows.card,
@@ -479,7 +443,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     marginTop: 8,
     marginBottom: 8,
     alignSelf: 'center',
@@ -513,7 +477,7 @@ const styles = StyleSheet.create({
   heroCard: {
     padding: 20,
     borderRadius: 25,
-    borderWidth: 1,
+    borderWidth: 0,
     marginTop: 14,
   },
   heroTopRow: {
@@ -573,7 +537,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -581,7 +545,7 @@ const styles = StyleSheet.create({
     height: 48,
     paddingHorizontal: 14,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -593,7 +557,7 @@ const styles = StyleSheet.create({
   },
   joinCodeCard: {
     padding: 16,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   codeSearchRow: {
     flexDirection: 'row',
@@ -624,7 +588,7 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 16,
     borderRadius: 16,
-    borderWidth: 1.5,
+    borderWidth: 0,
     marginTop: 4,
     marginBottom: 4,
   },

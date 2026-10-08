@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, View, StyleSheet, Alert } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform } from 'react-native';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
+import { RoomService, SupportedGameType } from './services/room.service';
 import { ThemeShowcaseScreen } from './screens/ThemeShowcaseScreen';
 import { ProfileScreen } from './screens/profile/ProfileScreen';
 import { FriendsScreen } from './screens/friends/FriendsScreen';
@@ -82,9 +83,132 @@ function MainNavigator() {
   const [activePeer, setActivePeer] = useState<ConversationPeer | null>(null);
   const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
   const [isJoinModalVisible, setIsJoinModalVisible] = useState(false);
+  const [joinModalInitialGame, setJoinModalInitialGame] = useState<SupportedGameType | undefined>(undefined);
+  const [joinModalInitialTab, setJoinModalInitialTab] = useState<'solo' | 'quick' | 'join' | 'create'>('quick');
   const [soloModalGameId, setSoloModalGameId] = useState<string | null>(null);
   const [isAchievementsModalVisible, setAchievementsModalVisible] = useState(false);
   const [activeStoryTray, setActiveStoryTray] = useState<StoryTrayItem | null>(null);
+
+  const handleJoinedRoom = (room: any) => {
+    setCurrentRoomCode(room.code);
+    if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
+      setCurrentBoardGameType(room.gameType as any);
+    } else if (
+      [
+        'CARROM',
+        'SNAKES_AND_LADDERS',
+        'BATTLESHIP',
+        'DOMINOES',
+        'BACKGAMMON',
+        'MANCALA',
+        'CHINESE_CHECKERS',
+      ].includes(room.gameType)
+    ) {
+      setCurrentBoardGame2Type(room.gameType as any);
+    } else if (
+      [
+        'POOL_8_BALL',
+        'MINI_GOLF',
+        'AIR_HOCKEY',
+        'DARTS',
+        'BOWLING',
+        'TABLE_TENNIS',
+      ].includes(room.gameType)
+    ) {
+      setCurrentCasualGameType(room.gameType as any);
+    } else if (
+      [
+        'UNO_STYLE',
+        'HEARTS',
+        'SPADES',
+        'RUMMY',
+        'GIN_RUMMY',
+        'CRAZY_EIGHTS',
+        'GO_FISH',
+        'WAR',
+        'DURAK',
+        'PRESIDENT',
+        'BLACKJACK',
+        'POKER',
+      ].includes(room.gameType)
+    ) {
+      setCurrentCardGameType(room.gameType as any);
+    } else if (
+      [
+        'ROCK_PAPER_SCISSORS',
+        'REACTION_TEST',
+        'NUMBER_GUESS',
+        'SPEED_TAP',
+        'COLOR_MATCH',
+        'MATH_BATTLE',
+        'QUICK_DRAW',
+        'WORDLE_DUEL',
+        'HANGMAN',
+        'MEMORY_MATCH',
+        'QUIZ_BATTLE',
+        '2048_MULTIPLAYER',
+        'MINESWEEPER_DUEL',
+        'PATTERN_MATCH',
+        'MASTERMIND',
+        'WORD_SCRAMBLE',
+        'TYPING_RACE',
+      ].includes(room.gameType)
+    ) {
+      setCurrentPuzzleGameType(room.gameType as any);
+    } else {
+      setCurrentPartyGameType(room.gameType as any);
+    }
+
+    if (room.code.startsWith('SOLO_') || room.status === 'PLAYING') {
+      if (room.gameType === 'TICTACTOE') {
+        setCurrentScreen('ticTacToe');
+      } else if (room.gameType === 'LUDO') {
+        setCurrentScreen('ludo');
+      } else if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
+        setCurrentScreen('boardGame');
+      } else if (
+        ['CARROM', 'SNAKES_AND_LADDERS', 'BATTLESHIP', 'DOMINOES', 'BACKGAMMON', 'MANCALA', 'CHINESE_CHECKERS'].includes(
+          room.gameType
+        )
+      ) {
+        setCurrentScreen('boardGame2');
+      } else if (['POOL_8_BALL', 'MINI_GOLF', 'AIR_HOCKEY', 'DARTS', 'BOWLING', 'TABLE_TENNIS'].includes(room.gameType)) {
+        setCurrentScreen('casualGame');
+      } else if (
+        ['UNO_STYLE', 'HEARTS', 'SPADES', 'RUMMY', 'GIN_RUMMY', 'CRAZY_EIGHTS', 'GO_FISH', 'WAR', 'DURAK', 'PRESIDENT', 'BLACKJACK', 'POKER'].includes(
+          room.gameType
+        )
+      ) {
+        setCurrentScreen('cardGame');
+      } else if (
+        [
+          'ROCK_PAPER_SCISSORS',
+          'REACTION_TEST',
+          'NUMBER_GUESS',
+          'SPEED_TAP',
+          'COLOR_MATCH',
+          'MATH_BATTLE',
+          'QUICK_DRAW',
+          'WORDLE_DUEL',
+          'HANGMAN',
+          'MEMORY_MATCH',
+          'QUIZ_BATTLE',
+          '2048_MULTIPLAYER',
+          'MINESWEEPER_DUEL',
+          'PATTERN_MATCH',
+          'MASTERMIND',
+          'WORD_SCRAMBLE',
+          'TYPING_RACE',
+        ].includes(room.gameType)
+      ) {
+        setCurrentScreen('puzzleGame');
+      } else {
+        setCurrentScreen('partyGame');
+      }
+    } else {
+      setCurrentScreen('roomLobby');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -376,12 +500,13 @@ function MainNavigator() {
     if (currentScreen === 'friends') return 'friends';
     if (currentScreen === 'chatList') return 'chatList';
     if (currentScreen === 'profile') return 'profile';
+    if (currentScreen === 'discovery') return 'play';
     return 'home';
   };
 
   const handleTabSelect = (tab: NavTab) => {
     if (tab === 'play') {
-      setIsJoinModalVisible(true);
+      setCurrentScreen('discovery');
       return;
     }
     if (tab === 'home') {
@@ -401,6 +526,11 @@ function MainNavigator() {
 
   return (
     <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
+      <StatusBar
+        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={theme.colors.background}
+        translucent={false}
+      />
       {/* Screen Content */}
       <View style={styles.screenWrapper}>
         {currentScreen === 'home' && (
@@ -411,9 +541,18 @@ function MainNavigator() {
             }}
             onPressFriends={() => setCurrentScreen('friends')}
             onPressChat={() => setCurrentScreen('chatList')}
-            onPressPlay={() => setIsJoinModalVisible(true)}
+            onPressPlay={(gameType) => {
+              if (gameType) {
+                setSoloModalGameId(gameType);
+              } else {
+                setJoinModalInitialGame(undefined);
+                setJoinModalInitialTab('quick');
+                setIsJoinModalVisible(true);
+              }
+            }}
             onPressDiscovery={() => setCurrentScreen('discovery')}
             onPressLeaderboards={() => setCurrentScreen('leaderboards')}
+            onPressStoryTray={(tray) => setActiveStoryTray(tray)}
           />
         )}
 
@@ -501,116 +640,9 @@ function MainNavigator() {
       <JoinRoomModal
         visible={isJoinModalVisible}
         onClose={() => setIsJoinModalVisible(false)}
-        onJoinedRoom={(room) => {
-          setCurrentRoomCode(room.code);
-          if (
-            ['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)
-          ) {
-            setCurrentBoardGameType(room.gameType as any);
-          } else if (
-            [
-              'CARROM',
-              'SNAKES_AND_LADDERS',
-              'BATTLESHIP',
-              'DOMINOES',
-              'BACKGAMMON',
-              'MANCALA',
-              'CHINESE_CHECKERS',
-            ].includes(room.gameType)
-          ) {
-            setCurrentBoardGame2Type(room.gameType as any);
-          } else if (
-            [
-              'POOL_8_BALL',
-              'MINI_GOLF',
-              'AIR_HOCKEY',
-              'DARTS',
-              'BOWLING',
-              'TABLE_TENNIS',
-            ].includes(room.gameType)
-          ) {
-            setCurrentCasualGameType(room.gameType as any);
-          } else if (
-            [
-              'UNO_STYLE',
-              'HEARTS',
-              'SPADES',
-              'RUMMY',
-              'GIN_RUMMY',
-              'CRAZY_EIGHTS',
-              'GO_FISH',
-              'WAR',
-              'DURAK',
-              'PRESIDENT',
-              'BLACKJACK',
-              'POKER',
-            ].includes(room.gameType)
-          ) {
-            setCurrentCardGameType(room.gameType as any);
-          } else if (
-            [
-              'ROCK_PAPER_SCISSORS',
-              'REACTION_TEST',
-              'NUMBER_GUESS',
-              'SPEED_TAP',
-              'COLOR_MATCH',
-              'MATH_BATTLE',
-              'QUICK_DRAW',
-              'WORDLE_DUEL',
-              'HANGMAN',
-              'MEMORY_MATCH',
-              'QUIZ_BATTLE',
-              '2048_MULTIPLAYER',
-              'MINESWEEPER_DUEL',
-              'PATTERN_MATCH',
-              'MASTERMIND',
-              'WORD_SCRAMBLE',
-              'TYPING_RACE',
-            ].includes(room.gameType)
-          ) {
-            setCurrentPuzzleGameType(room.gameType as any);
-          } else if (
-            [
-              'WOULD_YOU_RATHER',
-              'TRUTH_OR_DARE',
-              'CHARADES',
-              'GUESS_PICTURE',
-              'GUESS_WORD',
-              'GUESS_SONG',
-              'WHO_AM_I',
-              'IMPOSTER',
-              'MAFIA',
-              'DRAW_AND_GUESS',
-              'PICTIONARY',
-              'NEVER_HAVE_I_EVER',
-              'THIS_OR_THAT',
-              'TWO_TRUTHS_AND_A_LIE',
-            ].includes(room.gameType)
-          ) {
-            setCurrentPartyGameType(room.gameType as any);
-          }
-          if (room.code.startsWith('SOLO_') || room.status === 'PLAYING') {
-            if (room.gameType === 'TICTACTOE') {
-              setCurrentScreen('ticTacToe');
-            } else if (room.gameType === 'LUDO') {
-              setCurrentScreen('ludo');
-            } else if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
-              setCurrentScreen('boardGame');
-            } else if (['CARROM', 'SNAKES_AND_LADDERS', 'BATTLESHIP', 'DOMINOES', 'BACKGAMMON', 'MANCALA', 'CHINESE_CHECKERS'].includes(room.gameType)) {
-              setCurrentScreen('boardGame2');
-            } else if (['POOL_8_BALL', 'MINI_GOLF', 'AIR_HOCKEY', 'DARTS', 'BOWLING', 'TABLE_TENNIS'].includes(room.gameType)) {
-              setCurrentScreen('casualGame');
-            } else if (['UNO_STYLE', 'HEARTS', 'SPADES', 'RUMMY', 'GIN_RUMMY', 'CRAZY_EIGHTS', 'GO_FISH', 'WAR', 'DURAK', 'PRESIDENT', 'BLACKJACK', 'POKER'].includes(room.gameType)) {
-              setCurrentScreen('cardGame');
-            } else if (['ROCK_PAPER_SCISSORS', 'REACTION_TEST', 'NUMBER_GUESS', 'SPEED_TAP', 'COLOR_MATCH', 'MATH_BATTLE', 'QUICK_DRAW', 'WORDLE_DUEL', 'HANGMAN', 'MEMORY_MATCH', 'QUIZ_BATTLE', '2048_MULTIPLAYER', 'MINESWEEPER_DUEL', 'PATTERN_MATCH', 'MASTERMIND', 'WORD_SCRAMBLE', 'TYPING_RACE'].includes(room.gameType)) {
-              setCurrentScreen('puzzleGame');
-            } else {
-              setCurrentScreen('partyGame');
-            }
-          } else {
-            setCurrentScreen('roomLobby');
-          }
-        }}
+        initialGameType={joinModalInitialGame}
+        initialTab={joinModalInitialTab}
+        onJoinedRoom={handleJoinedRoom}
       />
 
       {/* Solo Mode & AI Opponent Selector Modal */}
@@ -623,41 +655,38 @@ function MainNavigator() {
             try {
               const res = await SoloService.startSoloMatch(gameId, difficulty, botId);
               setSoloModalGameId(null);
-              setCurrentRoomCode(res.roomCode);
-              if (res.gameType === 'TICTACTOE') {
-                setCurrentScreen('ticTacToe');
-              } else if (res.gameType === 'LUDO') {
-                setCurrentScreen('ludo');
-              } else if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(res.gameType)) {
-                setCurrentBoardGameType(res.gameType as any);
-                setCurrentScreen('boardGame');
-              } else if (['CARROM', 'SNAKES_AND_LADDERS', 'BATTLESHIP', 'DOMINOES', 'BACKGAMMON', 'MANCALA', 'CHINESE_CHECKERS'].includes(res.gameType)) {
-                setCurrentBoardGame2Type(res.gameType as any);
-                setCurrentScreen('boardGame2');
-              } else if (['POOL_8_BALL', 'MINI_GOLF', 'AIR_HOCKEY', 'DARTS', 'BOWLING', 'TABLE_TENNIS'].includes(res.gameType)) {
-                setCurrentCasualGameType(res.gameType as any);
-                setCurrentScreen('casualGame');
-              } else if (['UNO_STYLE', 'HEARTS', 'SPADES', 'RUMMY', 'GIN_RUMMY', 'CRAZY_EIGHTS', 'GO_FISH', 'WAR', 'DURAK', 'PRESIDENT', 'BLACKJACK', 'POKER'].includes(res.gameType)) {
-                setCurrentCardGameType(res.gameType as any);
-                setCurrentScreen('cardGame');
-              } else if (['ROCK_PAPER_SCISSORS', 'REACTION_TEST', 'NUMBER_GUESS', 'SPEED_TAP', 'COLOR_MATCH', 'MATH_BATTLE', 'QUICK_DRAW', 'WORDLE_DUEL', 'HANGMAN', 'MEMORY_MATCH', 'QUIZ_BATTLE', '2048_MULTIPLAYER', 'MINESWEEPER_DUEL', 'PATTERN_MATCH', 'MASTERMIND', 'WORD_SCRAMBLE', 'TYPING_RACE'].includes(res.gameType)) {
-                setCurrentPuzzleGameType(res.gameType as any);
-                setCurrentScreen('puzzleGame');
-              } else {
-                setCurrentPartyGameType(res.gameType as any);
-                setCurrentScreen('partyGame');
-              }
+              handleJoinedRoom({
+                id: res.matchId,
+                code: res.roomCode,
+                gameType: res.gameType as any,
+                status: 'PLAYING',
+                hostId: 'SOLO_HOST',
+                isPrivate: true,
+                createdAt: new Date().toISOString(),
+                participants: [],
+              });
             } catch (err: any) {
               Alert.alert('Solo Mode Error', err.message || 'Could not start solo match');
             }
           }}
-          onPlayWithFriends={() => {
+          onPlayWithFriends={(gameId) => {
+            const targetGame = (gameId || soloModalGameId) as any;
             setSoloModalGameId(null);
+            setJoinModalInitialGame(targetGame);
+            setJoinModalInitialTab('create');
             setIsJoinModalVisible(true);
           }}
-          onPlayOnline={() => {
+          onPlayOnline={async (gameId) => {
+            const targetGame = (gameId || soloModalGameId) as any;
             setSoloModalGameId(null);
-            setIsJoinModalVisible(true);
+            try {
+              const room = await RoomService.matchmake(targetGame);
+              handleJoinedRoom(room);
+            } catch (err: any) {
+              setJoinModalInitialGame(targetGame);
+              setJoinModalInitialTab('quick');
+              setIsJoinModalVisible(true);
+            }
           }}
         />
       )}
@@ -691,6 +720,7 @@ export default function App() {
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
   },
   screenWrapper: {
     flex: 1,
@@ -701,3 +731,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+

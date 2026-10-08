@@ -191,8 +191,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             ]}
           />
 
-          {/* Large Avatar with Presence */}
-          <View style={styles.avatarContainer}>
+          {/* Large Avatar with Presence & Edit capability */}
+          <TouchableOpacity
+            style={styles.avatarContainer}
+            onPress={() => isOwnProfile && setIsEditModalVisible(true)}
+            activeOpacity={isOwnProfile ? 0.8 : 1}
+          >
             <View
               style={[
                 styles.avatarGlowRing,
@@ -205,8 +209,13 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 size="xl"
                 status={profile?.isOnline ? 'online' : 'offline'}
               />
+              {isOwnProfile && (
+                <View style={[styles.avatarEditBadge, { backgroundColor: theme.colors.primary }]}>
+                  <Icon name="edit" size={12} color={theme.colors.background} />
+                </View>
+              )}
             </View>
-          </View>
+          </TouchableOpacity>
 
           {/* Player Names & Bio */}
           <View style={styles.identityContainer}>
@@ -629,7 +638,7 @@ const styles = StyleSheet.create({
     right: 20,
     height: 130,
     borderRadius: 25,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   avatarContainer: {
     marginTop: 20,
@@ -638,7 +647,18 @@ const styles = StyleSheet.create({
   avatarGlowRing: {
     padding: 4,
     borderRadius: 999,
-    borderWidth: 2.5,
+    borderWidth: 2,
+    position: 'relative',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   identityContainer: {
     alignItems: 'center',
@@ -662,7 +682,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     marginBottom: 14,
   },
   memberBadgeText: {
@@ -673,7 +693,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     width: '100%',
   },
   bioText: {
@@ -686,7 +706,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -715,8 +735,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 14,
     gap: 8,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderWidth: 0,
   },
   primaryActionBtnText: {
     fontSize: 15,
@@ -729,7 +748,7 @@ const styles = StyleSheet.create({
     height: 48,
     paddingHorizontal: 18,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 8,
   },
   secondaryActionBtnText: {
@@ -740,7 +759,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -772,7 +791,7 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 16,
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   statIconBadge: {
     width: 38,
@@ -801,7 +820,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   achievementIconBox: {
@@ -826,7 +845,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   emptyIconCircle: {
     width: 56,
@@ -856,7 +875,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 50,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 8,
   },
   logoutBtnText: {
@@ -867,7 +886,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   unlockedBadgeText: {
     fontSize: 11,

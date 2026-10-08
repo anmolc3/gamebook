@@ -44,7 +44,7 @@ export const GameCard: React.FC<GameCardProps> = ({
         styles.card,
         {
           borderRadius: theme.radius.card,
-          borderColor: gradientInfo.borderColor,
+          borderWidth: 0,
           overflow: 'hidden',
         },
         theme.shadows.card,
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   card: {
     padding: 20,
     marginBottom: 16,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   topRow: {
     flexDirection: 'row',

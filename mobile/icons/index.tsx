@@ -1,4 +1,5 @@
 import React from 'react';
+import { Image } from 'react-native';
 import Svg, { Path, Circle, Rect, Polyline, Line, G } from 'react-native-svg';
 
 export interface IconProps {
@@ -48,12 +49,15 @@ export const SearchIcon: React.FC<IconProps> = ({ size = 24, color = 'currentCol
   </Svg>
 );
 
-export const SettingsIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Settings'}>
-    <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={strokeWidth} />
-    <Path d="M19.4 15A1.65 1.65 0 0 0 19.73 16.82L20.21 17.65A2 2 0 0 1 19.47 20.39L18.65 20.87A2 2 0 0 1 15.91 20.13L15.43 19.3A1.65 1.65 0 0 0 13.61 18.97H12.61A1.65 1.65 0 0 0 11.23 20.21L10.75 21.04A2 2 0 0 1 8 21.78L7.18 21.3A2 2 0 0 1 6.44 18.56L6.92 17.73A1.65 1.65 0 0 0 6.59 15.91V14.91A1.65 1.65 0 0 0 5.35 13.53L4.52 13.05A2 2 0 0 1 3.78 10.31L4.26 9.49A2 2 0 0 1 7 8.75L7.83 9.23A1.65 1.65 0 0 0 9.65 8.9V7.9A1.65 1.65 0 0 0 11 6.52L11.48 5.69A2 2 0 0 1 14.22 4.95L15.04 5.43A2 2 0 0 1 15.78 8.17L15.3 9A1.65 1.65 0 0 0 15.63 10.82H16.63A1.65 1.65 0 0 0 18.01 9.58L18.49 8.75A2 2 0 0 1 21.23 8.01L22.05 8.49A2 2 0 0 1 22.79 11.23L22.31 12.06A1.65 1.65 0 0 0 22.64 13.88V14.88A1.65 1.65 0 0 0 24.02 16.26" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
+export const SettingsIcon: React.FC<IconProps> = ({ size = 24, accessibilityLabel }) => (
+  <Image
+    source={require('../assets/images/settings_icon_logo.webp')}
+    style={{ width: size, height: size }}
+    resizeMode="contain"
+    accessibilityLabel={accessibilityLabel || 'Settings'}
+  />
 );
+
 
 export const BellIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Notifications'}>

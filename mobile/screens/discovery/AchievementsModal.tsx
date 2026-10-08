@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 12,
     borderRadius: 18,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   iconCircle: {

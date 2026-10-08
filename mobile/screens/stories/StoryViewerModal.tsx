@@ -252,8 +252,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(62, 213, 152, 0.3)',
+    borderWidth: 0,
   },
   trophyGlow: {
     width: 88,

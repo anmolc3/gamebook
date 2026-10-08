@@ -44,7 +44,7 @@ export const StatCard: React.FC<StatCardProps> = ({
         styles.card,
         {
           borderRadius: theme.radius.card,
-          borderColor: gradients.statBorder,
+          borderWidth: 0,
           overflow: 'hidden',
         },
         theme.shadows.card,
@@ -92,7 +92,7 @@ export const StatCard: React.FC<StatCardProps> = ({
 const styles = StyleSheet.create({
   card: {
     padding: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     minWidth: 100,
     flex: 1,
     justifyContent: 'space-between',

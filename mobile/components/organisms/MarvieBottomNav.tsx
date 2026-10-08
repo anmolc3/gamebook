@@ -12,12 +12,12 @@ interface MarvieBottomNavProps {
   pendingRequestsCount?: number;
 }
 
-// Custom SVG asset icons per tab
+// Custom WebP asset icons per tab (natively supported by React Native Image)
 const NAV_IMAGES: Partial<Record<NavTab, ReturnType<typeof require>>> = {
-  chatList: require('../../assets/images/chat_icon_logo.svg'),
-  friends:  require('../../assets/images/controller_friends_theme.svg'),
-  profile:  require('../../assets/images/profile_icon_logo.svg'),
-  play:     require('../../assets/images/game_joystick_icon.svg'),
+  chatList: require('../../assets/images/chat_icon_logo.webp'),
+  friends:  require('../../assets/images/controller_friends_theme.webp'),
+  profile:  require('../../assets/images/profile_icon_logo.webp'),
+  play:     require('../../assets/images/game_joystick_icon.webp'),
 };
 
 export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({

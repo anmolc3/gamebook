@@ -936,8 +936,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 12,
     gap: 6,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    borderWidth: 0,
   },
   segmentText: {
     fontSize: 13,
@@ -985,7 +984,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   onlineDot: {
     width: 7,
@@ -1004,7 +1003,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   playerMeta: {
@@ -1032,14 +1031,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
   requestCard: {
     padding: 16,
     borderRadius: 22,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 12,
   },
   requestUserRow: {
@@ -1068,7 +1067,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 42,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 6,
   },
   btnText: {
@@ -1078,7 +1077,7 @@ const styles = StyleSheet.create({
   sentCard: {
     padding: 14,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   sentUserRow: {
     flexDirection: 'row',
@@ -1089,7 +1088,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 0,
   },
   cancelSentText: {
     fontSize: 12,
@@ -1101,7 +1100,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 50,
     borderRadius: 16,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 10,
     marginTop: 8,
   },
@@ -1127,7 +1126,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
-    borderWidth: 1,
+    borderWidth: 0,
     gap: 4,
   },
   statusBadgeText: {
@@ -1138,7 +1137,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: 0,
     marginTop: 10,
   },
   emptyIconCircle: {
