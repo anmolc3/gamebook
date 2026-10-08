@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform, PanResponder } from 'react-native';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { RoomService, SupportedGameType } from './services/room.service';
@@ -19,6 +19,7 @@ import { PuzzleGameScreen, PuzzleGameType } from './screens/games/PuzzleGameScre
 import { PartyGameScreen, PartyGameType } from './screens/games/PartyGameScreen';
 import { JoinRoomModal } from './components/organisms/JoinRoomModal';
 import { SoloModeModal } from './components/organisms/SoloModeModal';
+import { SuggestedFriendsModal } from './components/organisms/SuggestedFriendsModal';
 import { SoloService } from './services/solo.service';
 import { MarvieBottomNav, NavTab } from './components/organisms/MarvieBottomNav';
 import { LoginScreen } from './screens/auth/LoginScreen';
@@ -40,7 +41,7 @@ interface ConversationPeer {
 
 function MainNavigator() {
   const { theme } = useTheme();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isNewlyRegistered, dismissNewRegistration } = useAuth();
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
   const [currentScreen, setCurrentScreen] = useState<
     | 'home'
@@ -90,6 +91,45 @@ function MainNavigator() {
   const [soloModalGameId, setSoloModalGameId] = useState<string | null>(null);
   const [isAchievementsModalVisible, setAchievementsModalVisible] = useState(false);
   const [activeStoryTray, setActiveStoryTray] = useState<StoryTrayItem | null>(null);
+
+  const MAIN_SWIPE_TABS: Array<'home' | 'friends' | 'discovery' | 'chatList' | 'profile'> = [
+    'home',
+    'friends',
+    'discovery',
+    'chatList',
+    'profile',
+  ];
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
+          const isSignificant = Math.abs(gestureState.dx) > 35;
+          const isMainScreen = MAIN_SWIPE_TABS.includes(currentScreen as any) && !profileUserId;
+          return isHorizontal && isSignificant && isMainScreen;
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (!MAIN_SWIPE_TABS.includes(currentScreen as any) || profileUserId) return;
+          const currentIndex = MAIN_SWIPE_TABS.indexOf(currentScreen as any);
+          if (currentIndex === -1) return;
+
+          // Swipe Left (finger moves left) -> Next Tab
+          if (gestureState.dx < -50 && currentIndex < MAIN_SWIPE_TABS.length - 1) {
+            const nextScreen = MAIN_SWIPE_TABS[currentIndex + 1];
+            setProfileUserId(undefined);
+            setCurrentScreen(nextScreen);
+          }
+          // Swipe Right (finger moves right) -> Previous Tab
+          else if (gestureState.dx > 50 && currentIndex > 0) {
+            const prevScreen = MAIN_SWIPE_TABS[currentIndex - 1];
+            setProfileUserId(undefined);
+            setCurrentScreen(prevScreen);
+          }
+        },
+      }),
+    [currentScreen, profileUserId]
+  );
 
   const handleJoinedRoom = (room: any) => {
     setCurrentRoomCode(room.code);
@@ -533,8 +573,8 @@ function MainNavigator() {
         backgroundColor={theme.colors.background}
         translucent={false}
       />
-      {/* Screen Content */}
-      <View style={styles.screenWrapper}>
+      {/* Screen Content with Horizontal Swipe Tab Switching */}
+      <View style={styles.screenWrapper} {...panResponder.panHandlers}>
         {currentScreen === 'home' && (
           <ThemeShowcaseScreen
             onPressProfile={() => {
@@ -711,6 +751,16 @@ function MainNavigator() {
         visible={!!activeStoryTray}
         tray={activeStoryTray}
         onClose={() => setActiveStoryTray(null)}
+      />
+
+      {/* Suggested Players Near You Onboarding Modal */}
+      <SuggestedFriendsModal
+        visible={isNewlyRegistered}
+        onClose={dismissNewRegistration}
+        onViewProfile={(targetUserId) => {
+          dismissNewRegistration();
+          setProfileUserId(targetUserId);
+        }}
       />
     </View>
   );

@@ -118,4 +118,20 @@ export class ChatService {
     }
     return json.data;
   }
+
+  static async openViewOnceMessage(conversationId: string, messageId: string): Promise<any> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(
+      `${API_BASE_URL}/chat/conversations/${conversationId}/messages/${messageId}/open-view-once`,
+      {
+        method: 'PUT',
+        headers,
+      }
+    );
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error?.message || 'Failed to open view-once message');
+    }
+    return json.data;
+  }
 }

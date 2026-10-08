@@ -687,7 +687,7 @@ export const CasualGameScreen: React.FC<CasualGameScreenProps> = ({
 
       <ScrollView contentContainerStyle={styles.contentScroll} showsVerticalScrollIndicator={false}>
         {/* Player Versus HUD */}
-        <View style={[styles.hudCard, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.hudCard, { backgroundColor: '#141822', borderColor: '#262D3D', borderWidth: 1.5 }]}>
           {/* Player 1 */}
           <View style={[styles.playerCol, gameState?.turnPlayerId === p1Id && styles.activePlayerCol]}>
             <Avatar size="md" displayName={p1Name} />
@@ -939,11 +939,14 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 16,
     minWidth: 100,
+    backgroundColor: '#161922',
+    borderWidth: 1.5,
+    borderColor: '#262D3D',
   },
   activePlayerCol: {
     borderWidth: 2,
     borderColor: '#3ED598',
-    backgroundColor: 'rgba(62, 213, 152, 0.08)',
+    backgroundColor: '#133526',
   },
   playerName: {
     fontSize: 13,

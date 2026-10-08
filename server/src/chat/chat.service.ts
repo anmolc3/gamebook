@@ -397,4 +397,58 @@ export class ChatService {
 
     return { conversationId, markedCount: result.count };
   }
+
+  /**
+   * Open and mark a view-once message as opened
+   */
+  static async openViewOnceMessage(userId: string, conversationId: string, messageId: string) {
+    const message = await prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message || message.conversationId !== conversationId) {
+      throw new Error('Message not found');
+    }
+
+    const currentMeta = (message.metadata as any) || {};
+    if (!currentMeta.isViewOnce) {
+      throw new Error('This message is not a view-once media');
+    }
+
+    const updatedMetadata = {
+      ...currentMeta,
+      opened: true,
+      openedAt: new Date().toISOString(),
+      openedBy: userId,
+    };
+
+    const updated = await prisma.message.update({
+      where: { id: messageId },
+      data: {
+        metadata: updatedMetadata,
+      },
+    });
+
+    // Notify peer in real time
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { members: true },
+    });
+
+    if (conv) {
+      conv.members.forEach((m) => {
+        emitToUser(m.userId, 'chat:view_once_opened', {
+          conversationId,
+          messageId,
+          openedAt: updatedMetadata.openedAt,
+        });
+      });
+    }
+
+    return {
+      id: updated.id,
+      conversationId: updated.conversationId,
+      metadata: updated.metadata,
+    };
+  }
 }

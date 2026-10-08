@@ -253,16 +253,11 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Icon name="users" size={18} color={theme.colors.primary} />
+              <Icon name="posts" size={20} color={theme.colors.primary} />
               <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
                 Community & Social Feed
               </Text>
             </View>
-            <TouchableOpacity onPress={onPressFriends} activeOpacity={0.7}>
-              <Text style={[styles.sectionSubtitle, { color: theme.colors.primary }]}>
-                Friends Page →
-              </Text>
-            </TouchableOpacity>
           </View>
 
           <SocialFeedSection
@@ -279,9 +274,6 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
               Join With Room Code
-            </Text>
-            <Text style={[styles.sectionSubtitle, { color: theme.colors.textSecondary }]}>
-              6-Letter Code
             </Text>
           </View>
           <View
@@ -361,7 +353,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: 18,
   },
   toast: {
     flexDirection: 'row',

@@ -16,6 +16,7 @@ import { Icon } from '../../icons';
 import { IconButton } from '../molecules/IconButton';
 import { Avatar } from '../atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 
 export interface SettingsModalProps {
   visible: boolean;
@@ -40,6 +41,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [autoRematchOffers, setAutoRematchOffers] = useState(true);
   const [showOnlinePresence, setShowOnlinePresence] = useState(true);
   const [allowGameChallenges, setAllowGameChallenges] = useState(true);
+  const [isForgotPasswordVisible, setIsForgotPasswordVisible] = useState(false);
 
   // Notification states
   const [pushNotifications, setPushNotifications] = useState(true);
@@ -73,7 +75,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <Modal
+    <>
+      <Modal
       visible={visible}
       animationType="slide"
       transparent={true}
@@ -456,11 +459,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </View>
               </View>
 
-              {/* SECTION 3: SOCIAL & PRIVACY */}
+              {/* SECTION 3: PRIVACY & PASSWORDS */}
               <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                <Icon name="users" size={16} color={theme.colors.primary} />
+                <Icon name="lock" size={16} color={theme.colors.primary} />
                 <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Social & Privacy
+                  Privacy & Passwords
                 </Text>
               </View>
 
@@ -505,6 +508,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     thumbColor={allowGameChallenges ? theme.colors.surface : theme.colors.textSecondary}
                   />
                 </View>
+
+                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
+
+                <TouchableOpacity
+                  style={styles.settingItemRow}
+                  onPress={() => setIsForgotPasswordVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.settingItemMeta}>
+                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
+                      Forgot Password / Reset Password
+                    </Text>
+                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
+                      Send a verification code to reset your account password
+                    </Text>
+                  </View>
+                  <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
+                </TouchableOpacity>
               </View>
 
               {/* SECTION 4: ACCOUNT & PLATFORM COMPLIANCE */}
@@ -583,6 +604,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </SafeAreaView>
       </View>
     </Modal>
+
+    <ForgotPasswordModal
+      visible={isForgotPasswordVisible}
+      onClose={() => setIsForgotPasswordVisible(false)}
+      initialIdentifier={user?.email || user?.username}
+    />
+  </>
   );
 };
 

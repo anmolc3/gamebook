@@ -58,6 +58,24 @@ export const SettingsIcon: React.FC<IconProps> = ({ size = 24, accessibilityLabe
   />
 );
 
+export const VideoCallIcon: React.FC<IconProps> = ({ size = 24, color, accessibilityLabel }) => (
+  <Image
+    source={require('../assets/images/video_call_icon.png')}
+    style={{ width: size, height: size, tintColor: color }}
+    resizeMode="contain"
+    accessibilityLabel={accessibilityLabel || 'Video Call'}
+  />
+);
+
+export const AudioCallIcon: React.FC<IconProps> = ({ size = 24, color, accessibilityLabel }) => (
+  <Image
+    source={require('../assets/images/audio_call_icon.png')}
+    style={{ width: size, height: size, tintColor: color }}
+    resizeMode="contain"
+    accessibilityLabel={accessibilityLabel || 'Audio Call'}
+  />
+);
+
 
 export const BellIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Notifications'}>
@@ -377,11 +395,18 @@ export const ImageIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColo
   </Svg>
 );
 
-export const MenuIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+export const ViewOnceIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'View Once'}>
+    <Circle cx="12" cy="12" r="9.5" stroke={color} strokeWidth={strokeWidth} strokeDasharray="3.5 2.5" />
+    <Path d="M10.8 9.5L12.5 8V16" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const MenuIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2.4, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Menu'}>
-    <Line x1="4" y1="6" x2="20" y2="6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
-    <Line x1="4" y1="12" x2="20" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
-    <Line x1="4" y1="18" x2="20" y2="18" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    <Line x1="3" y1="5.5" x2="21" y2="5.5" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    <Line x1="3" y1="12" x2="21" y2="12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    <Line x1="3" y1="18.5" x2="21" y2="18.5" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
   </Svg>
 );
 
@@ -411,6 +436,63 @@ export const PostsIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColo
       </G>
       {/* heart */}
       <Path d="M585 624C523 584 545 544 585 572C625 544 647 584 585 624Z" stroke="none" />
+    </G>
+  </Svg>
+);
+
+export const FriendsAddIcon: React.FC<IconProps> = ({ size = 24, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 900 800" fill="none" accessibilityLabel={accessibilityLabel || 'Friends'}>
+    <Defs>
+      <SvgLinearGradient id="faAvatar" x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor="#59D7FF" />
+        <Stop offset="0.5" stopColor="#1789F5" />
+        <Stop offset="1" stopColor="#0750C7" />
+      </SvgLinearGradient>
+      <SvgLinearGradient id="faGold" x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor="#FFF49A" />
+        <Stop offset="0.35" stopColor="#FFD12E" />
+        <Stop offset="0.72" stopColor="#E99A12" />
+        <Stop offset="1" stopColor="#9C5A08" />
+      </SvgLinearGradient>
+      <SvgLinearGradient id="faGreen" x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor="#6CFF76" />
+        <Stop offset="0.5" stopColor="#20C84B" />
+        <Stop offset="1" stopColor="#087A32" />
+      </SvgLinearGradient>
+    </Defs>
+
+    {/* Three overlapping avatars */}
+    <G stroke="#071B55" strokeWidth={9}>
+      <Circle cx="245" cy="245" r="112" fill="url(#faGold)" />
+      <Circle cx="245" cy="245" r="91" fill="url(#faAvatar)" />
+      <Path d="M100 500c8-125 72-185 145-185s137 60 145 185z" fill="url(#faGold)" />
+      <Path d="M126 482c11-91 51-132 119-132s108 41 119 132z" fill="url(#faAvatar)" />
+
+      <Circle cx="655" cy="245" r="112" fill="url(#faGold)" />
+      <Circle cx="655" cy="245" r="91" fill="url(#faAvatar)" />
+      <Path d="M510 500c8-125 72-185 145-185s137 60 145 185z" fill="url(#faGold)" />
+      <Path d="M536 482c11-91 51-132 119-132s108 41 119 132z" fill="url(#faAvatar)" />
+
+      <Circle cx="450" cy="205" r="137" fill="url(#faGold)" />
+      <Circle cx="450" cy="205" r="112" fill="url(#faAvatar)" />
+      <Path d="M270 535c9-150 78-220 180-220s171 70 180 220z" fill="url(#faGold)" />
+      <Path d="M302 510c12-111 60-162 148-162s136 51 148 162z" fill="url(#faAvatar)" />
+    </G>
+
+    {/* Highlights */}
+    <G fill="none" stroke="#fff" strokeLinecap="round" opacity={0.3}>
+      <Path d="M398 150c25-31 59-48 96-50" strokeWidth={17} />
+      <Path d="M212 212c17-22 38-34 64-38" strokeWidth={13} />
+      <Path d="M622 212c17-22 38-34 64-38" strokeWidth={13} />
+    </G>
+
+    {/* Add button */}
+    <G>
+      <Circle cx="700" cy="475" r="116" fill="#071B55" stroke="url(#faGold)" strokeWidth={12} />
+      <Circle cx="700" cy="475" r="91" fill="url(#faGreen)" stroke="#0A6B2E" strokeWidth={6} />
+      <Circle cx="672" cy="445" r="25" fill="#fff" opacity={0.22} />
+      <Rect x="681" y="421" width="38" height="108" rx="19" fill="#fff" />
+      <Rect x="646" y="456" width="108" height="38" rx="19" fill="#fff" />
     </G>
   </Svg>
 );
@@ -464,7 +546,11 @@ export type IconName =
   | 'arrowRight'
   | 'image'
   | 'menu'
-  | 'posts';
+  | 'posts'
+  | 'friendsAdd'
+  | 'videoCall'
+  | 'audioCall'
+  | 'viewOnce';
 
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
@@ -515,8 +601,12 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'camera': return <CameraIcon {...props} />;
     case 'arrowRight': return <ArrowRightIcon {...props} />;
     case 'image': return <ImageIcon {...props} />;
+    case 'viewOnce': return <ViewOnceIcon {...props} />;
     case 'menu': return <MenuIcon {...props} />;
     case 'posts': return <PostsIcon {...props} />;
+    case 'friendsAdd': return <FriendsAddIcon {...props} />;
+    case 'videoCall': return <VideoCallIcon {...props} />;
+    case 'audioCall': return <AudioCallIcon {...props} />;
     default: return <GamepadIcon {...props} />;
   }
 };

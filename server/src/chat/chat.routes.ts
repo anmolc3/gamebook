@@ -9,5 +9,6 @@ router.post('/conversations/:recipientId', authenticateToken, ChatController.get
 router.get('/conversations/:conversationId/messages', authenticateToken, ChatController.getMessages);
 router.post('/conversations/:conversationId/messages', authenticateToken, ChatController.sendMessage);
 router.put('/conversations/:conversationId/read', authenticateToken, ChatController.markRead);
+router.put('/conversations/:conversationId/messages/:messageId/open-view-once', authenticateToken, ChatController.openViewOnce);
 
 export default router;

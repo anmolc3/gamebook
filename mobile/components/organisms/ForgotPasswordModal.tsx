@@ -21,12 +21,14 @@ export interface ForgotPasswordModalProps {
   visible: boolean;
   onClose: () => void;
   onPasswordResetSuccess?: (usernameOrEmail: string) => void;
+  initialIdentifier?: string;
 }
 
 export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   visible,
   onClose,
   onPasswordResetSuccess,
+  initialIdentifier,
 }) => {
   const { theme } = useTheme();
 
@@ -34,7 +36,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   const [step, setStep] = useState<'request' | 'verify' | 'success'>('request');
 
   // Form states
-  const [emailOrUsername, setEmailOrUsername] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState(initialIdentifier || '');
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -48,9 +50,17 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (visible) {
+      if (initialIdentifier) {
+        setEmailOrUsername(initialIdentifier);
+      }
+    }
+  }, [visible, initialIdentifier]);
+
   const resetForm = () => {
     setStep('request');
-    setEmailOrUsername('');
+    setEmailOrUsername(initialIdentifier || '');
     setResetCode('');
     setNewPassword('');
     setConfirmPassword('');

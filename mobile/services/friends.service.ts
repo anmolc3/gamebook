@@ -50,6 +50,10 @@ export interface SearchedPlayer {
   requestId?: string;
 }
 
+export interface SuggestedPlayer extends SearchedPlayer {
+  suggestionReason: string;
+}
+
 export interface BlockedPlayer {
   id: string;
   username: string;
@@ -76,6 +80,19 @@ export class FriendsService {
     const json = await res.json();
     if (!res.ok) {
       throw new Error(json.error?.message || 'Failed to fetch friends');
+    }
+    return json.data || [];
+  }
+
+  static async fetchSuggestedFriends(limit = 15): Promise<SuggestedPlayer[]> {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${API_BASE_URL}/friends/suggestions?limit=${limit}`, {
+      method: 'GET',
+      headers,
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error?.message || 'Failed to fetch suggested players');
     }
     return json.data || [];
   }

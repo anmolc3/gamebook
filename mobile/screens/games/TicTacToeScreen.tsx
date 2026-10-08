@@ -327,20 +327,18 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
           style={[
             styles.playerCard,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor:
-                turnPlayerId === playerXId
-                  ? theme.colors.primary
-                  : theme.colors.border,
+              backgroundColor: turnPlayerId === playerXId ? '#1C2535' : '#141822',
+              borderColor: turnPlayerId === playerXId ? '#3ED598' : '#262D3D',
+              borderWidth: turnPlayerId === playerXId ? 2 : 1.5,
             },
             turnPlayerId === playerXId && theme.shadows.card,
           ]}
         >
           <View style={styles.playerCardHeader}>
-            <View style={[styles.markBadge, { backgroundColor: theme.colors.cardTintMint }]}>
-              <CrossMarkIcon size={16} color={theme.colors.primary} strokeWidth={3} />
+            <View style={[styles.markBadge, { backgroundColor: '#133526' }]}>
+              <CrossMarkIcon size={16} color="#3ED598" strokeWidth={3} />
             </View>
-            <View style={styles.scorePill}>
+            <View style={[styles.scorePill, { backgroundColor: '#1E232E' }]}>
               <Text style={[styles.scoreText, { color: theme.colors.textPrimary }]}>
                 {playerXScore}
               </Text>
@@ -361,8 +359,8 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
           </Text>
 
           {turnPlayerId === playerXId && !winnerId && !isDraw && (
-            <View style={[styles.activeTurnPill, { backgroundColor: theme.colors.primary }]}>
-              <Text style={[styles.activeTurnText, { color: theme.colors.textOnPrimary }]}>
+            <View style={[styles.activeTurnPill, { backgroundColor: '#3ED598' }]}>
+              <Text style={[styles.activeTurnText, { color: '#0F172A' }]}>
                 TURNING
               </Text>
             </View>
@@ -370,7 +368,7 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
         </View>
 
         {/* VS Center Divider */}
-        <View style={styles.vsBadge}>
+        <View style={[styles.vsBadge, { backgroundColor: '#1E232E' }]}>
           <Text style={[styles.vsText, { color: theme.colors.textMuted }]}>VS</Text>
         </View>
 
@@ -379,20 +377,18 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
           style={[
             styles.playerCard,
             {
-              backgroundColor: theme.colors.surface,
-              borderColor:
-                turnPlayerId === playerOId
-                  ? theme.colors.accentAmber
-                  : theme.colors.border,
+              backgroundColor: turnPlayerId === playerOId ? '#262116' : '#141822',
+              borderColor: turnPlayerId === playerOId ? '#FFC542' : '#262D3D',
+              borderWidth: turnPlayerId === playerOId ? 2 : 1.5,
             },
             turnPlayerId === playerOId && theme.shadows.card,
           ]}
         >
           <View style={styles.playerCardHeader}>
-            <View style={[styles.markBadge, { backgroundColor: theme.colors.cardTintAmber }]}>
-              <CircleMarkIcon size={16} color={theme.colors.accentAmber} strokeWidth={3} />
+            <View style={[styles.markBadge, { backgroundColor: '#382C10' }]}>
+              <CircleMarkIcon size={16} color="#FFC542" strokeWidth={3} />
             </View>
-            <View style={styles.scorePill}>
+            <View style={[styles.scorePill, { backgroundColor: '#1E232E' }]}>
               <Text style={[styles.scoreText, { color: theme.colors.textPrimary }]}>
                 {playerOScore}
               </Text>

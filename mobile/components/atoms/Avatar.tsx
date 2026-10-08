@@ -16,7 +16,7 @@ const SIZE_MAP = {
   sm: 36,
   md: 48,
   lg: 64,
-  xl: 88,
+  xl: 90,
 };
 
 export const Avatar: React.FC<AvatarProps> = ({
@@ -40,7 +40,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   return (
     <View style={[{ width: dimension, height: dimension }, style]}>
       {avatarUrl ? (
-        <View style={{ borderRadius: dimension / 2, overflow: 'hidden' }}>
+        <View style={{ width: dimension, height: dimension, borderRadius: dimension / 2, overflow: 'hidden' }}>
           <PresetAvatar presetId={avatarUrl} size={dimension} />
         </View>
       ) : (

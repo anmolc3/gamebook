@@ -21,6 +21,25 @@ export class FriendsController {
     }
   }
 
+  static async getSuggestedUsers(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+        return;
+      }
+
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 15;
+      const suggestions = await FriendsService.getSuggestedUsers(userId, limit);
+      res.status(200).json({ success: true, data: suggestions });
+    } catch (err: any) {
+      res.status(500).json({
+        success: false,
+        error: { message: err.message || 'Failed to fetch suggested players' },
+      });
+    }
+  }
+
   static async getRequests(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user?.userId;

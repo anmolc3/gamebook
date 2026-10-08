@@ -25,4 +25,4 @@ export * from './organisms/SoloModeModal';
 export * from './organisms/MarvieBottomNav';
 export * from './organisms/CreateStoryModal';
 export * from './organisms/SocialFeedSection';
-
+export * from './organisms/SuggestedFriendsModal';

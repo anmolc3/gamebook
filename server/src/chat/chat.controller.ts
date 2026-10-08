@@ -142,4 +142,34 @@ export class ChatController {
       });
     }
   }
+
+  static async openViewOnce(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.userId;
+      const conversationId = Array.isArray(req.params.conversationId)
+        ? req.params.conversationId[0]
+        : req.params.conversationId;
+      const messageId = Array.isArray(req.params.messageId)
+        ? req.params.messageId[0]
+        : req.params.messageId;
+
+      if (!userId) {
+        res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+        return;
+      }
+
+      if (!conversationId || !messageId) {
+        res.status(400).json({ success: false, error: { message: 'Missing conversationId or messageId' } });
+        return;
+      }
+
+      const result = await ChatService.openViewOnceMessage(userId, conversationId, messageId);
+      res.status(200).json({ success: true, data: result });
+    } catch (err: any) {
+      res.status(400).json({
+        success: false,
+        error: { message: err.message || 'Failed to open view-once message' },
+      });
+    }
+  }
 }

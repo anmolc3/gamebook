@@ -879,7 +879,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
 
       <ScrollView contentContainerStyle={styles.contentScroll} showsVerticalScrollIndicator={false}>
         {/* HUD Player Comparison Card */}
-        <View style={[styles.hudCard, { backgroundColor: theme.colors.surface }]}>
+        <View style={[styles.hudCard, { backgroundColor: '#141822', borderColor: '#262D3D', borderWidth: 1.5 }]}>
           <View style={[styles.playerCol, isMyTurn && styles.activePlayerCol]}>
             <Avatar displayName={p1Name} size="md" />
             <Text style={[styles.playerName, { color: theme.colors.textPrimary }]} numberOfLines={1}>
@@ -1034,11 +1034,14 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 16,
     minWidth: 100,
+    backgroundColor: '#161922',
+    borderWidth: 1.5,
+    borderColor: '#262D3D',
   },
   activePlayerCol: {
     borderWidth: 2,
     borderColor: '#3ED598',
-    backgroundColor: 'rgba(62, 213, 152, 0.08)',
+    backgroundColor: '#133526',
   },
   playerName: {
     fontSize: 13,

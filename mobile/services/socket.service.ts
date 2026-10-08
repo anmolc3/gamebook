@@ -118,6 +118,16 @@ export class MobileSocketService {
     };
   }
 
+  static onViewOnceOpened(
+    callback: (data: { conversationId: string; messageId: string; openedAt: string }) => void
+  ): () => void {
+    if (!socket) return () => {};
+    socket.on('chat:view_once_opened', callback);
+    return () => {
+      socket?.off('chat:view_once_opened', callback);
+    };
+  }
+
   // Multiplayer Game Room & Lobby Real-Time Events
   static joinRoom(roomCode: string, callback?: (data: any) => void): void {
     if (socket) {

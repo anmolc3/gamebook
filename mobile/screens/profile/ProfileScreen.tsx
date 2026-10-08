@@ -313,11 +313,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {isOwnProfile ? (
           <TouchableOpacity
             onPress={() => setIsMenuModalVisible(true)}
-            style={[styles.navIconButton, { backgroundColor: theme.colors.surfaceElevated }]}
+            style={styles.navMenuButton}
             activeOpacity={0.7}
             accessibilityLabel="Profile Menu"
           >
-            <Icon name="menu" size={20} color={theme.colors.textPrimary} />
+            <Icon name="menu" size={26} strokeWidth={2.4} color={theme.colors.textPrimary} />
           </TouchableOpacity>
         ) : (
           <View style={styles.navIconButtonPlaceholder} />
@@ -370,68 +370,71 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             </TouchableOpacity>
           )}
 
-          {/* Large Avatar with Presence & Edit capability */}
-          <TouchableOpacity
-            style={styles.avatarContainer}
-            onPress={() => isOwnProfile && setIsEditModalVisible(true)}
-            activeOpacity={isOwnProfile ? 0.8 : 1}
-          >
-            <View
-              style={[
-                styles.avatarGlowRing,
-                { borderColor: theme.colors.primary, backgroundColor: theme.colors.surface },
-              ]}
+          {/* Header Row: Left Text Information & Right Round Avatar */}
+          <View style={styles.profileHeaderRow}>
+            {/* Left: Player Names, Member Since, Bio */}
+            <View style={styles.identityContainer}>
+              <Text style={[styles.displayName, { color: theme.colors.textPrimary }]}>
+                {profile?.displayName}
+              </Text>
+              <Text style={[styles.usernameText, { color: theme.colors.primary }]}>
+                @{profile?.username}
+              </Text>
+
+              {/* Member Since Text (No box, aligned left) */}
+              <View style={styles.memberBadge}>
+                <Icon name="calendar" size={13} color={theme.colors.textMuted} />
+                <Text style={[styles.memberBadgeText, { color: theme.colors.textSecondary }]}>
+                  {formatJoinDate(profile?.createdAt)}
+                </Text>
+              </View>
+
+              {/* Bio Quote (Flat, aligned left) */}
+              {profile?.bio ? (
+                <View style={styles.bioBox}>
+                  <Text style={[styles.bioText, { color: theme.colors.textSecondary }]}>
+                    "{profile.bio}"
+                  </Text>
+                </View>
+              ) : isOwnProfile ? (
+                <TouchableOpacity
+                  onPress={() => setIsEditModalVisible(true)}
+                  style={styles.addBioPlaceholder}
+                  activeOpacity={0.7}
+                >
+                  <Icon name="plus" size={14} color={theme.colors.primary} />
+                  <Text style={[styles.addBioText, { color: theme.colors.primary }]}>
+                    Tap to add your player bio & playstyle
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* Right: Round Profile Photo with Presence & Edit capability */}
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={() => isOwnProfile && setIsEditModalVisible(true)}
+              activeOpacity={isOwnProfile ? 0.8 : 1}
             >
-              <Avatar
-                displayName={profile?.displayName || 'Player'}
-                avatarUrl={profile?.avatarUrl}
-                size="xl"
-                status={profile?.isOnline ? 'online' : 'offline'}
-              />
+              <View
+                style={[
+                  styles.avatarGlowRing,
+                  { borderColor: theme.colors.primary },
+                ]}
+              >
+                <Avatar
+                  displayName={profile?.displayName || 'Player'}
+                  avatarUrl={profile?.avatarUrl}
+                  size="xl"
+                  status={profile?.isOnline ? 'online' : 'offline'}
+                />
+              </View>
               {isOwnProfile && (
                 <View style={[styles.avatarEditBadge, { backgroundColor: theme.colors.primary }]}>
                   <Icon name="edit" size={12} color={theme.colors.background} />
                 </View>
               )}
-            </View>
-          </TouchableOpacity>
-
-          {/* Player Names & Bio */}
-          <View style={styles.identityContainer}>
-            <Text style={[styles.displayName, { color: theme.colors.textPrimary }]}>
-              {profile?.displayName}
-            </Text>
-            <Text style={[styles.usernameText, { color: theme.colors.primary }]}>
-              @{profile?.username}
-            </Text>
-
-            {/* Member Since Text (No box) */}
-            <View style={styles.memberBadge}>
-              <Icon name="calendar" size={13} color={theme.colors.textMuted} />
-              <Text style={[styles.memberBadgeText, { color: theme.colors.textSecondary }]}>
-                {formatJoinDate(profile?.createdAt)}
-              </Text>
-            </View>
-
-            {/* Bio Quote (Flat, no box) */}
-            {profile?.bio ? (
-              <View style={styles.bioBox}>
-                <Text style={[styles.bioText, { color: theme.colors.textSecondary }]}>
-                  "{profile.bio}"
-                </Text>
-              </View>
-            ) : isOwnProfile ? (
-              <TouchableOpacity
-                onPress={() => setIsEditModalVisible(true)}
-                style={styles.addBioPlaceholder}
-                activeOpacity={0.7}
-              >
-                <Icon name="plus" size={14} color={theme.colors.primary} />
-                <Text style={[styles.addBioText, { color: theme.colors.primary }]}>
-                  Tap to add your player bio & playstyle
-                </Text>
-              </TouchableOpacity>
-            ) : null}
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -1029,6 +1032,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  navMenuButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   navIconButtonPlaceholder: {
     width: 40,
     height: 40,
@@ -1041,9 +1050,8 @@ const styles = StyleSheet.create({
     paddingBottom: 96,
   },
   heroSection: {
-    alignItems: 'center',
     paddingTop: 0,
-    paddingBottom: 18,
+    paddingBottom: 20,
     position: 'relative',
     borderBottomWidth: 1,
   },
@@ -1076,69 +1084,94 @@ const styles = StyleSheet.create({
     padding: 6,
     zIndex: 10,
   },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    width: '100%',
+    paddingHorizontal: 20,
+    marginTop: 110,
+    zIndex: 5,
+  },
   avatarContainer: {
-    marginTop: 100,
-    marginBottom: 12,
+    marginTop: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 6,
+    position: 'relative',
   },
   avatarGlowRing: {
-    padding: 4,
-    borderRadius: 999,
-    borderWidth: 2,
-    position: 'relative',
+    padding: 0,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    borderWidth: 3,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarEditBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: -2,
+    right: -2,
     width: 26,
     height: 26,
     borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 10,
   },
   identityContainer: {
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: 20,
+    flex: 1,
+    alignItems: 'flex-start',
+    paddingRight: 16,
+    paddingTop: 52,
   },
   displayName: {
     fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.4,
+    textAlign: 'left',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   usernameText: {
     fontSize: 15,
     fontWeight: '600',
     marginTop: 2,
-    marginBottom: 10,
+    marginBottom: 8,
+    textAlign: 'left',
   },
   memberBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginBottom: 8,
+    alignSelf: 'flex-start',
   },
   memberBadgeText: {
     fontSize: 12,
     fontWeight: '500',
   },
   bioBox: {
-    paddingHorizontal: 20,
     width: '100%',
     marginTop: 2,
   },
   bioText: {
     fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
+    textAlign: 'left',
     fontStyle: 'italic',
   },
   addBioPlaceholder: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    alignSelf: 'flex-start',
   },
   addBioText: {
     fontSize: 13,

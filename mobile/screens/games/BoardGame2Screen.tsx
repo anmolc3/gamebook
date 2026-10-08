@@ -769,7 +769,7 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
       </View>
 
       {/* Versus HUD */}
-      <View style={[styles.versusCard, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.versusCard, { backgroundColor: '#141822', borderColor: '#262D3D', borderWidth: 1.5 }]}>
         <View style={styles.playerColumn}>
           <View style={[styles.avatarWrap, isMyTurn && styles.activeAvatarWrap]}>
             <Avatar avatarUrl={player1?.user?.avatarUrl || null} displayName={player1?.user?.displayName || 'Player 1'} size="md" />
@@ -878,12 +878,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1.5,
+    borderColor: '#262D3D',
   },
   playerColumn: { alignItems: 'center', width: 90 },
   avatarWrap: { borderRadius: 25, padding: 2, borderWidth: 2, borderColor: 'transparent' },
-  activeAvatarWrap: { borderColor: '#3ED598' },
+  activeAvatarWrap: { borderColor: '#3ED598', backgroundColor: '#133526' },
   playerName: { color: '#FFFFFF', fontSize: 13, fontWeight: '600', marginTop: 6 },
   playerScore: { color: '#97ADB6', fontSize: 11, fontWeight: '500', marginTop: 1 },
   versusCenter: { alignItems: 'center' },

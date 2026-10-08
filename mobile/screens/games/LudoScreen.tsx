@@ -36,15 +36,15 @@ export interface LudoScreenProps {
   onLeave: () => void;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BOARD_SIZE = Math.min(SCREEN_WIDTH - 24, 380);
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const BOARD_SIZE = Math.min(SCREEN_WIDTH - 8, Math.max(340, SCREEN_HEIGHT * 0.53), 430);
 const CELL_SIZE = BOARD_SIZE / 15;
 
 const COLOR_MAP: Record<LudoColor, { primary: string; light: string; text: string }> = {
-  RED: { primary: '#FF575F', light: 'rgba(255, 87, 95, 0.18)', text: '#FF575F' },
-  GREEN: { primary: '#3ED598', light: 'rgba(62, 213, 152, 0.18)', text: '#3ED598' },
-  YELLOW: { primary: '#FFC542', light: 'rgba(255, 197, 66, 0.18)', text: '#FFC542' },
-  BLUE: { primary: '#0062FF', light: 'rgba(0, 98, 255, 0.18)', text: '#0062FF' },
+  RED: { primary: '#FF575F', light: '#38141B', text: '#FF575F' },
+  GREEN: { primary: '#3ED598', light: '#103324', text: '#3ED598' },
+  YELLOW: { primary: '#FFC542', light: '#382C10', text: '#FFC542' },
+  BLUE: { primary: '#0062FF', light: '#0E2347', text: '#0062FF' },
 };
 
 // 52 track coordinate mapping on a 15x15 Ludo grid
@@ -422,6 +422,16 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     }
   };
 
+  // Auto-move when there is only 1 valid move available (eliminates touch hunt friction)
+  useEffect(() => {
+    if (isMyTurn && hasRolled && validMoves.length === 1 && !isMoving) {
+      const autoMoveTimer = setTimeout(() => {
+        handleSelectToken(validMoves[0]);
+      }, 400);
+      return () => clearTimeout(autoMoveTimer);
+    }
+  }, [isMyTurn, hasRolled, validMoves, isMoving]);
+
   // Open stats popup for player
   const handleOpenPlayerStats = async (p: LudoPlayerState) => {
     setSelectedPlayerForStats(p);
@@ -786,9 +796,10 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         key={p.userId}
         style={[
           styles.playerCard,
-          { backgroundColor: theme.colors.surface },
-          isTurn && {
-            backgroundColor: colorMeta.primary + '22',
+          {
+            backgroundColor: isTurn ? '#1E2536' : '#141822',
+            borderColor: isTurn ? colorMeta.primary : '#262D3D',
+            borderWidth: isTurn ? 2 : 1.5,
           },
         ]}
         onPress={() => handleOpenPlayerStats(p)}
@@ -799,7 +810,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             <View
               style={[
                 styles.turnGlowHalo,
-                { backgroundColor: colorMeta.primary + '30' },
+                { borderColor: colorMeta.primary, borderWidth: 2 },
               ]}
             />
           )}
@@ -824,8 +835,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
               {userInfo.displayName || p.username}
             </Text>
             {isMe && (
-              <View style={[styles.youBadge, { backgroundColor: theme.colors.primary + '25' }]}>
-                <Text style={[styles.youBadgeText, { color: theme.colors.primary }]}>YOU</Text>
+              <View style={[styles.youBadge, { backgroundColor: '#064E3B' }]}>
+                <Text style={[styles.youBadgeText, { color: '#3ED598' }]}>YOU</Text>
               </View>
             )}
           </View>
@@ -834,7 +845,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             <Text style={[styles.tokensProgressText, { color: theme.colors.textSecondary }]}>
               {finishedCount}/4 Home
             </Text>
-            <View style={styles.statsIconPill}>
+            <View style={[styles.statsIconPill, { backgroundColor: '#1E232E' }]}>
               <Icon name="info" size={10} color={theme.colors.textMuted} />
               <Text style={[styles.statsIconPillText, { color: theme.colors.textMuted }]}>Stats</Text>
             </View>
@@ -970,7 +981,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                   cx={gx * CELL_SIZE}
                   cy={gy * CELL_SIZE}
                   r={CELL_SIZE * 0.7}
-                  fill="rgba(16, 19, 27, 0.85)"
+                  fill="#10131B"
                   stroke={COLOR_MAP[col].primary}
                   strokeWidth={1.5}
                 />
@@ -1063,6 +1074,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
               return (
                 <Animated.View
                   key={`token_animated_${tokenKey}`}
+                  pointerEvents={isSelectable ? 'auto' : 'none'}
                   style={[
                     styles.tokenItem,
                     {
@@ -1070,6 +1082,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                       height: size,
                       borderRadius: size / 2,
                       backgroundColor: COLOR_MAP[player.color].primary,
+                      zIndex: isSelectable ? 100 : 20,
+                      elevation: isSelectable ? 20 : 6,
                       transform: [
                         {
                           translateX: anim
@@ -1099,12 +1113,14 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                     ]}
                   />
 
-                  {/* Touch overlay for movable tokens */}
+                  {/* Touch overlay with generous hit target for effortless sensitivity */}
                   {isSelectable && (
                     <TouchableOpacity
-                      style={StyleSheet.absoluteFill}
+                      style={styles.tokenTouchHitBox}
+                      hitSlop={{ top: 22, bottom: 22, left: 22, right: 22 }}
                       onPress={() => handleSelectToken(token.id)}
                       activeOpacity={0.6}
+                      accessibilityLabel={`Move token ${token.id + 1}`}
                     />
                   )}
                 </Animated.View>
@@ -1113,46 +1129,40 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           )}
         </View>
 
-        {/* Down Side Players Bar (Bottom Side Profiles + Dice if it's Bottom Side Turn) */}
+        {/* Down Side Players Bar (Bottom Side Profiles + Dice) */}
         <View style={[styles.sectionRow, styles.fixedSideRow]}>
           <View style={styles.playersSideCluster}>
             {bottomPlayers.map((p) => renderPlayerProfileCard(p))}
           </View>
 
-          {/* Fixed Dice Slot on Down Side (Tappable Dice - No Separate Button) */}
+          {/* Fixed Dice Slot on Down Side (Directly Tap the Dice to Roll - No Extra Button) */}
           <View style={styles.fixedSideDiceSlot}>
             {isBottomTurn ? (
-              <View style={[styles.activeSideDiceBox, { backgroundColor: theme.colors.surface }]}>
+              <View style={[styles.activeSideDiceBox, { backgroundColor: '#141822', borderColor: '#262D3D', borderWidth: 1.5 }]}>
                 <TouchableOpacity
-                  activeOpacity={0.7}
+                  activeOpacity={0.8}
                   disabled={!isMyTurn || hasRolled || isRolling}
                   onPress={handleRollDice}
                   style={[
                     styles.tappableDiceWrapper,
                     isMyTurn && !hasRolled && !isRolling && [
                       styles.tappableDicePulse,
-                      { borderColor: theme.colors.primary },
+                      { borderColor: theme.colors.primary, borderWidth: 2 },
                     ],
                   ]}
                   accessibilityLabel="Tap dice to roll"
                 >
-                  {renderDiceFace(diceVisualFace, 44)}
+                  {renderDiceFace(diceVisualFace, 50)}
                 </TouchableOpacity>
 
                 <View style={styles.diceTextCol}>
                   {isMyTurn && !hasRolled ? (
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      disabled={isRolling}
-                      onPress={handleRollDice}
-                    >
-                      <Text style={[styles.tapDiceCtaText, { color: theme.colors.primary }]}>
-                        {isRolling ? 'ROLLING...' : 'TAP DICE'}
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={[styles.diceStatusLabel, { color: theme.colors.primary, fontWeight: '800' }]}>
+                      {isRolling ? 'Rolling...' : 'Tap Dice'}
+                    </Text>
                   ) : isMyTurn && hasRolled ? (
-                    <Text style={[styles.diceStatusLabel, { color: theme.colors.primary }]}>
-                      {validMoves.length > 0 ? 'TAP TOKEN' : 'NO MOVES'}
+                    <Text style={[styles.diceStatusLabel, { color: validMoves.length > 0 ? theme.colors.primary : '#FF575F', fontWeight: '800' }]}>
+                      {validMoves.length > 0 ? 'Move Token' : 'No Moves'}
                     </Text>
                   ) : (
                     <Text style={[styles.diceStatusLabel, { color: theme.colors.textSecondary }]}>
@@ -1633,9 +1643,10 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   boardContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   boardWrapper: {
     borderRadius: 22,
@@ -1646,7 +1657,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
-    marginVertical: 8,
   },
   tokenItem: {
     position: 'absolute',
@@ -1659,23 +1669,33 @@ const styles = StyleSheet.create({
     zIndex: 20,
     elevation: 6,
   },
+  tokenTouchHitBox: {
+    position: 'absolute',
+    top: -16,
+    bottom: -16,
+    left: -16,
+    right: -16,
+    zIndex: 50,
+  },
   tokenInnerPip: {
     backgroundColor: '#FFFFFF',
   },
   selectableTokenPulse: {
     borderColor: '#3ED598',
-    borderWidth: 2.5,
+    borderWidth: 3,
     shadowColor: '#3ED598',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 12,
   },
   toastContainer: {
     position: 'absolute',
     bottom: 24,
     alignSelf: 'center',
-    backgroundColor: 'rgba(24, 8, 12, 0.92)',
+    backgroundColor: '#161A24',
+    borderWidth: 1,
+    borderColor: '#2D3748',
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 20,

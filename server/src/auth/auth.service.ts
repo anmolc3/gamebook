@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { prisma } from '../database/prisma';
 import { ENV } from '../config/env';
+import { EmailService } from '../email/email.service';
 import {
   RegisterInput,
   LoginInput,
@@ -233,10 +234,21 @@ export class AuthService {
         ? user.email.slice(0, 2) + '***' + user.email.slice(atIndex)
         : user.email;
 
+    // Send email via Gmail / configured email provider
+    const emailResult = await EmailService.sendPasswordResetCode({
+      toEmail: user.email,
+      username: user.username,
+      code: resetCode,
+      expiresInMinutes: 15,
+    });
+
     return {
       success: true,
-      message: 'Verification code generated successfully',
-      resetCode,
+      message: emailResult.sent
+        ? `Verification code sent to ${maskedEmail}`
+        : 'Verification code generated successfully',
+      resetCode: emailResult.sent && process.env.NODE_ENV === 'production' ? undefined : resetCode,
+      emailSent: emailResult.sent,
       maskedEmail,
       username: user.username,
       expiresInMinutes: 15,

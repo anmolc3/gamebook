@@ -956,7 +956,7 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
       </View>
 
       {/* Player Versus Card */}
-      <View style={[styles.versusCard, { backgroundColor: theme.colors.surface }]}>
+      <View style={[styles.versusCard, { backgroundColor: '#141822', borderColor: '#262D3D', borderWidth: 1.5 }]}>
         {/* Player 1 (You) */}
         <View style={styles.playerColumn}>
           <View
@@ -986,9 +986,9 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
               styles.timerPill,
               {
                 backgroundColor:
-                  secondsRemaining <= 5 ? 'rgba(255, 87, 95, 0.2)' : 'rgba(62, 213, 152, 0.15)',
+                  secondsRemaining <= 5 ? '#3B1820' : '#133526',
                 borderColor:
-                  secondsRemaining <= 5 ? theme.colors.error : theme.colors.primary,
+                  secondsRemaining <= 5 ? '#FF575F' : '#3ED598',
               },
             ]}
           >
@@ -997,7 +997,7 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
                 styles.timerText,
                 {
                   color:
-                    secondsRemaining <= 5 ? theme.colors.error : theme.colors.primary,
+                    secondsRemaining <= 5 ? '#FF575F' : '#3ED598',
                 },
               ]}
             >

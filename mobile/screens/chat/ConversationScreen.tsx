@@ -13,6 +13,7 @@ import {
   StatusBar,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -20,6 +21,7 @@ import { Avatar } from '../../components/atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ChatService, ChatMessage } from '../../services/chat.service';
 import { MobileSocketService } from '../../services/socket.service';
+import { ImagePickerService } from '../../services/imagePicker.service';
 
 export interface ConversationScreenProps {
   peerId: string;
@@ -65,6 +67,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [pendingImage, setPendingImage] = useState<{ uri: string; base64?: string } | null>(null);
+  const [isViewOnce, setIsViewOnce] = useState<boolean>(true);
+  const [activeViewOnceItem, setActiveViewOnceItem] = useState<{
+    messageId: string;
+    imageUri: string;
+    senderName: string;
+    isOwn: boolean;
+  } | null>(null);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -144,6 +154,24 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       }
     });
 
+    // Listen to view-once opened events in real-time
+    const unsubViewOnce = MobileSocketService.onViewOnceOpened(({ messageId }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                metadata: {
+                  ...m.metadata,
+                  opened: true,
+                  openedAt: new Date().toISOString(),
+                },
+              }
+            : m
+        )
+      );
+    });
+
     return () => {
       if (conversationId) {
         MobileSocketService.sendTyping(conversationId, false);
@@ -156,6 +184,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       unsubRead();
       unsubTyping();
       unsubPresence();
+      unsubViewOnce();
     };
   }, [conversationId, peerId, authUser?.id, initializeConversation]);
 
@@ -189,14 +218,84 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     }
   };
 
-  // Send standard text message
+  // Image attachment and View Once triggers
+  const handlePickImage = async () => {
+    try {
+      const res = await ImagePickerService.pickImageFromDevice({ quality: 0.85 });
+      if (res && res.uri) {
+        setPendingImage({ uri: res.uri, base64: res.base64 });
+        setIsViewOnce(true);
+      }
+    } catch (err: any) {
+      Alert.alert('Image Picker', err.message || 'Could not pick image');
+    }
+  };
+
+  const handleOpenViewOnce = (msg: ChatMessage) => {
+    if (msg.metadata?.opened) {
+      Alert.alert(
+        'Photo Expired',
+        'This one-time photo has already been opened and is no longer available.'
+      );
+      return;
+    }
+
+    const imageUri = msg.metadata?.imageUri;
+    if (!imageUri) {
+      Alert.alert('Photo Expired', 'This one-time photo is no longer available.');
+      return;
+    }
+
+    setActiveViewOnceItem({
+      messageId: msg.id,
+      imageUri,
+      senderName: msg.senderName,
+      isOwn: msg.isOwnMessage,
+    });
+  };
+
+  const handleCloseViewOnce = async () => {
+    if (!activeViewOnceItem) return;
+    const { messageId, isOwn } = activeViewOnceItem;
+    setActiveViewOnceItem(null);
+
+    if (!isOwn && conversationId) {
+      try {
+        await ChatService.openViewOnceMessage(conversationId, messageId);
+      } catch (e) {
+        console.log('Error opening view-once on server:', e);
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? {
+                ...m,
+                metadata: {
+                  ...m.metadata,
+                  opened: true,
+                  openedAt: new Date().toISOString(),
+                },
+              }
+            : m
+        )
+      );
+    }
+  };
+
+  // Send standard or View Once message
   const handleSendMessage = async () => {
     const trimmed = inputText.trim();
-    if (!trimmed || !conversationId || isSending) return;
+    if ((!trimmed && !pendingImage) || !conversationId || isSending) return;
 
     try {
+      const textToSend = trimmed;
+      const imageToSend = pendingImage;
+      const viewOnceFlag = isViewOnce;
+
       setIsSending(true);
       setInputText('');
+      setPendingImage(null);
 
       if (typingTimerRef.current) {
         clearTimeout(typingTimerRef.current);
@@ -204,7 +303,25 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       isTypingActiveRef.current = false;
       MobileSocketService.sendTyping(conversationId, false);
 
-      const newMsg = await ChatService.sendMessage(conversationId, trimmed, 'TEXT');
+      let metadata: Record<string, any> | undefined = undefined;
+      if (imageToSend) {
+        metadata = {
+          isViewOnce: viewOnceFlag,
+          imageUri: imageToSend.uri,
+          opened: false,
+          openedAt: null,
+        };
+      }
+
+      const contentToSend =
+        textToSend || (imageToSend ? (viewOnceFlag ? '① Photo' : 'Photo') : '');
+
+      const newMsg = await ChatService.sendMessage(
+        conversationId,
+        contentToSend,
+        'TEXT',
+        metadata
+      );
 
       setMessages((prev) => {
         if (prev.some((m) => m.id === newMsg.id)) return prev;
@@ -356,6 +473,102 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       );
     }
 
+    const isViewOnceMsg = !!item.metadata?.isViewOnce;
+    if (isViewOnceMsg) {
+      const isOpened = !!item.metadata?.opened;
+      return (
+        <View
+          style={[
+            styles.messageRow,
+            isOwn ? styles.messageRowOwn : styles.messageRowPeer,
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={isOpened ? 1 : 0.7}
+            onPress={() => handleOpenViewOnce(item)}
+            style={[
+              styles.viewOnceBubble,
+              {
+                backgroundColor: isOpened
+                  ? '#161B26'
+                  : isOwn
+                  ? '#133526'
+                  : '#1A2A38',
+                borderColor: isOpened
+                  ? '#2B3545'
+                  : isOwn
+                  ? '#3ED598'
+                  : '#38BDF8',
+              },
+            ]}
+          >
+            {/* View Once Badge Circle */}
+            <View
+              style={[
+                styles.viewOnceBadgeCircle,
+                {
+                  backgroundColor: isOpened
+                    ? '#242C3C'
+                    : isOwn
+                    ? '#1E4636'
+                    : '#22384A',
+                },
+              ]}
+            >
+              <Icon
+                name="viewOnce"
+                size={20}
+                color={isOpened ? '#64748B' : isOwn ? '#3ED598' : '#38BDF8'}
+                strokeWidth={2.5}
+              />
+            </View>
+
+            {/* View Once Text Meta */}
+            <View style={styles.viewOnceTextCol}>
+              <Text
+                style={[
+                  styles.viewOnceTitle,
+                  { color: isOpened ? '#94A3B8' : '#FFFFFF' },
+                ]}
+              >
+                {isOpened ? 'Opened' : 'Photo'}
+              </Text>
+              <Text
+                style={[
+                  styles.viewOnceSub,
+                  { color: isOpened ? '#64748B' : isOwn ? '#3ED598' : '#38BDF8' },
+                ]}
+              >
+                {isOpened
+                  ? 'Expired'
+                  : isOwn
+                  ? 'View once sent'
+                  : 'Tap to view once'}
+              </Text>
+            </View>
+
+            {/* Time and Status */}
+            <View style={styles.viewOnceTimeCol}>
+              <Text style={[styles.timeText, { color: '#64748B' }]}>
+                {formatMessageTime(item.createdAt)}
+              </Text>
+              {isOwn && (
+                <View style={styles.statusTick}>
+                  {item.status === 'READ' ? (
+                    <Icon name="doubleCheck" size={13} color="#3ED598" />
+                  ) : item.status === 'DELIVERED' ? (
+                    <Icon name="doubleCheck" size={13} color="#64748B" />
+                  ) : (
+                    <Icon name="check" size={13} color="#64748B" />
+                  )}
+                </View>
+              )}
+            </View>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View
         style={[
@@ -474,15 +687,53 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           </View>
         </TouchableOpacity>
 
-        {/* Direct Challenge Shortcut */}
-        <TouchableOpacity
-          onPress={() => setShowInviteModal(true)}
-          style={[styles.challengeIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
-          activeOpacity={0.7}
-          accessibilityLabel="Send Game Challenge"
-        >
-          <Icon name="gamepad" size={20} color={theme.colors.primary} />
-        </TouchableOpacity>
+        {/* Header Right Action Shortcuts */}
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Voice Call',
+                `Starting voice call with ${peerName} (@${peerUsername || 'player'})...`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Connect', onPress: () => {} },
+                ]
+              );
+            }}
+            style={[styles.headerActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Audio Call"
+          >
+            <Icon name="audioCall" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Video Call',
+                `Starting HD video call with ${peerName} (@${peerUsername || 'player'})...`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Connect', onPress: () => {} },
+                ]
+              );
+            }}
+            style={[styles.headerActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Video Call"
+          >
+            <Icon name="videoCall" size={19} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowInviteModal(true)}
+            style={[styles.headerActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Send Game Challenge"
+          >
+            <Icon name="gamepad" size={19} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -528,6 +779,60 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           </View>
         )}
 
+        {/* Pending Image Attachment Bar */}
+        {pendingImage && (
+          <View style={[styles.pendingImageBar, { backgroundColor: '#141822', borderColor: '#262D3D' }]}>
+            <Image source={{ uri: pendingImage.uri }} style={styles.pendingThumb} resizeMode="cover" />
+
+            <View style={styles.pendingImageTextCol}>
+              <Text style={styles.pendingImageTitle}>
+                {isViewOnce ? 'View Once Photo' : 'Standard Photo'}
+              </Text>
+              <Text style={styles.pendingImageSub}>
+                {isViewOnce
+                  ? 'Recipient can only open this photo once'
+                  : 'Photo stays in chat stream'}
+              </Text>
+            </View>
+
+            {/* View Once Toggle Button (WhatsApp / Telegram ①) */}
+            <TouchableOpacity
+              onPress={() => setIsViewOnce((prev) => !prev)}
+              style={[
+                styles.viewOnceToggleBtn,
+                isViewOnce
+                  ? { backgroundColor: '#133526', borderColor: '#3ED598', borderWidth: 2 }
+                  : { backgroundColor: '#1E232E', borderColor: '#475569', borderWidth: 1.5 },
+              ]}
+              activeOpacity={0.7}
+              accessibilityLabel="Toggle View Once"
+            >
+              <Icon
+                name="viewOnce"
+                size={20}
+                color={isViewOnce ? '#3ED598' : '#94A3B8'}
+                strokeWidth={2.5}
+              />
+              <Text style={[styles.viewOnceToggleText, { color: isViewOnce ? '#3ED598' : '#94A3B8' }]}>
+                {isViewOnce ? '1' : 'Off'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Remove Image */}
+            <TouchableOpacity
+              onPress={() => {
+                setPendingImage(null);
+                setIsViewOnce(true);
+              }}
+              style={styles.discardImageBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Remove photo"
+            >
+              <Icon name="close" size={18} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Input Controls Bar */}
         <View
           style={[
@@ -538,6 +843,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             },
           ]}
         >
+          {/* Game Challenge Button */}
           <TouchableOpacity
             onPress={() => setShowInviteModal(true)}
             style={[styles.inviteTriggerBtn, { backgroundColor: theme.colors.surface }]}
@@ -545,6 +851,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
             accessibilityLabel="Game Invite"
           >
             <Icon name="gamepad" size={20} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          {/* Photo Picker Button */}
+          <TouchableOpacity
+            onPress={handlePickImage}
+            style={[styles.mediaTriggerBtn, { backgroundColor: theme.colors.surface }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Send Photo"
+          >
+            <Icon name="image" size={20} color={theme.colors.primary} />
           </TouchableOpacity>
 
           <TextInput
@@ -556,7 +872,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                 borderColor: theme.colors.border,
               },
             ]}
-            placeholder="Type a message..."
+            placeholder={pendingImage ? 'Add caption (optional)...' : 'Type a message...'}
             placeholderTextColor={theme.colors.textMuted}
             value={inputText}
             onChangeText={handleTextChange}
@@ -566,14 +882,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
 
           <TouchableOpacity
             onPress={handleSendMessage}
-            disabled={!inputText.trim() || isSending}
+            disabled={(!inputText.trim() && !pendingImage) || isSending}
             style={[
               styles.sendBtn,
               {
-                backgroundColor: inputText.trim()
+                backgroundColor: (inputText.trim() || pendingImage)
                   ? theme.colors.primary
                   : theme.colors.surface,
-                opacity: inputText.trim() ? 1 : 0.4,
+                opacity: (inputText.trim() || pendingImage) ? 1 : 0.4,
               },
             ]}
             activeOpacity={0.8}
@@ -585,7 +901,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               <Icon
                 name="send"
                 size={18}
-                color={inputText.trim() ? theme.colors.textOnPrimary : theme.colors.textMuted}
+                color={(inputText.trim() || pendingImage) ? theme.colors.textOnPrimary : theme.colors.textMuted}
               />
             )}
           </TouchableOpacity>
@@ -676,6 +992,62 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           </View>
         </View>
       </Modal>
+
+      {/* Full-Screen View Once Image Modal */}
+      <Modal
+        visible={!!activeViewOnceItem}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={handleCloseViewOnce}
+      >
+        <SafeAreaView style={styles.viewOnceModalContainer}>
+          <StatusBar barStyle="light-content" />
+
+          {/* Top Bar with Zero Transparency */}
+          <View style={styles.viewOnceModalTopBar}>
+            <View style={styles.viewOnceSenderInfo}>
+              <View style={styles.viewOnceModalBadge}>
+                <Icon name="viewOnce" size={18} color="#3ED598" strokeWidth={2.5} />
+              </View>
+              <View>
+                <Text style={styles.viewOnceModalSenderName}>
+                  {activeViewOnceItem?.senderName || 'Player'}
+                </Text>
+                <Text style={styles.viewOnceModalLabel}>
+                  View Once Photo • Will disappear on close
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleCloseViewOnce}
+              style={styles.viewOnceCloseBtn}
+              activeOpacity={0.7}
+              accessibilityLabel="Close view once photo"
+            >
+              <Icon name="close" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Full Screen Image */}
+          <View style={styles.viewOnceImageWrapper}>
+            {activeViewOnceItem?.imageUri ? (
+              <Image
+                source={{ uri: activeViewOnceItem.imageUri }}
+                style={styles.viewOnceMainImage}
+                resizeMode="contain"
+              />
+            ) : null}
+          </View>
+
+          {/* Bottom Notice */}
+          <View style={styles.viewOnceBottomNotice}>
+            <Text style={styles.viewOnceBottomNoticeText}>
+              This one-time photo will disappear once you close this screen.
+            </Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -702,10 +1074,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  challengeIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  headerActionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -987,5 +1364,172 @@ const styles = StyleSheet.create({
   modalCancelText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  // View Once Message Bubble
+  viewOnceBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 10,
+    maxWidth: '80%',
+  },
+  viewOnceBadgeCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewOnceTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  viewOnceTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  viewOnceSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  viewOnceTimeCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-end',
+    marginLeft: 6,
+  },
+  // Pending Image Bar
+  pendingImageBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#141822',
+    borderTopWidth: 1,
+    borderTopColor: '#262D3D',
+    gap: 10,
+  },
+  pendingThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#262D3D',
+  },
+  pendingImageTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  pendingImageTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  pendingImageSub: {
+    fontSize: 11,
+  },
+  viewOnceToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    gap: 4,
+  },
+  viewOnceToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  discardImageBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1F2432',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaTriggerBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // View Once Full-screen Modal (Zero Transparency)
+  viewOnceModalContainer: {
+    flex: 1,
+    backgroundColor: '#0B0D13',
+    justifyContent: 'space-between',
+  },
+  viewOnceModalTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 54,
+    paddingBottom: 16,
+    backgroundColor: '#10131B',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1F2433',
+  },
+  viewOnceSenderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  viewOnceModalBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1E2536',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewOnceModalSenderName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  viewOnceModalLabel: {
+    fontSize: 11,
+    color: '#3ED598',
+    fontWeight: '600',
+  },
+  viewOnceCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1E2536',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewOnceImageWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    backgroundColor: '#07090D',
+  },
+  viewOnceMainImage: {
+    width: '100%',
+    height: '100%',
+  },
+  viewOnceBottomNotice: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: '#10131B',
+    borderTopWidth: 1,
+    borderTopColor: '#1F2433',
+    alignItems: 'center',
+  },
+  viewOnceBottomNoticeText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    textAlign: 'center',
   },
 });

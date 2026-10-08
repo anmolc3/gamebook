@@ -7,6 +7,8 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  isNewlyRegistered: boolean;
+  dismissNewRegistration: () => void;
   login: (usernameOrEmail: string, password: string) => Promise<void>;
   register: (email: string, username: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUserData | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isNewlyRegistered, setIsNewlyRegistered] = useState(false);
 
   // Restore stored session on launch
   useEffect(() => {
@@ -63,12 +66,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await MobileAuthService.register({ email, username, password, displayName });
       setUser(data.user);
       setToken(data.token);
+      setIsNewlyRegistered(true);
       await MobileAuthService.setStoredToken(data.token);
       // Register push token for new accounts
       NotificationService.initialize().catch(() => null);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const dismissNewRegistration = () => {
+    setIsNewlyRegistered(false);
   };
 
   const logout = async () => {
@@ -79,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await MobileAuthService.clearStoredToken();
       setUser(null);
       setToken(null);
+      setIsNewlyRegistered(false);
     } finally {
       setIsLoading(false);
     }
@@ -95,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         token,
         isLoading,
         isAuthenticated: !!user && !!token,
+        isNewlyRegistered,
+        dismissNewRegistration,
         login,
         register,
         logout,

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -268,6 +269,47 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
             )}
           </View>
         </View>
+
+        {/* Quick Call Action Shortcuts */}
+        <View style={styles.cardCallActions}>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Voice Call',
+                `Starting voice call with ${item.peer?.displayName} (@${item.peer?.username || 'player'})...`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Connect', onPress: () => {} },
+                ]
+              );
+            }}
+            style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Audio Call"
+          >
+            <Icon name="audioCall" size={16} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Video Call',
+                `Starting HD video call with ${item.peer?.displayName} (@${item.peer?.username || 'player'})...`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Connect', onPress: () => {} },
+                ]
+              );
+            }}
+            style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            activeOpacity={0.7}
+            accessibilityLabel="Video Call"
+          >
+            <Icon name="videoCall" size={17} color={theme.colors.primary} />
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -302,7 +344,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
             activeOpacity={0.7}
             accessibilityLabel="Friends list"
           >
-            <Icon name="users" size={18} color={theme.colors.primary} />
+            <Icon name="friendsAdd" size={26} />
           </TouchableOpacity>
         ) : (
           <View style={styles.headerSpacer} />
@@ -365,7 +407,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
             <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
               {searchQuery
                 ? `No conversations match "${searchQuery}"`
-                : 'Start a direct chat with your friends, invite them to match challenges, and exchange strategy tips!'}
+                : 'Add friends to see feeds and play with them! Start direct chats, voice & video calls, and challenge them to matches.'}
             </Text>
             {onNavigateToFriends && !searchQuery && (
               <TouchableOpacity
@@ -574,5 +616,18 @@ const styles = StyleSheet.create({
   emptyActionBtnText: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  cardCallActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 6,
+  },
+  cardCallBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

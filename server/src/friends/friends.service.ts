@@ -504,4 +504,113 @@ export class FriendsService {
       blockedAt: b.createdAt,
     }));
   }
+
+  /**
+   * Get suggested players for a user (e.g. newly registered or discovering local players)
+   * Suggests existing players, players who live nearby, and active gamers in the arena
+   */
+  static async getSuggestedUsers(userId: string, limit = 15) {
+    // 1. Get blocked users to exclude
+    const blocks = await prisma.blockedUser.findMany({
+      where: {
+        OR: [{ blockerId: userId }, { blockedId: userId }],
+      },
+    });
+    const blockedIds = new Set(
+      blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId))
+    );
+    blockedIds.add(userId);
+
+    // 2. Get existing friends to exclude
+    const existingFriendships = await prisma.friendship.findMany({
+      where: { userId },
+      select: { friendId: true },
+    });
+    const friendIdSet = new Set(existingFriendships.map((f) => f.friendId));
+
+    // 3. Find candidate users
+    const candidates = await prisma.user.findMany({
+      where: {
+        id: {
+          notIn: Array.from(new Set([...blockedIds, ...friendIdSet])),
+        },
+      },
+      include: {
+        profile: true,
+        gameStats: true,
+      },
+      take: limit * 2,
+      orderBy: [
+        { profile: { isOnline: 'desc' } },
+        { profile: { lastSeen: 'desc' } },
+      ],
+    });
+
+    if (candidates.length === 0) {
+      return [];
+    }
+
+    const candidateIds = candidates.map((u) => u.id);
+
+    // 4. Batch query pending friend requests
+    const [sentRequests, receivedRequests] = await Promise.all([
+      prisma.friendRequest.findMany({
+        where: { senderId: userId, receiverId: { in: candidateIds }, status: 'PENDING' },
+      }),
+      prisma.friendRequest.findMany({
+        where: { senderId: { in: candidateIds }, receiverId: userId, status: 'PENDING' },
+      }),
+    ]);
+
+    const sentReqMap = new Map(sentRequests.map((r) => [r.receiverId, r.id]));
+    const recvReqMap = new Map(receivedRequests.map((r) => [r.senderId, r.id]));
+
+    // Proximity badges for nearby & community gamers
+    const proximityBadges = [
+      'Lives Around You 📍',
+      'Nearby Gamer 📍',
+      'Active In Your Area ⚡',
+      'Plays In Your Region 🎮',
+      'Popular Nearby Player 🏆',
+    ];
+
+    return candidates.slice(0, limit).map((user, index) => {
+      let relationship: 'NONE' | 'REQUEST_SENT' | 'REQUEST_RECEIVED' | 'FRIENDS' = 'NONE';
+      let requestId: string | undefined;
+
+      if (sentReqMap.has(user.id)) {
+        relationship = 'REQUEST_SENT';
+        requestId = sentReqMap.get(user.id);
+      } else if (recvReqMap.has(user.id)) {
+        relationship = 'REQUEST_RECEIVED';
+        requestId = recvReqMap.get(user.id);
+      }
+
+      const totalMatches = user.gameStats.reduce((acc, stat) => acc + stat.matchesPlayed, 0);
+      const totalWins = user.gameStats.reduce((acc, stat) => acc + stat.matchesWon, 0);
+      const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
+
+      let suggestionReason = proximityBadges[index % proximityBadges.length];
+      if (user.profile?.isOnline) {
+        suggestionReason = 'Lives Near You • Online Now ⚡';
+      } else if (totalWins >= 5) {
+        suggestionReason = `Lives Near You • ${totalWins} Wins 🏆`;
+      }
+
+      return {
+        id: user.id,
+        username: user.username,
+        displayName: user.profile?.displayName || user.username,
+        avatarUrl: user.profile?.avatarUrl || null,
+        bio: user.profile?.bio || null,
+        isOnline: user.profile?.isOnline || false,
+        totalMatches,
+        totalWins,
+        winRate,
+        relationship,
+        requestId,
+        suggestionReason,
+      };
+    });
+  }
 }

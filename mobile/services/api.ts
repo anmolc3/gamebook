@@ -18,7 +18,13 @@ export async function apiGet<T>(endpoint: string): Promise<T> {
     method: 'GET',
     headers,
   });
-  const json = await res.json();
+  const text = await res.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Server returned non-JSON response (${res.status})`);
+  }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
   }
@@ -33,7 +39,13 @@ export async function apiPost<T>(endpoint: string, body?: any): Promise<T> {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const json = await res.json();
+  const text = await res.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Server returned non-JSON response (${res.status})`);
+  }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
   }
@@ -47,7 +59,13 @@ export async function apiDelete<T>(endpoint: string): Promise<T> {
     method: 'DELETE',
     headers,
   });
-  const json = await res.json();
+  const text = await res.text();
+  let json: any;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Server returned non-JSON response (${res.status})`);
+  }
   if (!res.ok) {
     throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
   }

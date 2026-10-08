@@ -4,8 +4,9 @@ import { FriendsController } from './friends.controller';
 
 const router = Router();
 
-// Friend list and search
+// Friend list, suggestions and search
 router.get('/', authenticateToken, FriendsController.getFriends);
+router.get('/suggestions', authenticateToken, FriendsController.getSuggestedUsers);
 router.get('/search', authenticateToken, FriendsController.searchUsers);
 
 // Friend requests

@@ -54,6 +54,7 @@ export const FeedPostImage: React.FC<{ uri: string }> = ({ uri }) => {
 interface SocialFeedSectionProps {
   onChallengeUser?: (userId: string, username: string) => void;
   onViewProfile?: (userId: string) => void;
+  onAddFriends?: () => void;
   maxPosts?: number;
   edgeToEdge?: boolean;
 }
@@ -61,6 +62,7 @@ interface SocialFeedSectionProps {
 export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
   onChallengeUser,
   onViewProfile,
+  onAddFriends,
   maxPosts,
   edgeToEdge = true,
 }) => {
@@ -379,10 +381,35 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
       {/* Empty State */}
       {!isLoading && displayedPosts.length === 0 && (
         <View style={styles.emptyBox}>
-          <Icon name="chat" size={28} color={theme.colors.textMuted} />
-          <Text style={[styles.emptyText, { color: theme.colors.textMuted }]}>
-            No posts yet. Be the first player to share!
+          <View
+            style={[
+              styles.emptyIconCircle,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <Icon name="users" size={32} color={theme.colors.primary} />
+          </View>
+          <Text style={[styles.emptyTitleText, { color: theme.colors.textPrimary }]}>
+            Add friends to see feeds and play with them
           </Text>
+          <Text style={[styles.emptySubText, { color: theme.colors.textSecondary }]}>
+            Connect with players around you to discover their gaming moments, share high scores, and send instant match invites!
+          </Text>
+          {onAddFriends && (
+            <TouchableOpacity
+              onPress={onAddFriends}
+              style={[styles.emptyActionBtn, { backgroundColor: theme.colors.primary }]}
+              activeOpacity={0.8}
+            >
+              <Icon name="userPlus" size={16} color={theme.colors.textOnPrimary} />
+              <Text style={[styles.emptyActionBtnText, { color: theme.colors.textOnPrimary }]}>
+                Find Players Around You
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -669,6 +696,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 36,
     gap: 10,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  emptyTitleText: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  emptySubText: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingHorizontal: 28,
+  },
+  emptyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 6,
+  },
+  emptyActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   emptyText: {
     fontSize: 13,

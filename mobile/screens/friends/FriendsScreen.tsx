@@ -21,6 +21,7 @@ import {
   FriendUser,
   FriendRequestItem,
   SearchedPlayer,
+  SuggestedPlayer,
 } from '../../services/friends.service';
 import { MobileSocketService } from '../../services/socket.service';
 import { SocialFeedSection } from '../../components/organisms/SocialFeedSection';
@@ -49,6 +50,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchedPlayer[]>([]);
+  const [suggestedPlayers, setSuggestedPlayers] = useState<SuggestedPlayer[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
@@ -58,13 +60,15 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   // Load all social data
   const loadData = useCallback(async () => {
     try {
-      const [friendsData, requestsData] = await Promise.all([
+      const [friendsData, requestsData, suggestedData] = await Promise.all([
         FriendsService.fetchFriends(),
         FriendsService.fetchRequests(),
+        FriendsService.fetchSuggestedFriends(15).catch(() => []),
       ]);
       setFriends(friendsData);
       setIncomingRequests(requestsData.incoming);
       setOutgoingRequests(requestsData.outgoing);
+      setSuggestedPlayers(suggestedData);
     } catch (err) {
       console.warn('Failed to load social data:', err);
     } finally {
@@ -258,8 +262,8 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
           activeOpacity={0.8}
         >
           <Icon
-            name="chat"
-            size={15}
+            name="posts"
+            size={16}
             color={activeTab === 'feeds' ? theme.colors.primary : theme.colors.textMuted}
           />
           <Text
@@ -423,6 +427,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
           <SocialFeedSection
             onViewProfile={onViewProfile}
             onChallengeUser={onChallenge}
+            onAddFriends={() => setActiveTab('discover')}
           />
         ) : activeTab === 'friends' ? (
           /* ============================================================ */
@@ -468,16 +473,16 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
                   No Friends Yet
                 </Text>
                 <Text style={[styles.emptyStateSubtitle, { color: theme.colors.textSecondary }]}>
-                  Connect with other players to challenge them to Tic-Tac-Toe, play Ludo matches, and track each other's achievements!
+                  Add friends to see feeds and play with them! Connect with players around you to challenge them to live matches, compare stats, and share gaming moments.
                 </Text>
                 <TouchableOpacity
                   onPress={() => setActiveTab('discover')}
                   style={[styles.emptyCtaBtn, { backgroundColor: theme.colors.primary }]}
                   activeOpacity={0.8}
                 >
-                  <Icon name="search" size={16} color={theme.colors.background} />
+                  <Icon name="userPlus" size={16} color={theme.colors.background} />
                   <Text style={[styles.emptyCtaBtnText, { color: theme.colors.background }]}>
-                    Discover Players
+                    Find Friends Around You
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -896,25 +901,147 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
                 </View>
               )
             ) : (
-              <View
-                style={[
-                  styles.emptyStateCard,
-                  {
-                    backgroundColor: theme.colors.surfaceElevated,
-                    borderColor: theme.colors.border,
-                    marginTop: 16,
-                  },
-                ]}
-              >
-                <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
-                  <Icon name="search" size={28} color={theme.colors.primary} />
+              <View style={{ marginTop: 16 }}>
+                <View style={styles.suggestedHeaderRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Icon name="users" size={16} color={theme.colors.primary} />
+                    <Text style={[styles.sectionHeading, { color: theme.colors.textPrimary }]}>
+                      People You May Know & Near You
+                    </Text>
+                  </View>
+                  <Text style={[styles.sectionSubheading, { color: theme.colors.primary, marginTop: 2 }]}>
+                    Add friends to see feeds and play with them
+                  </Text>
                 </View>
-                <Text style={[styles.emptyStateTitle, { color: theme.colors.textPrimary }]}>
-                  Discover Fellow Competitors
-                </Text>
-                <Text style={[styles.emptyStateSubtitle, { color: theme.colors.textSecondary }]}>
-                  Type at least 2 characters to search by gamer tag or username across the entire platform.
-                </Text>
+
+                {suggestedPlayers.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptyStateCard,
+                      {
+                        backgroundColor: theme.colors.surfaceElevated,
+                        borderColor: theme.colors.border,
+                        marginTop: 12,
+                      },
+                    ]}
+                  >
+                    <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
+                      <Icon name="search" size={28} color={theme.colors.primary} />
+                    </View>
+                    <Text style={[styles.emptyStateTitle, { color: theme.colors.textPrimary }]}>
+                      Discover Fellow Competitors
+                    </Text>
+                    <Text style={[styles.emptyStateSubtitle, { color: theme.colors.textSecondary }]}>
+                      Add friends to see feeds and play with them! Search for usernames or handles to challenge friends.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.cardsList, { marginTop: 12 }]}>
+                    {suggestedPlayers.map((player) => (
+                      <TouchableOpacity
+                        key={player.id}
+                        onPress={() => onViewProfile?.(player.id)}
+                        style={[
+                          styles.playerCard,
+                          {
+                            backgroundColor: theme.colors.surfaceElevated,
+                            borderColor: theme.colors.border,
+                          },
+                        ]}
+                        activeOpacity={0.8}
+                      >
+                        <Avatar
+                          displayName={player.displayName}
+                          avatarUrl={player.avatarUrl}
+                          size="md"
+                          status={player.isOnline ? 'online' : 'offline'}
+                        />
+                        <View style={styles.playerMeta}>
+                          <Text
+                            style={[styles.playerName, { color: theme.colors.textPrimary }]}
+                            numberOfLines={1}
+                          >
+                            {player.displayName}
+                          </Text>
+                          <Text style={[styles.playerUsername, { color: theme.colors.textMuted }]}>
+                            @{player.username}
+                          </Text>
+                          <Text style={[styles.suggestionReasonText, { color: theme.colors.accent }]}>
+                            {player.suggestionReason || 'Lives Near You 📍'}
+                          </Text>
+                        </View>
+
+                        <View style={styles.actionsContainer}>
+                          {player.relationship === 'NONE' && (
+                            <TouchableOpacity
+                              onPress={() => handleSendRequest(player.id)}
+                              disabled={actionLoadingId === player.id}
+                              style={[styles.addFriendBtn, { backgroundColor: theme.colors.primary }]}
+                              activeOpacity={0.8}
+                            >
+                              {actionLoadingId === player.id ? (
+                                <ActivityIndicator size="small" color={theme.colors.background} />
+                              ) : (
+                                <>
+                                  <Icon name="userPlus" size={15} color={theme.colors.background} />
+                                  <Text style={[styles.addFriendText, { color: theme.colors.background }]}>
+                                    Add
+                                  </Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          )}
+
+                          {player.relationship === 'REQUEST_SENT' && (
+                            <View
+                              style={[
+                                styles.statusBadge,
+                                { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
+                              ]}
+                            >
+                              <Icon name="check" size={14} color={theme.colors.textMuted} />
+                              <Text style={[styles.statusBadgeText, { color: theme.colors.textMuted }]}>
+                                Sent
+                              </Text>
+                            </View>
+                          )}
+
+                          {player.relationship === 'REQUEST_RECEIVED' && (
+                            <TouchableOpacity
+                              onPress={() => {
+                                if (player.requestId) handleAcceptRequest(player.requestId);
+                              }}
+                              style={[styles.addFriendBtn, { backgroundColor: theme.colors.accent }]}
+                              activeOpacity={0.8}
+                            >
+                              <Icon name="userCheck" size={15} color={theme.colors.background} />
+                              <Text style={[styles.addFriendText, { color: theme.colors.background }]}>
+                                Accept
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+
+                          {player.relationship === 'FRIENDS' && (
+                            <View
+                              style={[
+                                styles.statusBadge,
+                                {
+                                  backgroundColor: theme.colors.accent + '18',
+                                  borderColor: theme.colors.accent,
+                                },
+                              ]}
+                            >
+                              <Icon name="userCheck" size={14} color={theme.colors.accent} />
+                              <Text style={[styles.statusBadgeText, { color: theme.colors.accent }]}>
+                                Friends
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -1220,5 +1347,19 @@ const styles = StyleSheet.create({
   emptySubText: {
     fontSize: 13,
     marginTop: 4,
+  },
+  suggestedHeaderRow: {
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  suggestionReasonText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });

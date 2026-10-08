@@ -106,18 +106,15 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                 {customImg ? (
                   <Image
                     source={customImg}
-                    style={[
-                      styles.navImage,
-                      { opacity: isActive ? 1 : 0.55 },
-                    ]}
+                    style={styles.navImage}
                     resizeMode="contain"
                   />
                 ) : (
                   <Icon
                     name={tab.icon}
-                    size={22}
-                    color={isActive ? theme.colors.primary : theme.colors.textMuted}
-                    strokeWidth={isActive ? 2.4 : 1.8}
+                    size={26}
+                    color={isActive ? theme.colors.primary : theme.colors.textPrimary}
+                    strokeWidth={2.4}
                   />
                 )}
 
@@ -167,12 +164,12 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
 
 const styles = StyleSheet.create({
   navContainer: {
-    height: Platform.OS === 'ios' ? 84 : 70,
+    height: Platform.OS === 'ios' ? 84 : 72,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     borderTopWidth: 1,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'ios' ? 22 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 22 : 10,
     paddingHorizontal: 12,
     position: 'absolute',
     bottom: 0,
@@ -222,9 +219,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   centerBtnWrapper: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -232,11 +229,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   centerNavImage: {
-    width: 36,
-    height: 36,
+    width: 42,
+    height: 42,
   },
   navImage: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
   },
 });
