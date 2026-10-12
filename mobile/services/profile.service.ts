@@ -39,6 +39,9 @@ export interface UserProfile {
   appearanceMode?: string;
   isOnline: boolean;
   lastSeen: string;
+  onlinePrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  lastSeenPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  readReceipts?: boolean;
   createdAt: string;
   stats: ProfileStats;
   achievements: AchievementItem[];
@@ -54,6 +57,9 @@ export interface UpdateProfilePayload {
   bannerUrl?: string | null;
   themePreference?: 'coralMarble' | 'moonViolet' | 'violetDusk' | 'midnightNeutral' | 'forestGold';
   appearanceMode?: 'system' | 'light' | 'dark';
+  onlinePrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  lastSeenPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  readReceipts?: boolean;
 }
 
 export class ProfileService {
@@ -72,17 +78,32 @@ export class ProfileService {
       headers,
     });
 
-    const json = await res.json();
+    const text = await res.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(
+        res.status === 404
+          ? 'Profile service not found'
+          : `Server returned ${res.status}`
+      );
+    }
+
     if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch personal profile');
+      throw new Error(json.error?.message || json.message || 'Failed to fetch personal profile');
     }
 
     const profile: UserProfile = json.data;
-    // Load local bannerUrl if stored locally
+    // Load local bannerUrl and avatarUrl if stored locally
     try {
       const localBanner = await AsyncStorage.getItem(`@gameapp:profile_banner_${profile.id}`);
       if (localBanner) {
         profile.bannerUrl = localBanner;
+      }
+      const localAvatar = await AsyncStorage.getItem(`@gameapp:profile_avatar_${profile.id}`);
+      if (localAvatar) {
+        profile.avatarUrl = localAvatar;
       }
     } catch {}
 
@@ -90,33 +111,112 @@ export class ProfileService {
   }
 
   static async updateMyProfile(payload: UpdateProfilePayload): Promise<UserProfile> {
-    if (payload.bannerUrl !== undefined) {
+    // 1. Immediately cache custom photos in AsyncStorage for instant UI responsiveness & offline support
+    let cachedUserId = 'me';
+    try {
+      const stored = await AsyncStorage.getItem('@gameapp_auth_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.id) cachedUserId = parsed.id;
+      }
+    } catch {}
+
+    if (payload.bannerUrl !== undefined && payload.bannerUrl) {
       try {
-        if (payload.bannerUrl) {
-          const myProfile = await this.fetchMyProfile().catch(() => null);
-          const userId = myProfile?.id || 'me';
-          await AsyncStorage.setItem(`@gameapp:profile_banner_${userId}`, payload.bannerUrl);
-        }
+        await AsyncStorage.setItem(`@gameapp:profile_banner_${cachedUserId}`, payload.bannerUrl);
+      } catch {}
+    }
+
+    if (payload.avatarUrl !== undefined && payload.avatarUrl) {
+      try {
+        await AsyncStorage.setItem(`@gameapp:profile_avatar_${cachedUserId}`, payload.avatarUrl);
       } catch {}
     }
 
     const headers = await this.getAuthHeaders();
     // Exclude bannerUrl from API call in case server doesn't have column yet
     const { bannerUrl, ...apiPayload } = payload;
-    const res = await fetch(`${API_BASE_URL}/profiles/me`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(apiPayload),
-    });
 
-    const json = await res.json();
+    let res: Response;
+    let text = '';
+    try {
+      res = await fetch(`${API_BASE_URL}/profiles/me`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(apiPayload),
+      });
+      text = await res.text();
+    } catch (networkErr: any) {
+      // If network failed but we saved locally, construct fallback profile
+      return {
+        id: cachedUserId,
+        username: 'user',
+        displayName: payload.displayName || 'Player',
+        bio: payload.bio || null,
+        avatarUrl: payload.avatarUrl || null,
+        bannerUrl: payload.bannerUrl || null,
+        isOnline: true,
+        lastSeen: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        stats: {
+          totalMatches: 0,
+          matchesPlayed: 0,
+          totalWins: 0,
+          matchesWon: 0,
+          totalLosses: 0,
+          matchesLost: 0,
+          winRate: 0,
+          friendsCount: 0,
+        },
+        achievements: [],
+        isOwnProfile: true,
+        relationship: 'SELF',
+      };
+    }
+
+    let json: any = null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // If server returned non-JSON (like 413 HTML from proxy due to image payload size),
+      // we gracefully fall back using the locally saved photo!
+      console.warn(`[ProfileService] Server returned non-JSON (${res.status}): ${text.slice(0, 100)}`);
+      return {
+        id: cachedUserId,
+        username: 'user',
+        displayName: payload.displayName || 'Player',
+        bio: payload.bio || null,
+        avatarUrl: payload.avatarUrl || null,
+        bannerUrl: payload.bannerUrl || null,
+        isOnline: true,
+        lastSeen: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        stats: {
+          totalMatches: 0,
+          matchesPlayed: 0,
+          totalWins: 0,
+          matchesWon: 0,
+          totalLosses: 0,
+          matchesLost: 0,
+          winRate: 0,
+          friendsCount: 0,
+        },
+        achievements: [],
+        isOwnProfile: true,
+        relationship: 'SELF',
+      };
+    }
+
     if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to update profile');
+      throw new Error(json.error?.message || json.message || 'Failed to update profile');
     }
 
     const updatedProfile: UserProfile = json.data;
     if (payload.bannerUrl !== undefined) {
       updatedProfile.bannerUrl = payload.bannerUrl;
+    }
+    if (payload.avatarUrl !== undefined && payload.avatarUrl) {
+      updatedProfile.avatarUrl = payload.avatarUrl;
     }
     return updatedProfile;
   }

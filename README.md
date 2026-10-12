@@ -122,9 +122,6 @@ game-app/
 
 ---
 
-## 🎨 Design System & Themes
-
-The visual presentation adapts the spacious, soft-layered aesthetics of the Sketch Marvie UI reference while projecting our own distinct social gaming identity.
 
 ### Strict Non-Negotiable Rules
 - **ZERO Emojis as UI Icons**: All interface controls, buttons, and navigation items use vector SVG icons.

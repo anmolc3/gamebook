@@ -15,6 +15,7 @@ import { Avatar } from '../atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ImagePickerService } from '../../services/imagePicker.service';
 import { FeedService, FeedPostItem } from '../../services/feed.service';
+import { ImageCropperModal } from './ImageCropperModal';
 
 export type SocialFeedPost = FeedPostItem;
 
@@ -73,6 +74,8 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [newPostText, setNewPostText] = useState('');
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  const [cropperImageUri, setCropperImageUri] = useState<string | null>(null);
+  const [isCropperVisible, setIsCropperVisible] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({});
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
@@ -147,14 +150,15 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
     };
   }, [loadFeeds, user?.id]);
 
-  // Pick photo from device local storage in ANY aspect ratio
+  // Pick photo from device local storage in ANY aspect ratio and open ImageCropperModal
   const handlePickLocalImage = async () => {
     const res = await ImagePickerService.pickImageFromDevice({
-      allowsEditing: false, // Preserves natural aspect ratio (square, portrait, landscape, etc.)
+      allowsEditing: false, // Let user crop using full in-app cropper with all ratio options
       quality: 0.88,
     });
     if (res && !res.canceled && res.uri) {
-      setNewPostImage(res.uri);
+      setCropperImageUri(res.uri);
+      setIsCropperVisible(true);
     }
   };
 
@@ -325,14 +329,28 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
           />
         </View>
 
-        {/* Attached photo preview */}
+        {/* Attached photo preview with tap-to-crop */}
         {newPostImage && (
           <View style={styles.attachedImageWrap}>
-            <Image source={{ uri: newPostImage }} style={styles.attachedImagePreview} resizeMode="cover" />
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => {
+                setCropperImageUri(newPostImage);
+                setIsCropperVisible(true);
+              }}
+              style={styles.attachedImageTouchable}
+            >
+              <Image source={{ uri: newPostImage }} style={styles.attachedImagePreview} resizeMode="cover" />
+              <View style={[styles.cropHintBadge, { backgroundColor: 'rgba(0,0,0,0.65)' }]}>
+                <Icon name="crop" size={12} color="#FFFFFF" />
+                <Text style={styles.cropHintText}>Tap to crop</Text>
+              </View>
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => setNewPostImage(null)}
               style={styles.removeImageBtn}
               activeOpacity={0.7}
+              accessibilityLabel="Remove photo"
             >
               <Icon name="close" size={14} color="#FFFFFF" />
             </TouchableOpacity>
@@ -601,6 +619,16 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
           </View>
         );
       })}
+      {/* Photo Cropper Modal with all aspect ratios (Original, 1:1, 4:5, 16:9, 9:16, 4:3, 3:2) and Done button */}
+      <ImageCropperModal
+        visible={isCropperVisible}
+        imageUri={cropperImageUri}
+        onClose={() => setIsCropperVisible(false)}
+        onCropDone={(resultUri, _ratioId) => {
+          setNewPostImage(resultUri);
+          setIsCropperVisible(false);
+        }}
+      />
     </View>
   );
 };
@@ -641,9 +669,30 @@ const styles = StyleSheet.create({
     position: 'relative',
     height: 150,
   },
+  attachedImageTouchable: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
   attachedImagePreview: {
     width: '100%',
     height: '100%',
+  },
+  cropHintBadge: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  cropHintText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
   },
   removeImageBtn: {
     position: 'absolute',

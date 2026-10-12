@@ -12,6 +12,7 @@ import { ConversationScreen } from './screens/chat/ConversationScreen';
 import { RoomLobbyScreen } from './screens/rooms/RoomLobbyScreen';
 import { TicTacToeScreen } from './screens/games/TicTacToeScreen';
 import { LudoScreen } from './screens/games/LudoScreen';
+import { LudoLobbyScreen } from './screens/games/LudoLobbyScreen';
 import { BoardGameScreen } from './screens/games/BoardGameScreen';
 import { BoardGame2Screen } from './screens/games/BoardGame2Screen';
 import { CasualGameScreen, CasualGameType } from './screens/games/CasualGameScreen';
@@ -35,6 +36,11 @@ import { NotificationService, CHANNELS } from './services/notification.service';
 import { MobileSocketService } from './services/socket.service';
 import { CallProvider } from './features/call/CallContext';
 import { CallModal } from './components/organisms/CallModal';
+import { GameAlertModal } from './components/organisms/GameAlertModal';
+import { GameAlertService } from './services/alert.service';
+
+// Initialize global game-themed alert interceptor
+GameAlertService.init();
 
 interface ConversationPeer {
   id: string;
@@ -42,11 +48,13 @@ interface ConversationPeer {
   username: string;
   avatarUrl: string | null;
   conversationId?: string;
+  isGroup?: boolean;
+  groupMeta?: any;
 }
 
 function MainNavigator() {
   const { theme } = useTheme();
-  const { isAuthenticated, isLoading, isNewlyRegistered, dismissNewRegistration } = useAuth();
+  const { user, isAuthenticated, isLoading, isNewlyRegistered, dismissNewRegistration } = useAuth();
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
   const [currentScreen, setCurrentScreen] = useState<
     | 'home'
@@ -60,6 +68,7 @@ function MainNavigator() {
     | 'roomLobby'
     | 'ticTacToe'
     | 'ludo'
+    | 'ludoLobby'
     | 'boardGame'
     | 'boardGame2'
     | 'casualGame'
@@ -90,6 +99,7 @@ function MainNavigator() {
   const [profileUserId, setProfileUserId] = useState<string | undefined>(undefined);
   const [activePeer, setActivePeer] = useState<ConversationPeer | null>(null);
   const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
+  const [currentRoomDetails, setCurrentRoomDetails] = useState<any>(null);
   const [isJoinModalVisible, setIsJoinModalVisible] = useState(false);
   const [joinModalInitialGame, setJoinModalInitialGame] = useState<SupportedGameType | undefined>(undefined);
   const [joinModalInitialTab, setJoinModalInitialTab] = useState<'solo' | 'quick' | 'join' | 'create'>('quick');
@@ -98,6 +108,7 @@ function MainNavigator() {
   const [activeStoryTray, setActiveStoryTray] = useState<StoryTrayItem | null>(null);
 
   const insets = useSafeAreaInsets();
+  const processedMessageIdsRef = React.useRef<Set<string>>(new Set());
 
   // Listen globally to incoming messages & invites over socket to post system notifications
   useEffect(() => {
@@ -106,6 +117,21 @@ function MainNavigator() {
     MobileSocketService.connect();
 
     const unsubscribeChat = MobileSocketService.onMessageReceived((msg: any) => {
+      if (!msg) return;
+
+      // Ignore own messages
+      if (user?.id && msg.senderId === user.id) return;
+
+      // Deduplicate by message id
+      if (msg.id && processedMessageIdsRef.current.has(msg.id)) return;
+      if (msg.id) {
+        processedMessageIdsRef.current.add(msg.id);
+        if (processedMessageIdsRef.current.size > 100) {
+          const first = processedMessageIdsRef.current.values().next().value;
+          if (first) processedMessageIdsRef.current.delete(first);
+        }
+      }
+
       // Don't duplicate notification if the user is already actively chatting with this peer
       if (
         currentScreen === 'conversation' &&
@@ -128,6 +154,7 @@ function MainNavigator() {
           conversationId: msg.conversationId,
           senderId: msg.senderId,
           senderName: senderTitle,
+          messageId: msg.id,
         },
         CHANNELS.MESSAGES
       );
@@ -136,7 +163,7 @@ function MainNavigator() {
     return () => {
       unsubscribeChat();
     };
-  }, [isAuthenticated, currentScreen, activePeer]);
+  }, [isAuthenticated, currentScreen, activePeer, user?.id]);
 
   const MAIN_SWIPE_TABS: Array<'home' | 'friends' | 'discovery' | 'chatList' | 'profile'> = [
     'home',
@@ -179,6 +206,7 @@ function MainNavigator() {
 
   const handleJoinedRoom = (room: any) => {
     setCurrentRoomCode(room.code);
+    setCurrentRoomDetails(room);
     if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
       setCurrentBoardGameType(room.gameType as any);
     } else if (
@@ -340,7 +368,7 @@ function MainNavigator() {
       <LudoScreen
         roomCode={currentRoomCode}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          setCurrentScreen('ludoLobby');
         }}
       />
     );
@@ -429,8 +457,10 @@ function MainNavigator() {
     return (
       <RoomLobbyScreen
         roomCode={currentRoomCode}
+        initialRoom={currentRoomDetails}
         onBack={() => {
           setCurrentRoomCode(null);
+          setCurrentRoomDetails(null);
           setCurrentScreen('home');
         }}
         onGameStart={(room) => {
@@ -538,7 +568,7 @@ function MainNavigator() {
     );
   }
 
-  // Active 1-on-1 Conversation Screen
+  // Active Conversation Screen (1-on-1 or Group)
   if (currentScreen === 'conversation' && activePeer) {
     return (
       <ConversationScreen
@@ -547,6 +577,8 @@ function MainNavigator() {
         peerUsername={activePeer.username}
         peerAvatarUrl={activePeer.avatarUrl}
         initialConversationId={activePeer.conversationId}
+        isGroup={activePeer.isGroup}
+        groupMeta={activePeer.groupMeta}
         onBack={() => setCurrentScreen('chatList')}
         onNavigateToProfile={(targetId) => {
           setProfileUserId(targetId);
@@ -588,7 +620,7 @@ function MainNavigator() {
     if (currentScreen === 'friends') return 'friends';
     if (currentScreen === 'chatList') return 'chatList';
     if (currentScreen === 'profile') return 'profile';
-    if (currentScreen === 'discovery') return 'play';
+    if (currentScreen === 'discovery' || currentScreen === 'ludoLobby') return 'play';
     return 'home';
   };
 
@@ -631,7 +663,9 @@ function MainNavigator() {
             onPressChat={() => setCurrentScreen('chatList')}
             onPressThemes={() => setCurrentScreen('themes')}
             onPressPlay={(gameType) => {
-              if (gameType) {
+              if (gameType === 'LUDO') {
+                setCurrentScreen('ludoLobby');
+              } else if (gameType) {
                 setSoloModalGameId(gameType);
               } else {
                 setJoinModalInitialGame(undefined);
@@ -651,10 +685,45 @@ function MainNavigator() {
           />
         )}
 
+        {currentScreen === 'ludoLobby' && (
+          <LudoLobbyScreen
+            onBack={() => setCurrentScreen('discovery')}
+            onPlayOnline={async () => {
+              try {
+                const room = await RoomService.matchmake('LUDO');
+                handleJoinedRoom(room);
+              } catch (err: any) {
+                setJoinModalInitialGame('LUDO');
+                setJoinModalInitialTab('quick');
+                setIsJoinModalVisible(true);
+              }
+            }}
+            onPlayWithFriends={() => {
+              setJoinModalInitialGame('LUDO');
+              setJoinModalInitialTab('quick');
+              setIsJoinModalVisible(true);
+            }}
+            onCreateRoom={() => {
+              setJoinModalInitialGame('LUDO');
+              setJoinModalInitialTab('create');
+              setIsJoinModalVisible(true);
+            }}
+            onJoinRoom={() => {
+              setJoinModalInitialGame('LUDO');
+              setJoinModalInitialTab('join');
+              setIsJoinModalVisible(true);
+            }}
+          />
+        )}
+
         {currentScreen === 'discovery' && (
           <GameDiscoveryScreen
             onSelectGame={(gameId) => {
-              setSoloModalGameId(gameId);
+              if (gameId === 'LUDO') {
+                setCurrentScreen('ludoLobby');
+              } else {
+                setSoloModalGameId(gameId);
+              }
             }}
             onPressLeaderboards={() => setCurrentScreen('leaderboards')}
             onPressAchievements={() => setAchievementsModalVisible(true)}
@@ -695,13 +764,15 @@ function MainNavigator() {
           <ChatListScreen
             onBack={() => setCurrentScreen('home')}
             onNavigateToFriends={() => setCurrentScreen('friends')}
-            onSelectConversation={(peerId, peerName, peerUsername, peerAvatarUrl, convId) => {
+            onSelectConversation={(peerId, peerName, peerUsername, peerAvatarUrl, convId, isGroup, groupMeta) => {
               setActivePeer({
                 id: peerId,
                 name: peerName,
                 username: peerUsername,
                 avatarUrl: peerAvatarUrl,
                 conversationId: convId,
+                isGroup,
+                groupMeta,
               });
               setCurrentScreen('conversation');
             }}
@@ -811,6 +882,9 @@ function MainNavigator() {
 
       {/* Global Real-Time 1-on-1 Audio & Video Call Overlay */}
       <CallModal />
+
+      {/* Global Game-Themed Alert Dialog Overlay */}
+      <GameAlertModal />
     </View>
   );
 }

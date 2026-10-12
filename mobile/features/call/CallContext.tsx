@@ -135,8 +135,17 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (Platform.OS !== 'web') {
         Vibration.vibrate([0, 200, 800], true);
       }
+
+      // Auto-cancel if no answer within 30 seconds
+      dismissTimerRef.current = setTimeout(() => {
+        if (Platform.OS !== 'web') Vibration.cancel();
+        MobileSocketService.endCall(newCallId, 0);
+        setCallState('ended');
+        setEndReason('No answer');
+        dismissTimerRef.current = setTimeout(dismissCall, 2000);
+      }, 30000);
     },
-    [authUser, clearTimers]
+    [authUser, clearTimers, dismissCall]
   );
 
   // Accept incoming call

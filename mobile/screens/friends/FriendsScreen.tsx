@@ -1107,7 +1107,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: 60,
   },
   loadingContainer: {
     alignItems: 'center',

@@ -7,6 +7,7 @@ export interface IconProps {
   color?: string;
   strokeWidth?: number;
   accessibilityLabel?: string;
+  style?: any;
 }
 
 // 1. Navigation Icons
@@ -520,9 +521,41 @@ export const PhoneOffIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' })
   </Svg>
 );
 
+export const ReplyIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Polyline points="9 17 4 12 9 7" />
+    <Path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+  </Svg>
+);
+
+export const ShareIcon: React.FC<IconProps> = ({ size = 24, color = '#fff' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Circle cx="18" cy="5" r="3" />
+    <Circle cx="6" cy="12" r="3" />
+    <Circle cx="18" cy="19" r="3" />
+    <Line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+    <Line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+  </Svg>
+);
+
+export const ArchiveIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Polyline points="21 8 21 21 3 21 3 8" />
+    <Rect x="1" y="3" width="22" height="5" />
+    <Line x1="10" y1="12" x2="14" y2="12" />
+  </Svg>
+);
+
+export const CropIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Crop'}>
+    <Path d="M6 2V18H22M2 6H18V22" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 export type IconName =
   | 'home'
   | 'gamepad'
+  | 'archive'
   | 'bot'
   | 'users'
   | 'chat'
@@ -576,12 +609,16 @@ export type IconName =
   | 'viewOnce'
   | 'mic'
   | 'volume'
-  | 'phoneOff';
+  | 'phoneOff'
+  | 'reply'
+  | 'crop'
+  | 'share';
 
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
     case 'home': return <HomeIcon {...props} />;
     case 'gamepad': return <GamepadIcon {...props} />;
+    case 'archive': return <ArchiveIcon {...props} />;
     case 'bot': return <BotIcon {...props} />;
     case 'users': return <UsersIcon {...props} />;
     case 'chat': return <ChatIcon {...props} />;
@@ -636,6 +673,9 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'mic': return <MicIcon {...props} />;
     case 'volume': return <VolumeIcon {...props} />;
     case 'phoneOff': return <PhoneOffIcon {...props} />;
+    case 'reply': return <ReplyIcon {...props} />;
+    case 'crop': return <CropIcon {...props} />;
+    case 'share': return <ShareIcon {...props} />;
     default: return <GamepadIcon {...props} />;
   }
 };

@@ -11,15 +11,16 @@ try {
   ExpoAudio = null;
 }
 
-// User-provided Ludo Audio Assets from sound effect/ludo
+// User-provided & custom Ludo Audio Assets from assets/sounds/ludo
 const LUDO_AUDIO_ASSETS: Record<string, any> = {
   diceRoll: require('../assets/sounds/ludo/dice_roll.mp3'),
   tokenOpen: require('../assets/sounds/ludo/token_open.mp3'),
-  tokenMove: require('../assets/sounds/ludo/token_open.mp3'),
+  tokenMove: require('../assets/sounds/ludo/token_step.wav'),
   tokenCapture: require('../assets/sounds/ludo/token_kill.mp3'),
   tokenCapture2: require('../assets/sounds/ludo/token_kill_2.mp3'),
   homeGoal: require('../assets/sounds/ludo/token_win.mp3'),
   gameOver: require('../assets/sounds/ludo/game_over.mp3'),
+  turnPing: require('../assets/sounds/ludo/turn_ping.wav'),
 };
 
 export type SoundEffectType =
@@ -120,8 +121,23 @@ function getTurnPingSoundUri(): string {
   });
 }
 
+function getTokenStepSoundUri(): string {
+  const sampleRate = 22050;
+  const duration = 0.1;
+  const numSamples = Math.floor(sampleRate * duration);
+
+  return createWavUri(sampleRate, numSamples, (t) => {
+    // Tactile wooden / plastic board tap
+    const env = Math.exp(-t * 45);
+    const fundamental = Math.sin(2 * Math.PI * 480 * t);
+    const click = Math.sin(2 * Math.PI * 1400 * t) * Math.exp(-t * 100);
+    return env * (fundamental * 0.7 + click * 0.3) * 0.85;
+  });
+}
+
 export class SoundService {
   private static players = new Map<SoundEffectType, any>();
+  private static webAudioPool = new Map<SoundEffectType, any>();
   private static resolvedUris = new Map<SoundEffectType, string>();
   private static isInitialized = false;
 
@@ -146,6 +162,12 @@ export class SoundService {
       }
     }
 
+    if (type === 'tokenMove') {
+      const stepUri = getTokenStepSoundUri();
+      this.resolvedUris.set(type, stepUri);
+      return stepUri;
+    }
+
     if (type === 'turnPing') {
       const pingUri = getTurnPingSoundUri();
       this.resolvedUris.set(type, pingUri);
@@ -156,7 +178,7 @@ export class SoundService {
   }
 
   /**
-   * Initializes audio session mode if available
+   * Initializes audio session mode and preloads players for instant zero-latency playback
    */
   static async init(): Promise<void> {
     if (this.isInitialized) return;
@@ -171,10 +193,47 @@ export class SoundService {
     } catch {
       // Audio session mode not required for execution
     }
+
+    // Preload native audio players for zero latency
+    try {
+      if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
+        for (const [key, asset] of Object.entries(LUDO_AUDIO_ASSETS)) {
+          if (!this.players.has(key as SoundEffectType)) {
+            try {
+              const p = ExpoAudio.createAudioPlayer(asset);
+              this.players.set(key as SoundEffectType, p);
+            } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    // Preload web Audio elements for instant web play
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+      const allTypes: SoundEffectType[] = [
+        'diceRoll',
+        'tokenOpen',
+        'tokenMove',
+        'tokenCapture',
+        'homeGoal',
+        'gameOver',
+        'turnPing',
+      ];
+      for (const t of allTypes) {
+        try {
+          const uri = this.getAssetUri(t);
+          if (uri && !this.webAudioPool.has(t)) {
+            const audio = new (window as any).Audio(uri);
+            audio.load();
+            this.webAudioPool.set(t, audio);
+          }
+        } catch {}
+      }
+    }
   }
 
   /**
-   * Plays a game sound effect across all platforms safely using user-provided audio
+   * Plays a game sound effect across all platforms safely and instantly
    */
   static async play(type: SoundEffectType): Promise<void> {
     try {
@@ -182,18 +241,18 @@ export class SoundService {
         await this.init();
       }
 
-      const assetModule = LUDO_AUDIO_ASSETS[type];
-
       // 1. Web platform audio playback
       if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
-        let uri = this.getAssetUri(type);
-        if (!uri && assetModule) {
-          try {
-            uri = Asset.fromModule(assetModule).uri;
-          } catch {}
+        let audio = this.webAudioPool.get(type);
+        if (!audio) {
+          const uri = this.getAssetUri(type);
+          if (uri) {
+            audio = new (window as any).Audio(uri);
+            this.webAudioPool.set(type, audio);
+          }
         }
-        if (uri) {
-          const audio = new (window as any).Audio(uri);
+        if (audio) {
+          audio.currentTime = 0;
           audio.volume = 0.95;
           audio.play().catch(() => {});
           return;
@@ -204,7 +263,7 @@ export class SoundService {
       if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
         let player = this.players.get(type);
         if (!player) {
-          // Use asset require module directly or resolved URI
+          const assetModule = LUDO_AUDIO_ASSETS[type];
           const source = assetModule ? assetModule : this.getAssetUri(type);
           if (source) {
             player = ExpoAudio.createAudioPlayer(source);
@@ -213,20 +272,29 @@ export class SoundService {
         }
 
         if (player) {
-          if (typeof player.seekTo === 'function') {
-            player.seekTo(0);
-          }
-          if (typeof player.play === 'function') {
-            player.play();
+          try {
+            if (player.playing) {
+              player.pause();
+            }
+            if (typeof player.seekTo === 'function') {
+              await player.seekTo(0);
+            }
+            if (typeof player.play === 'function') {
+              player.play();
+            }
+          } catch {
+            if (typeof player.play === 'function') {
+              player.play();
+            }
           }
           return;
         }
       }
 
       // 3. Fallback for turn ping or web Audio if not loaded
-      if (type === 'turnPing') {
-        const pingUri = getTurnPingSoundUri();
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
+      if (type === 'turnPing' || type === 'tokenMove') {
+        const pingUri = this.getAssetUri(type);
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio && pingUri) {
           const audio = new (window as any).Audio(pingUri);
           audio.play().catch(() => {});
         }

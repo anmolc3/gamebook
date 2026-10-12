@@ -337,6 +337,7 @@ export class MatchManager {
       sequenceNumber: match.sequenceNumber,
       state: match.state,
       outcome,
+      events: result.events || [],
     };
   }
 

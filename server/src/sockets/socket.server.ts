@@ -6,6 +6,7 @@ import { AuthenticatedUser } from '../middleware/auth.middleware';
 import { prisma } from '../database/prisma';
 import { MatchManager } from '../games/match.manager';
 import { PushNotificationService } from '../notifications/push.service';
+import { PresenceService } from '../presence/presence.service';
 
 export let io: SocketIOServer;
 
@@ -52,8 +53,7 @@ export function clearSocketRateLimit(socketId: string): void {
 }
 
 export function isUserOnline(userId: string): boolean {
-  const sockets = activeUserSockets.get(userId);
-  return !!sockets && sockets.size > 0;
+  return PresenceService.isUserOnline(userId);
 }
 
 export function getOnlineUsersCount(): number {
@@ -85,54 +85,6 @@ export function emitToRoom(roomCode: string, event: string, payload: any): void 
 export function emitToAll(event: string, payload: any): void {
   if (io) {
     io.emit(event, payload);
-  }
-}
-
-async function notifyFriendsPresence(userId: string, isOnline: boolean, lastSeen: Date) {
-  try {
-    const friendships = await prisma.friendship.findMany({
-      where: { userId },
-      select: { friendId: true },
-    });
-
-    for (const item of friendships) {
-      emitToUser(item.friendId, 'presence:update', {
-        userId,
-        isOnline,
-        lastSeen: lastSeen.toISOString(),
-      });
-    }
-  } catch (err) {
-    console.error('Failed to broadcast presence update to friends:', err);
-  }
-}
-
-async function syncFriendsPresenceToUser(userId: string, targetSocket: Socket) {
-  try {
-    const friendships = await prisma.friendship.findMany({
-      where: { userId },
-      select: {
-        friendId: true,
-        friend: {
-          select: {
-            profile: {
-              select: { lastSeen: true, isOnline: true },
-            },
-          },
-        },
-      },
-    });
-
-    for (const item of friendships) {
-      const isOnline = isUserOnline(item.friendId) || (item.friend.profile?.isOnline ?? false);
-      targetSocket.emit('presence:update', {
-        userId: item.friendId,
-        isOnline,
-        lastSeen: item.friend.profile?.lastSeen?.toISOString() || new Date().toISOString(),
-      });
-    }
-  } catch (err) {
-    console.error('Failed to sync friends presence to newly connected user:', err);
   }
 }
 
@@ -175,24 +127,42 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
 
       // Track active sockets
       let userSockets = activeUserSockets.get(userId);
-      const isFirstConnection = !userSockets || userSockets.size === 0;
       if (!userSockets) {
         userSockets = new Set();
         activeUserSockets.set(userId, userSockets);
       }
       userSockets.add(socket.id);
 
+      // Register socket with PresenceService
+      const isFirstConnection = PresenceService.handleSocketConnect(userId, socket.id);
+
       // Immediately sync current online statuses of all friends to this device
-      syncFriendsPresenceToUser(userId, socket);
+      PresenceService.syncFriendsPresenceToUser(userId, socket).catch((err) =>
+        console.error('[Socket.IO] Error syncing friends presence:', err)
+      );
+
+      // Synchronize undelivered message receipts on connect / reconnect
+      try {
+        const { ChatService } = require('../chat/chat.service');
+        ChatService.syncUndeliveredMessagesForUser(userId).catch((err: any) =>
+          console.error('[Socket.IO] Error syncing undelivered messages:', err)
+        );
+      } catch (err) {
+        console.error('[Socket.IO] Error requiring ChatService for sync:', err);
+      }
 
       if (isFirstConnection) {
         const now = new Date();
-        await prisma.profile.updateMany({
-          where: { userId },
-          data: { isOnline: true, lastSeen: now },
-        }).catch(() => null);
+        prisma.profile
+          .updateMany({
+            where: { userId },
+            data: { isOnline: true, lastSeen: now },
+          })
+          .catch(() => null);
 
-        notifyFriendsPresence(userId, true, now);
+        PresenceService.notifyAuthorizedRecipients(userId, true, now, emitToUser).catch((err) =>
+          console.error('[Socket.IO] Error notifying friends of online presence:', err)
+        );
       }
     } else {
       console.log(`🔌 [Socket.IO] Anonymous client connected: ${socket.id}`);
@@ -232,6 +202,32 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
           username,
           isTyping: !!data.isTyping,
         });
+      }
+    });
+
+    // Delivery confirmation acknowledgment (2 grey ticks)
+    socket.on('chat:message_delivered', async (data: { conversationId: string; messageIds?: string[] }, cb?: any) => {
+      if (userId && data?.conversationId) {
+        try {
+          const { ChatService } = require('../chat/chat.service');
+          const res = await ChatService.confirmDelivery(userId, data.conversationId, data.messageIds);
+          if (typeof cb === 'function') cb(res);
+        } catch (err: any) {
+          if (typeof cb === 'function') cb({ success: false, error: err.message });
+        }
+      }
+    });
+
+    // Read receipt acknowledgment (2 blue ticks)
+    socket.on('chat:messages_read', async (data: { conversationId: string }, cb?: any) => {
+      if (userId && data?.conversationId) {
+        try {
+          const { ChatService } = require('../chat/chat.service');
+          const res = await ChatService.markAsRead(userId, data.conversationId);
+          if (typeof cb === 'function') cb(res);
+        } catch (err: any) {
+          if (typeof cb === 'function') cb({ success: false, error: err.message });
+        }
       }
     });
 
@@ -665,15 +661,12 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
           userSockets.delete(socket.id);
           if (userSockets.size === 0) {
             activeUserSockets.delete(userId);
-            const now = new Date();
-            await prisma.profile.updateMany({
-              where: { userId },
-              data: { isOnline: false, lastSeen: now },
-            }).catch(() => null);
-
-            notifyFriendsPresence(userId, false, now);
           }
         }
+
+        PresenceService.handleSocketDisconnect(userId, socket.id, async (now) => {
+          await PresenceService.notifyAuthorizedRecipients(userId, false, now, emitToUser);
+        });
       }
     });
   });

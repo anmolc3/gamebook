@@ -222,8 +222,11 @@ export class NotificationService {
     ]);
   }
 
+  private static recentNotifMap = new Map<string, number>();
+
   /**
    * Immediately present a notification in the device notification area / drawer.
+   * Debounces duplicate notifications within 3.5 seconds to prevent multi-notification spam.
    */
   static async displayLocalNotification(
     title: string,
@@ -232,6 +235,21 @@ export class NotificationService {
     channelId: string = CHANNELS.MESSAGES
   ): Promise<void> {
     if (!Notifications) return;
+    const notifKey = `${title}:::${body}:::${data?.messageId || data?.conversationId || ''}`;
+    const now = Date.now();
+    const lastTimestamp = this.recentNotifMap.get(notifKey);
+    if (lastTimestamp && now - lastTimestamp < 3500) {
+      return; // Suppress duplicate notification
+    }
+    this.recentNotifMap.set(notifKey, now);
+
+    // Garbage-collect old keys
+    if (this.recentNotifMap.size > 50) {
+      for (const [k, t] of this.recentNotifMap.entries()) {
+        if (now - t > 10000) this.recentNotifMap.delete(k);
+      }
+    }
+
     try {
       if (Platform.OS === 'android') {
         await this.createAndroidChannels();

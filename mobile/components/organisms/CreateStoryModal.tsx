@@ -10,12 +10,15 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { StoryService } from '../../services/story.service';
 import { ImagePickerService } from '../../services/imagePicker.service';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface CreateStoryModalProps {
   visible: boolean;
@@ -72,23 +75,26 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
   onStoryCreated,
 }) => {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [selectedPhoto, setSelectedPhoto] = useState<string>(STORY_PHOTO_PRESETS[0].url);
   const [caption, setCaption] = useState<string>('');
   const [selectedMood, setSelectedMood] = useState<string>(MOODS[0].id);
   const [privacy, setPrivacy] = useState<'PUBLIC' | 'FRIENDS'>('PUBLIC');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [customPhotoInput, setCustomPhotoInput] = useState<string>('');
+  const [cropperImageUri, setCropperImageUri] = useState<string | null>(null);
+  const [isCropperVisible, setIsCropperVisible] = useState<boolean>(false);
 
   const activeMood = MOODS.find((m) => m.id === selectedMood) || MOODS[0];
 
   const handlePickLocalImage = async () => {
     const res = await ImagePickerService.pickImageFromDevice({
-      aspect: [9, 16],
-      quality: 0.85,
+      allowsEditing: false, // Let user crop using full in-app cropper with all ratios
+      quality: 0.88,
     });
     if (res && !res.canceled && res.uri) {
-      setSelectedPhoto(res.uri);
-      setCustomPhotoInput('');
+      setCropperImageUri(res.uri);
+      setIsCropperVisible(true);
     }
   };
 
@@ -110,32 +116,46 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
     }
   };
 
+  const headerTopPadding = Math.max(insets.top, Platform.OS === 'android' ? 12 : 8);
+
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-            <Icon name="close" size={24} color={theme.colors.textPrimary} />
-          </TouchableOpacity>
+        {/* Aligned Top Navbar */}
+        <View
+          style={[
+            styles.header,
+            {
+              borderBottomColor: theme.colors.border,
+              paddingTop: headerTopPadding,
+            },
+          ]}
+        >
+          <View style={styles.headerSlotLeft}>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="close" size={22} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          </View>
           <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
             Add to Story
           </Text>
-          <TouchableOpacity
-            onPress={handlePublish}
-            disabled={isSubmitting}
-            style={[
-              styles.publishBtn,
-              { backgroundColor: theme.colors.primary, opacity: isSubmitting ? 0.6 : 1 },
-            ]}
-            activeOpacity={0.8}
-          >
-            {isSubmitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.publishBtnText}>Share</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerSlotRight}>
+            <TouchableOpacity
+              onPress={handlePublish}
+              disabled={isSubmitting}
+              style={[
+                styles.publishBtn,
+                { backgroundColor: theme.colors.primary, opacity: isSubmitting ? 0.6 : 1 },
+              ]}
+              activeOpacity={0.8}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.publishBtnText}>Share</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -285,71 +305,19 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
               autoCorrect={false}
             />
           </View>
-
-          {/* Privacy Switch */}
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
-              WHO CAN SEE THIS?
-            </Text>
-            <View style={styles.privacyRow}>
-              <TouchableOpacity
-                onPress={() => setPrivacy('PUBLIC')}
-                style={[
-                  styles.privacyBtn,
-                  {
-                    backgroundColor:
-                      privacy === 'PUBLIC' ? theme.colors.primary : theme.colors.surfaceElevated,
-                    borderColor:
-                      privacy === 'PUBLIC' ? theme.colors.primary : theme.colors.border,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Icon
-                  name="eye"
-                  size={16}
-                  color={privacy === 'PUBLIC' ? '#FFFFFF' : theme.colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.privacyText,
-                    { color: privacy === 'PUBLIC' ? '#FFFFFF' : theme.colors.textPrimary },
-                  ]}
-                >
-                  Public
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => setPrivacy('FRIENDS')}
-                style={[
-                  styles.privacyBtn,
-                  {
-                    backgroundColor:
-                      privacy === 'FRIENDS' ? theme.colors.primary : theme.colors.surfaceElevated,
-                    borderColor:
-                      privacy === 'FRIENDS' ? theme.colors.primary : theme.colors.border,
-                  },
-                ]}
-                activeOpacity={0.8}
-              >
-                <Icon
-                  name="users"
-                  size={16}
-                  color={privacy === 'FRIENDS' ? '#FFFFFF' : theme.colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.privacyText,
-                    { color: privacy === 'FRIENDS' ? '#FFFFFF' : theme.colors.textPrimary },
-                  ]}
-                >
-                  Friends Only
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         </ScrollView>
+
+        {/* Photo Cropper Modal with all aspect ratios (Original, 1:1, 4:5, 16:9, 9:16, 4:3, 3:2) and Done button */}
+        <ImageCropperModal
+          visible={isCropperVisible}
+          imageUri={cropperImageUri}
+          onClose={() => setIsCropperVisible(false)}
+          onCropDone={(resultUri, _ratioId) => {
+            setSelectedPhoto(resultUri);
+            setCustomPhotoInput('');
+            setIsCropperVisible(false);
+          }}
+        />
       </View>
     </Modal>
   );
@@ -364,21 +332,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingBottom: 12,
     borderBottomWidth: 1,
+  },
+  headerSlotLeft: {
+    width: 70,
+    alignItems: 'flex-start',
+  },
+  headerSlotRight: {
+    width: 70,
+    alignItems: 'flex-end',
   },
   closeBtn: {
     padding: 6,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
+    textAlign: 'center',
+    flex: 1,
   },
   publishBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 20,
-    minWidth: 70,
+    minWidth: 64,
     alignItems: 'center',
   },
   publishBtnText: {

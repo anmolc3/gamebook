@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 16,
-    paddingBottom: 96,
+    paddingBottom: 60,
   },
   toast: {
     flexDirection: 'row',

@@ -30,9 +30,9 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
 
-  // Dynamic bottom padding for gesture bars, 3-button navigation, and home indicators
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 14 : 8);
-  const navHeight = 58 + bottomInset;
+  // Balanced modern dynamic bottom padding and height
+  const bottomInset = insets.bottom > 0 ? Math.min(insets.bottom, 16) : (Platform.OS === 'ios' ? 10 : 8);
+  const navHeight = 54 + bottomInset;
 
   interface TabItem {
     id: NavTab;
@@ -93,7 +93,7 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                 ) : (
                   <Icon
                     name={tab.icon}
-                    size={24}
+                    size={20}
                     color={theme.colors.textOnPrimary}
                     strokeWidth={2.4}
                   />
@@ -120,9 +120,9 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                 ) : (
                   <Icon
                     name={tab.icon}
-                    size={26}
+                    size={22}
                     color={isActive ? theme.colors.primary : theme.colors.textPrimary}
-                    strokeWidth={2.4}
+                    strokeWidth={2.2}
                   />
                 )}
 
@@ -140,18 +140,6 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                   </View>
                 )}
               </View>
-
-              <Text
-                style={[
-                  styles.tabLabel,
-                  {
-                    color: isActive ? theme.colors.primary : theme.colors.textMuted,
-                    fontWeight: isActive ? '700' : '500',
-                  },
-                ]}
-              >
-                {tab.label}
-              </Text>
 
               {/* Active Indicator Dot */}
               {isActive && (
@@ -172,11 +160,11 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
 
 const styles = StyleSheet.create({
   navContainer: {
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
     borderTopWidth: 1,
-    paddingTop: 8,
-    paddingHorizontal: 12,
+    paddingTop: 4,
+    paddingHorizontal: 8,
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -186,60 +174,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: '100%',
+    height: 50,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
     height: '100%',
+    paddingVertical: 2,
   },
   iconWrapper: {
     position: 'relative',
-    marginBottom: 4,
-  },
-  tabLabel: {
-    fontSize: 10,
-    letterSpacing: 0.2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 0,
   },
   activeDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    marginTop: 2,
+    marginTop: 4,
   },
   badgeDot: {
     position: 'absolute',
     top: -4,
     right: -8,
-    minWidth: 14,
-    height: 14,
-    borderRadius: 7,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 7.5,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,
   },
   badgeText: {
-    fontSize: 8,
+    fontSize: 8.5,
     fontWeight: '800',
     color: '#FFFFFF',
   },
   centerBtnWrapper: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 3,
+    marginBottom: 4,
+    borderWidth: 2,
     overflow: 'hidden',
   },
   centerNavImage: {
-    width: 42,
-    height: 42,
+    width: 28,
+    height: 28,
   },
   navImage: {
-    width: 32,
-    height: 32,
+    width: 25,
+    height: 25,
   },
 });

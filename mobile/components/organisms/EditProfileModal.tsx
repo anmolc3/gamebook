@@ -17,6 +17,7 @@ import { Icon } from '../../icons';
 import { PRESET_AVATARS, PresetAvatar } from '../atoms/AvatarPresets';
 import { ProfileService, UpdateProfilePayload, UserProfile } from '../../services/profile.service';
 import { ImagePickerService } from '../../services/imagePicker.service';
+import { ImageCropperModal } from './ImageCropperModal';
 
 export interface EditProfileModalProps {
   visible: boolean;
@@ -47,25 +48,34 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Cropper state
+  const [cropperUri, setCropperUri] = useState<string | null>(null);
+  const [cropperTarget, setCropperTarget] = useState<'avatar' | 'banner'>('avatar');
+  const [isCropperVisible, setIsCropperVisible] = useState(false);
+
   // Pick avatar image from device local storage
   const handlePickAvatarFromDevice = async () => {
     const result = await ImagePickerService.pickImageFromDevice({
-      aspect: [1, 1],
+      allowsEditing: false,
       quality: 0.85,
     });
     if (result && !result.canceled && result.uri) {
-      setSelectedAvatar(result.uri);
+      setCropperTarget('avatar');
+      setCropperUri(result.uri);
+      setIsCropperVisible(true);
     }
   };
 
   // Pick profile background / cover image from device local storage
   const handlePickBannerFromDevice = async () => {
     const result = await ImagePickerService.pickImageFromDevice({
-      aspect: [16, 9],
+      allowsEditing: false,
       quality: 0.85,
     });
     if (result && !result.canceled && result.uri) {
-      setSelectedBanner(result.uri);
+      setCropperTarget('banner');
+      setCropperUri(result.uri);
+      setIsCropperVisible(true);
     }
   };
 
@@ -379,6 +389,21 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Photo Cropper Modal with all aspect ratios (Original, 1:1, 4:5, 16:9, 9:16, 4:3, 3:2) and Done button */}
+      <ImageCropperModal
+        visible={isCropperVisible}
+        imageUri={cropperUri}
+        onClose={() => setIsCropperVisible(false)}
+        onCropDone={(resultUri, _ratioId) => {
+          if (cropperTarget === 'avatar') {
+            setSelectedAvatar(resultUri);
+          } else {
+            setSelectedBanner(resultUri);
+          }
+          setIsCropperVisible(false);
+        }}
+      />
     </Modal>
   );
 };

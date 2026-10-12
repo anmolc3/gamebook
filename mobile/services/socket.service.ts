@@ -3,6 +3,48 @@ import { SOCKET_URL } from './api';
 import { MobileAuthService } from './auth.service';
 
 let socket: Socket | null = null;
+const eventListeners = new Map<string, Set<Function>>();
+
+function registerListener(event: string, callback: Function): () => void {
+  if (!eventListeners.has(event)) {
+    eventListeners.set(event, new Set());
+    if (socket && socket.connected) {
+      socket.off(event);
+      socket.on(event, (...args: any[]) => {
+        eventListeners.get(event)?.forEach((cb) => {
+          try {
+            cb(...args);
+          } catch (err) {
+            console.warn(`[Socket] Error in listener for ${event}:`, err);
+          }
+        });
+      });
+    }
+  }
+  eventListeners.get(event)!.add(callback);
+
+  return () => {
+    const set = eventListeners.get(event);
+    if (set) {
+      set.delete(callback);
+    }
+  };
+}
+
+function attachAllListeners(sock: Socket): void {
+  eventListeners.forEach((listeners, event) => {
+    sock.off(event);
+    sock.on(event, (...args: any[]) => {
+      listeners.forEach((cb) => {
+        try {
+          cb(...args);
+        } catch (err) {
+          console.warn(`[Socket] Error in listener for ${event}:`, err);
+        }
+      });
+    });
+  });
+}
 
 export class MobileSocketService {
   static async connect(): Promise<Socket | null> {
@@ -25,11 +67,14 @@ export class MobileSocketService {
 
     socket.on('connect', () => {
       console.log('⚡ [Socket] Connected to real-time multiplayer gateway');
+      if (socket) attachAllListeners(socket);
     });
 
     socket.on('disconnect', (reason) => {
       console.log(`🔌 [Socket] Disconnected: ${reason}`);
     });
+
+    attachAllListeners(socket);
 
     return socket;
   }
@@ -47,28 +92,16 @@ export class MobileSocketService {
 
   // Presence listeners
   static onPresenceUpdate(callback: (data: { userId: string; isOnline: boolean; lastSeen: string }) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('presence:update', callback);
-    return () => {
-      socket?.off('presence:update', callback);
-    };
+    return registerListener('presence:update', callback);
   }
 
   // Social friend request listeners
   static onFriendRequestReceived(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('friend:request_received', callback);
-    return () => {
-      socket?.off('friend:request_received', callback);
-    };
+    return registerListener('friend:request_received', callback);
   }
 
   static onFriendRequestAccepted(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('friend:request_accepted', callback);
-    return () => {
-      socket?.off('friend:request_accepted', callback);
-    };
+    return registerListener('friend:request_accepted', callback);
   }
 
   // Chat real-time room joining & events
@@ -93,39 +126,85 @@ export class MobileSocketService {
   static onUserTyping(
     callback: (data: { conversationId: string; userId: string; username: string; isTyping: boolean }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('chat:user_typing', callback);
-    return () => {
-      socket?.off('chat:user_typing', callback);
-    };
+    return registerListener('chat:user_typing', callback);
   }
 
   static onMessageReceived(callback: (message: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('chat:message_received', callback);
-    return () => {
-      socket?.off('chat:message_received', callback);
-    };
+    return registerListener('chat:message_received', callback);
+  }
+
+  static sendDeliveryConfirmation(conversationId: string, messageIds?: string[]): void {
+    if (socket) {
+      socket.emit('chat:message_delivered', { conversationId, messageIds });
+    }
+  }
+
+  static sendMessagesRead(conversationId: string): void {
+    if (socket) {
+      socket.emit('chat:messages_read', { conversationId });
+    }
+  }
+
+  static onMessageDelivered(
+    callback: (data: {
+      conversationId: string;
+      messageId: string;
+      deliveredTo: string;
+      deliveredAt: string;
+      status: 'SENT' | 'DELIVERED' | 'READ';
+      isAllDelivered?: boolean;
+    }) => void
+  ): () => void {
+    return registerListener('chat:message_delivered', callback);
   }
 
   static onMessagesRead(
-    callback: (data: { conversationId: string; readBy: string; readAt: string }) => void
+    callback: (data: {
+      conversationId: string;
+      readBy: string;
+      readAt: string;
+      messageId?: string;
+      messageIds?: string[];
+      status?: 'READ' | 'DELIVERED';
+      isAllRead?: boolean;
+    }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('chat:messages_read', callback);
-    return () => {
-      socket?.off('chat:messages_read', callback);
-    };
+    return registerListener('chat:messages_read', callback);
   }
 
   static onViewOnceOpened(
     callback: (data: { conversationId: string; messageId: string; openedAt: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('chat:view_once_opened', callback);
-    return () => {
-      socket?.off('chat:view_once_opened', callback);
-    };
+    return registerListener('chat:view_once_opened', callback);
+  }
+
+  // Group real-time event listeners
+  static onGroupCreated(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_created', callback);
+  }
+
+  static onGroupUpdated(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_updated', callback);
+  }
+
+  static onGroupMembersUpdated(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_members_updated', callback);
+  }
+
+  static onGroupMemberRemoved(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_member_removed', callback);
+  }
+
+  static onGroupMemberLeft(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_member_left', callback);
+  }
+
+  static onGroupRoleUpdated(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_role_updated', callback);
+  }
+
+  static onGroupRemoved(callback: (data: any) => void): () => void {
+    return registerListener('chat:group_removed', callback);
   }
 
   // Multiplayer Game Room & Lobby Real-Time Events
@@ -142,81 +221,45 @@ export class MobileSocketService {
   }
 
   static onRoomState(callback: (room: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('room:state', callback);
-    return () => {
-      socket?.off('room:state', callback);
-    };
+    return registerListener('room:state', callback);
   }
 
   static onPlayerJoined(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_joined', callback);
-    return () => {
-      socket?.off('room:player_joined', callback);
-    };
+    return registerListener('room:player_joined', callback);
   }
 
   static onPlayerLeft(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_left', callback);
-    return () => {
-      socket?.off('room:player_left', callback);
-    };
+    return registerListener('room:player_left', callback);
   }
 
   static onPlayerReady(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_ready', callback);
-    return () => {
-      socket?.off('room:player_ready', callback);
-    };
+    return registerListener('room:player_ready', callback);
   }
 
   static onGameStart(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('game:start', callback);
-    return () => {
-      socket?.off('game:start', callback);
-    };
+    return registerListener('game:start', callback);
   }
 
   static onPlayerDisconnected(
     callback: (data: { userId: string; username: string; roomCode: string; graceSeconds: number }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_disconnected', callback);
-    return () => {
-      socket?.off('room:player_disconnected', callback);
-    };
+    return registerListener('room:player_disconnected', callback);
   }
 
   static onPlayerReconnected(
     callback: (data: { userId: string; username: string; roomCode: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_reconnected', callback);
-    return () => {
-      socket?.off('room:player_reconnected', callback);
-    };
+    return registerListener('room:player_reconnected', callback);
   }
 
   static onPlayerAbandoned(
     callback: (data: { userId: string; username: string; roomCode: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('room:player_abandoned', callback);
-    return () => {
-      socket?.off('room:player_abandoned', callback);
-    };
+    return registerListener('room:player_abandoned', callback);
   }
 
   static onRoomDisbanded(callback: (data: any) => void): () => void {
-    if (!socket) return () => {};
-    socket.on('room:disbanded', callback);
-    return () => {
-      socket?.off('room:disbanded', callback);
-    };
+    return registerListener('room:disbanded', callback);
   }
 
   // --------------------------------------------------------------------------
@@ -392,61 +435,52 @@ export class MobileSocketService {
       timestamp: string;
     }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:incoming', callback);
-    return () => {
-      socket?.off('call:incoming', callback);
-    };
+    return registerListener('call:incoming', callback);
   }
 
   static onCallAccepted(
     callback: (data: { callId: string; timestamp: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:accepted', callback);
-    return () => {
-      socket?.off('call:accepted', callback);
-    };
+    return registerListener('call:accepted', callback);
   }
 
   static onCallRejected(
     callback: (data: { callId: string; reason: string; byUserId?: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:rejected', callback);
-    return () => {
-      socket?.off('call:rejected', callback);
-    };
+    return registerListener('call:rejected', callback);
   }
 
   static onCallEnded(
     callback: (data: { callId: string; durationSeconds?: number; endedBy?: string; reason?: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:ended', callback);
-    return () => {
-      socket?.off('call:ended', callback);
-    };
+    return registerListener('call:ended', callback);
   }
 
   static onCallPeerMediaState(
     callback: (data: { callId: string; isMuted?: boolean; isVideoOff?: boolean; userId: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:peer_media_state', callback);
-    return () => {
-      socket?.off('call:peer_media_state', callback);
-    };
+    return registerListener('call:peer_media_state', callback);
   }
 
   static onCallSignal(
     callback: (data: { callId: string; signal: any; fromUserId: string }) => void
   ): () => void {
-    if (!socket) return () => {};
-    socket.on('call:signal', callback);
-    return () => {
-      socket?.off('call:signal', callback);
-    };
+    return registerListener('call:signal', callback);
+  }
+
+  static notifyPresencePrivacyUpdate(): void {
+    if (socket) {
+      socket.emit('presence:privacy_update');
+    }
+  }
+
+  static queryPresence(userId: string): Promise<{ isOnline: boolean; lastSeen: string | null }> {
+    return new Promise((resolve) => {
+      if (!socket) return resolve({ isOnline: false, lastSeen: null });
+      socket.emit('presence:query', { userId }, (res: any) => {
+        resolve(res || { isOnline: false, lastSeen: null });
+      });
+    });
   }
 }
 

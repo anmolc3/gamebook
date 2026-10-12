@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import { MobileSocketService } from '../../services/socket.service';
 
 export interface RoomLobbyScreenProps {
   roomCode: string;
+  initialRoom?: RoomDetails | null;
   onBack: () => void;
   onGameStart?: (room: RoomDetails) => void;
   onNavigateToChat?: (userId: string, username: string) => void;
@@ -29,6 +30,7 @@ export interface RoomLobbyScreenProps {
 
 export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   roomCode,
+  initialRoom,
   onBack,
   onGameStart,
   onNavigateToChat,
@@ -37,8 +39,8 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   const { theme } = useTheme();
   const { user: authUser } = useAuth();
 
-  const [room, setRoom] = useState<RoomDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [room, setRoom] = useState<RoomDetails | null>(initialRoom || null);
+  const [isLoading, setIsLoading] = useState(!initialRoom);
   const [isRulesModalVisible, setIsRulesModalVisible] = useState(false);
   const [isTogglingReady, setIsTogglingReady] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
@@ -47,8 +49,8 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     graceSeconds: number;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const hasLoadedRef = useRef(!!initialRoom);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -57,9 +59,10 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
 
   const loadRoom = useCallback(async (silent = false) => {
     try {
-      if (!silent) setIsLoading(true);
+      if (!silent && !hasLoadedRef.current) setIsLoading(true);
       const data = await RoomService.getRoom(roomCode);
       setRoom(data);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       Alert.alert('Room Error', err.message || 'Could not load room');
       onBack();
@@ -80,7 +83,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     MobileSocketService.connect();
     MobileSocketService.joinRoom(roomCode);
 
-    // Synchronize full room state
+    // Synchronize full room state (do NOT show loading spinner on socket updates)
     const unsubState = MobileSocketService.onRoomState((updatedRoom: RoomDetails) => {
       setRoom(updatedRoom);
     });
@@ -191,6 +194,20 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     ]);
   };
 
+  const getGameLabel = (gameType?: string) => {
+    switch (gameType) {
+      case 'TICTACTOE': return 'Tic-Tac-Toe';
+      case 'LUDO': return 'Ludo Multiplayer';
+      case 'CHESS': return 'Chess Master';
+      case 'CHECKERS': return 'Checkers Grand';
+      case 'CONNECT_FOUR': return 'Connect Four';
+      case 'REVERSI': return 'Reversi / Othello';
+      case 'GOMOKU': return 'Gomoku Duel';
+      case 'CARDS': return 'Card Battle';
+      default: return gameType?.replace(/_/g, ' ') || 'Game';
+    }
+  };
+
   const isHost = room?.hostId === authUser?.id;
   const myPlayer = room?.players.find((p) => p.userId === authUser?.id);
   const isReady = myPlayer?.isReady || false;
@@ -204,6 +221,38 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   for (let i = 0; i < maxSlots; i++) {
     const playerInSlot = room?.players.find((p) => p.slotIndex === i) || null;
     slots.push(playerInSlot);
+  }
+
+  if (!room && isLoading) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
+        <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
+        <View style={[styles.headerBar, { borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity
+            onPress={onBack}
+            style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Back"
+          >
+            <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
+          <View style={styles.headerTitleCol}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Match Lobby
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
+              Room #{roomCode}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>
+            Connecting to match lobby...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -226,8 +275,8 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
             Match Lobby
           </Text>
           <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
-            {isTicTacToe ? 'Tic-Tac-Toe' : 'Ludo Multiplayer'}
-          </Text>
+              {getGameLabel(room?.gameType)}
+            </Text>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -347,12 +396,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
           </View>
         </View>
 
-        {isLoading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-          </View>
-        ) : (
-          <View style={styles.slotsGrid}>
+        <View style={styles.slotsGrid}>
             {slots.map((player, idx) => {
               if (player) {
                 const isPlayerHost = player.userId === room?.hostId;
@@ -490,8 +534,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
               );
             })}
           </View>
-        )}
-      </ScrollView>
+        </ScrollView>
 
       {/* Bottom Controls Action Bar */}
       <View

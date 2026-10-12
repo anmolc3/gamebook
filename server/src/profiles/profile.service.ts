@@ -1,5 +1,7 @@
 import { prisma } from '../database/prisma';
 import { isUserOnline } from '../sockets/socket.server';
+import { PresenceService } from '../presence/presence.service';
+import { PresencePrivacy } from '@prisma/client';
 import { UpdateProfileInput } from './profile.validation';
 
 export class ProfileService {
@@ -44,6 +46,9 @@ export class ProfileService {
       avatarUrl: user.profile.avatarUrl,
       themePreference: user.profile.themePreference,
       appearanceMode: user.profile.appearanceMode,
+      onlinePrivacy: user.profile.onlinePrivacy,
+      lastSeenPrivacy: user.profile.lastSeenPrivacy,
+      readReceipts: user.profile.readReceipts ?? true,
       isOnline: isUserOnline(user.id) || user.profile.isOnline,
       lastSeen: user.profile.lastSeen,
       createdAt: user.createdAt,
@@ -90,6 +95,9 @@ export class ProfileService {
         ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
         ...(data.themePreference ? { themePreference: data.themePreference } : {}),
         ...(data.appearanceMode ? { appearanceMode: data.appearanceMode } : {}),
+        ...(data.onlinePrivacy ? { onlinePrivacy: data.onlinePrivacy as PresencePrivacy } : {}),
+        ...(data.lastSeenPrivacy ? { lastSeenPrivacy: data.lastSeenPrivacy as PresencePrivacy } : {}),
+        ...(data.readReceipts !== undefined ? { readReceipts: data.readReceipts } : {}),
       },
     });
 
@@ -178,14 +186,19 @@ export class ProfileService {
     const totalLosses = targetUser.gameStats.reduce((acc, stat) => acc + stat.matchesLost, 0);
     const winRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
+    const filteredPresence = await PresenceService.filterPresenceForViewer(viewerId, {
+      id: targetUser.id,
+      profile: targetUser.profile,
+    });
+
     return {
       id: targetUser.id,
       username: targetUser.username,
       displayName: targetUser.profile.displayName,
       bio: targetUser.profile.bio,
       avatarUrl: targetUser.profile.avatarUrl,
-      isOnline: isUserOnline(targetUser.id) || targetUser.profile.isOnline,
-      lastSeen: targetUser.profile.lastSeen,
+      isOnline: filteredPresence.isOnline,
+      lastSeen: filteredPresence.lastSeen,
       createdAt: targetUser.createdAt,
       stats: {
         totalMatches,

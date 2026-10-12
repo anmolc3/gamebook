@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -9,20 +9,41 @@ import {
   SafeAreaView,
   Switch,
   Alert,
+  Platform,
+  Image,
 } from 'react-native';
-import { useTheme, ThemeId, AppearanceMode } from '../../theme';
-import { THEME_METADATA, resolveTheme } from '../../theme/themes';
+import { useTheme, AppearanceMode } from '../../theme';
+import { THEME_METADATA } from '../../theme/themes';
 import { Icon } from '../../icons';
-import { IconButton } from '../molecules/IconButton';
 import { Avatar } from '../atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
+import { ProfileService } from '../../services/profile.service';
+import { MobileSocketService } from '../../services/socket.service';
+
+export type SettingsPage =
+  | 'root'
+  | 'account'
+  | 'privacy'
+  | 'notifications'
+  | 'chat'
+  | 'groups'
+  | 'gaming'
+  | 'appearance'
+  | 'storage'
+  | 'help';
 
 export interface SettingsModalProps {
   visible: boolean;
   onClose: () => void;
   onPressNotifications?: () => void;
   onPressOpenThemesPage?: () => void;
+  initialPage?: SettingsPage;
+}
+
+interface SelectionOption {
+  label: string;
+  value: string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -30,31 +51,112 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onPressNotifications,
   onPressOpenThemesPage,
+  initialPage = 'root',
 }) => {
-  const { theme, themeId, appearanceMode, effectiveMode, setThemeId, setAppearanceMode } = useTheme();
+  const { theme, themeId, appearanceMode, setThemeId, setAppearanceMode } = useTheme();
   const { user, logout } = useAuth();
-  const activeMeta = THEME_METADATA.find((m) => m.id === themeId) || THEME_METADATA[0];
 
-  // Local preferences states
-  const [soundEffects, setSoundEffects] = useState(true);
-  const [hapticFeedback, setHapticFeedback] = useState(true);
-  const [autoRematchOffers, setAutoRematchOffers] = useState(true);
-  const [showOnlinePresence, setShowOnlinePresence] = useState(true);
-  const [allowGameChallenges, setAllowGameChallenges] = useState(true);
-  const [isForgotPasswordVisible, setIsForgotPasswordVisible] = useState(false);
+  const [activePage, setActivePage] = useState<SettingsPage>(initialPage);
 
-  // Notification states
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [gameInvitesAlert, setGameInvitesAlert] = useState(true);
-  const [turnAlerts, setTurnAlerts] = useState(true);
-  const [friendAlerts, setFriendAlerts] = useState(true);
-  const [showNotificationsList, setShowNotificationsList] = useState(false);
+  // Selection Modal state for dropdown options
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerTitle, setPickerTitle] = useState('');
+  const [pickerOptions, setPickerOptions] = useState<SelectionOption[]>([]);
+  const [pickerCurrentValue, setPickerCurrentValue] = useState('');
+  const [onSelectOption, setOnSelectOption] = useState<(val: string) => void>(() => () => {});
 
-  const appearanceOptions: { mode: AppearanceMode; label: string; icon: 'sun' | 'moon' | 'palette' }[] = [
-    { mode: 'system', label: 'System', icon: 'palette' },
-    { mode: 'light', label: 'Light', icon: 'sun' },
-    { mode: 'dark', label: 'Dark', icon: 'moon' },
-  ];
+  // Profile & Privacy states
+  const [onlinePrivacy, setOnlinePrivacy] = useState<'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'>('EVERYONE');
+  const [lastSeenPrivacy, setLastSeenPrivacy] = useState<'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'>('EVERYONE');
+  const [profilePhotoPrivacy, setProfilePhotoPrivacy] = useState<string>('Everyone');
+  const [aboutPrivacy, setAboutPrivacy] = useState<string>('Everyone');
+  const [statusPrivacy, setStatusPrivacy] = useState<string>('My Contacts');
+  const [readReceipts, setReadReceipts] = useState<boolean>(true);
+  const [typingIndicators, setTypingIndicators] = useState<boolean>(true);
+  const [disappearingMessages, setDisappearingMessages] = useState<string>('Off');
+  const [whoCanCallMe, setWhoCanCallMe] = useState<string>('Everyone');
+  const [whoCanVideoCallMe, setWhoCanVideoCallMe] = useState<string>('Everyone');
+
+  // Notifications states
+  const [doNotDisturb, setDoNotDisturb] = useState<boolean>(false);
+  const [quietHours, setQuietHours] = useState<boolean>(false);
+  const [messageNotifications, setMessageNotifications] = useState<boolean>(true);
+  const [groupNotifications, setGroupNotifications] = useState<boolean>(true);
+  const [mentionsAlert, setMentionsAlert] = useState<boolean>(true);
+  const [reactionNotifications, setReactionNotifications] = useState<boolean>(true);
+  const [showMessagePreview, setShowMessagePreview] = useState<boolean>(true);
+  const [notificationSound, setNotificationSound] = useState<string>('Default');
+  const [messageVibration, setMessageVibration] = useState<boolean>(true);
+  const [incomingCallNotifications, setIncomingCallNotifications] = useState<boolean>(true);
+  const [missedCallNotifications, setMissedCallNotifications] = useState<boolean>(true);
+  const [ringtone, setRingtone] = useState<string>('Default');
+  const [callVibration, setCallVibration] = useState<boolean>(true);
+
+  // Gaming & Gameplay preferences
+  const [soundEffects, setSoundEffects] = useState<boolean>(true);
+  const [hapticFeedback, setHapticFeedback] = useState<boolean>(true);
+  const [autoRematchOffers, setAutoRematchOffers] = useState<boolean>(true);
+  const [showOnlinePresence, setShowOnlinePresence] = useState<boolean>(true);
+  const [allowGameChallenges, setAllowGameChallenges] = useState<boolean>(true);
+
+  // Chat settings
+  const [enterIsSend, setEnterIsSend] = useState<boolean>(false);
+  const [mediaAutoDownload, setMediaAutoDownload] = useState<boolean>(true);
+
+  // Password modal
+  const [isForgotPasswordVisible, setIsForgotPasswordVisible] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (visible) {
+      setActivePage(initialPage || 'root');
+      ProfileService.fetchMyProfile()
+        .then((p) => {
+          if (p.readReceipts !== undefined) setReadReceipts(p.readReceipts);
+          if (p.onlinePrivacy) setOnlinePrivacy(p.onlinePrivacy as any);
+          if (p.lastSeenPrivacy) setLastSeenPrivacy(p.lastSeenPrivacy as any);
+        })
+        .catch(() => null);
+    }
+  }, [visible, initialPage]);
+
+  const handleToggleReadReceipts = async (value: boolean) => {
+    setReadReceipts(value);
+    try {
+      await ProfileService.updateMyProfile({ readReceipts: value });
+    } catch (err) {
+      console.warn('Failed to save read receipts:', err);
+    }
+  };
+
+  const handleUpdatePrivacy = async (
+    key: 'onlinePrivacy' | 'lastSeenPrivacy',
+    value: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'
+  ) => {
+    if (key === 'onlinePrivacy') setOnlinePrivacy(value);
+    if (key === 'lastSeenPrivacy') setLastSeenPrivacy(value);
+    try {
+      await ProfileService.updateMyProfile({ [key]: value });
+      MobileSocketService.notifyPresencePrivacyUpdate();
+    } catch (err) {
+      console.warn('Failed to save privacy update:', err);
+    }
+  };
+
+  const openPicker = (
+    title: string,
+    currentValue: string,
+    options: SelectionOption[],
+    onSelect: (val: string) => void
+  ) => {
+    setPickerTitle(title);
+    setPickerCurrentValue(currentValue);
+    setPickerOptions(options);
+    setOnSelectOption(() => (val: string) => {
+      onSelect(val);
+      setPickerVisible(false);
+    });
+    setPickerVisible(true);
+  };
 
   const handleSignOut = () => {
     Alert.alert(
@@ -74,176 +176,970 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   };
 
+  const handleBack = () => {
+    if (activePage !== 'root') {
+      setActivePage('root');
+    } else {
+      onClose();
+    }
+  };
+
+  const formatPrivacyLabel = (key: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY') => {
+    if (key === 'EVERYONE') return 'Everyone';
+    if (key === 'MY_FRIENDS') return 'My Contacts';
+    return 'Nobody';
+  };
+
   return (
     <>
       <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}>
-        <SafeAreaView style={styles.sheetContainer}>
-          <View
-            style={[
-              styles.content,
-              {
-                backgroundColor: theme.colors.background,
-                borderTopLeftRadius: theme.radius.sheet,
-                borderTopRightRadius: theme.radius.sheet,
-                borderColor: theme.colors.border,
-              },
-              theme.shadows.modal,
-            ]}
-          >
-            {/* Grab Handle */}
-            <View style={styles.grabHandleWrapper}>
-              <View
-                style={[
-                  styles.grabHandle,
-                  { backgroundColor: theme.colors.border },
-                ]}
-              />
-            </View>
-
-            {/* Header */}
+        visible={visible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={handleBack}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.container}>
+            {/* =========================================================================
+                HEADER BAR WITH GAMING DOODLE WATERMARKS
+               ========================================================================= */}
             <View style={styles.header}>
-              <View style={styles.headerTitleRow}>
-                <View
-                  style={[
-                    styles.settingsHeaderIcon,
-                    { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Icon name="settings" size={20} color={theme.colors.primary} />
-                </View>
-                <View>
-                  <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
-                    Platform Settings
-                  </Text>
-                  <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
-                    Theme, appearance & game controls
-                  </Text>
-                </View>
-              </View>
-              <IconButton
-                icon="close"
-                size={36}
-                iconSize={18}
-                variant="tinted"
-                onPress={onClose}
-                accessibilityLabel="Close settings modal"
-              />
+              <TouchableOpacity
+                onPress={handleBack}
+                style={styles.backButton}
+                activeOpacity={0.7}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel="Back"
+              >
+                <Icon name="chevronLeft" size={24} color="#FFFFFF" strokeWidth={2.5} />
+              </TouchableOpacity>
+
+              <Text style={styles.headerTitle}>
+                {activePage === 'root' && 'Settings'}
+                {activePage === 'privacy' && 'Privacy & Security'}
+                {activePage === 'notifications' && 'Notifications'}
+                {activePage === 'account' && 'Account'}
+                {activePage === 'chat' && 'Chat'}
+                {activePage === 'groups' && 'Groups'}
+                {activePage === 'gaming' && 'Gaming'}
+                {activePage === 'appearance' && 'Appearance'}
+                {activePage === 'storage' && 'Storage and Data'}
+                {activePage === 'help' && 'Help & Support'}
+              </Text>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-              {/* SECTION 1: APPEARANCE & THEMES */}
-              <View style={styles.sectionHeader}>
-                <Icon name="palette" size={16} color={theme.colors.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Appearance & Themes
-                </Text>
-              </View>
-
-              {/* Mode Segmented Control (System, Light, Dark) */}
-              <Text style={[styles.subSectionTitle, { color: theme.colors.textSecondary }]}>
-                Display Mode
-              </Text>
-              <View
-                style={[
-                  styles.modeContainer,
-                  {
-                    backgroundColor: theme.colors.surfaceElevated,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                {appearanceOptions.map((opt) => {
-                  const isSelected = appearanceMode === opt.mode;
-                  return (
-                    <TouchableOpacity
-                      key={opt.mode}
-                      onPress={() => setAppearanceMode(opt.mode)}
-                      style={[
-                        styles.modeOption,
-                        isSelected && {
-                          backgroundColor: theme.colors.surface,
-                          borderColor: theme.colors.border,
-                          borderWidth: 1,
-                        },
-                      ]}
-                      activeOpacity={0.8}
-                    >
-                      <Icon
-                        name={opt.icon}
-                        size={16}
-                        color={isSelected ? theme.colors.primary : theme.colors.textSecondary}
-                        strokeWidth={2}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              {/* =========================================================================
+                  ROOT PAGE (SCREEN 1)
+                 ========================================================================= */}
+              {activePage === 'root' && (
+                <>
+                  {/* USER PROFILE CARD WITH COPPER GRADIENT & DECORATIVE GRAPHIC */}
+                  <TouchableOpacity
+                    style={styles.profileCard}
+                    activeOpacity={0.82}
+                    onPress={() => setActivePage('account')}
+                  >
+                    {/* Transparent gaming graphic on right side */}
+                    <View style={styles.cardGraphicWrap} pointerEvents="none">
+                      <Image
+                        source={require('../../assets/images/settings_card_graphic.png')}
+                        style={styles.cardGraphic}
+                        resizeMode="contain"
                       />
-                      <Text
-                        style={[
-                          styles.modeText,
-                          {
-                            color: isSelected ? theme.colors.textPrimary : theme.colors.textSecondary,
-                            fontWeight: isSelected ? '700' : '500',
-                          },
-                        ]}
-                      >
-                        {opt.label}
+                    </View>
+
+                    <View style={styles.avatarWrap}>
+                      <Avatar
+                        displayName={user?.displayName || 'Player'}
+                        avatarUrl={user?.avatarUrl}
+                        size="lg"
+                      />
+                      <View style={styles.onlineBadgeDot} />
+                    </View>
+
+                    <View style={styles.profileMeta}>
+                      <Text style={styles.profileDisplayName} numberOfLines={1}>
+                        {user?.displayName || 'Anirudh Sharma'}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                      <Text style={styles.profileUsername} numberOfLines={1}>
+                        @{user?.username || 'anirudh.sharma'}
+                      </Text>
+                    </View>
 
-              {/* Dedicated Interactive Themes Picker */}
-              <Text style={[styles.subSectionTitle, { color: theme.colors.textSecondary, marginTop: 18 }]}>
-                Color Themes
-              </Text>
+                    <Icon name="chevronRight" size={20} color="#D8893F" strokeWidth={2.5} />
+                  </TouchableOpacity>
 
-              <View style={styles.themesGrid}>
-                {THEME_METADATA.map((item) => {
-                  const isSelected = themeId === item.id;
-                  return (
+                  {/* 9 MAIN SETTINGS NAVIGATION ROWS */}
+                  <View style={styles.menuList}>
+                    {/* 1. Account */}
                     <TouchableOpacity
-                      key={item.id}
-                      onPress={() => setThemeId(item.id)}
-                      activeOpacity={0.78}
-                      style={[
-                        styles.themeItemCard,
-                        {
-                          backgroundColor: theme.colors.surfaceElevated,
-                          borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                          borderWidth: isSelected ? 2 : 1,
-                        },
-                        isSelected && theme.shadows.soft,
-                      ]}
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('account')}
                     >
-                      <View style={styles.themeItemLeft}>
-                        <View style={styles.themeColorCircles}>
-                          <View style={[styles.paletteCircle, { backgroundColor: item.previewColor }]} />
-                          <View style={[styles.paletteCircle, { backgroundColor: item.accentColor, marginLeft: -7 }]} />
+                      <View style={[styles.squircleIcon, { backgroundColor: '#FF8A00' }]}>
+                        <Icon name="user" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Account</Text>
+                        <Text style={styles.menuRowDesc}>Profile, email, phone, password</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 2. Privacy & Security */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('privacy')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#2196F3' }]}>
+                        <Icon name="shield" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Privacy & Security</Text>
+                        <Text style={styles.menuRowDesc}>Last seen, read receipts, blocked users</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 3. Notifications */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('notifications')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#FF4B4B' }]}>
+                        <Icon name="bell" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Notifications</Text>
+                        <Text style={styles.menuRowDesc}>Messages, calls, groups, sounds</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 4. Chat */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('chat')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#25D366' }]}>
+                        <Icon name="chat" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Chat</Text>
+                        <Text style={styles.menuRowDesc}>Theme, wallpapers, media</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 5. Groups */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('groups')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#9C27B0' }]}>
+                        <Icon name="users" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Groups</Text>
+                        <Text style={styles.menuRowDesc}>Manage groups, permissions</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 6. Gaming */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('gaming')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#FFB300' }]}>
+                        <Icon name="gamepad" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Gaming</Text>
+                        <Text style={styles.menuRowDesc}>Game preferences, in-game settings</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 7. Appearance */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('appearance')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#00BCD4' }]}>
+                        <Icon name="palette" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Appearance</Text>
+                        <Text style={styles.menuRowDesc}>Theme, language, font size</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 8. Storage and Data */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('storage')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#607D8B' }]}>
+                        <Icon name="archive" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Storage and Data</Text>
+                        <Text style={styles.menuRowDesc}>Manage storage, auto-download</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+
+                    {/* 9. Help & Support */}
+                    <TouchableOpacity
+                      style={styles.menuRow}
+                      activeOpacity={0.65}
+                      onPress={() => setActivePage('help')}
+                    >
+                      <View style={[styles.squircleIcon, { backgroundColor: '#FF4081' }]}>
+                        <Icon name="award" size={20} color="#FFFFFF" strokeWidth={2.2} />
+                      </View>
+                      <View style={styles.menuRowContent}>
+                        <Text style={styles.menuRowTitle}>Help & Support</Text>
+                        <Text style={styles.menuRowDesc}>FAQ, contact us, app info</Text>
+                      </View>
+                      <Icon name="chevronRight" size={18} color="#4B5565" />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+
+              {/* =========================================================================
+                  PAGE 2: PRIVACY & SECURITY (SCREEN 2)
+                 ========================================================================= */}
+              {activePage === 'privacy' && (
+                <View style={styles.subPageContainer}>
+                  {/* GROUP 1: PROFILE PRIVACY */}
+                  <Text style={styles.sectionHeaderLabel}>PROFILE PRIVACY</Text>
+
+                  {/* Last Seen */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can See My Last Seen',
+                        formatPrivacyLabel(lastSeenPrivacy),
+                        [
+                          { label: 'Everyone', value: 'EVERYONE' },
+                          { label: 'My Contacts', value: 'MY_FRIENDS' },
+                          { label: 'Nobody', value: 'NOBODY' },
+                        ],
+                        (val) => handleUpdatePrivacy('lastSeenPrivacy', val as any)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA726' }]}>
+                      <Icon name="eye" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Last Seen</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{formatPrivacyLabel(lastSeenPrivacy)}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Profile Photo */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can See My Profile Photo',
+                        profilePhotoPrivacy,
+                        [
+                          { label: 'Everyone', value: 'Everyone' },
+                          { label: 'My Contacts', value: 'My Contacts' },
+                          { label: 'Nobody', value: 'Nobody' },
+                        ],
+                        (val) => setProfilePhotoPrivacy(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA726' }]}>
+                      <Icon name="image" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Profile Photo</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{profilePhotoPrivacy}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* About */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can See About Info',
+                        aboutPrivacy,
+                        [
+                          { label: 'Everyone', value: 'Everyone' },
+                          { label: 'My Contacts', value: 'My Contacts' },
+                          { label: 'Nobody', value: 'Nobody' },
+                        ],
+                        (val) => setAboutPrivacy(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA726' }]}>
+                      <Icon name="info" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>About</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{aboutPrivacy}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Status */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can See My Status',
+                        statusPrivacy,
+                        [
+                          { label: 'Everyone', value: 'Everyone' },
+                          { label: 'My Contacts', value: 'My Contacts' },
+                          { label: 'Nobody', value: 'Nobody' },
+                        ],
+                        (val) => setStatusPrivacy(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA726' }]}>
+                      <Icon name="users" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Status</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{statusPrivacy}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* GROUP 2: MESSAGING PRIVACY */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>MESSAGING PRIVACY</Text>
+
+                  {/* Read Receipts (Blue Ticks) */}
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#1E88E5' }]}>
+                      <Icon name="doubleCheck" size={19} color="#FFFFFF" strokeWidth={2.4} />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Read Receipts (Blue Ticks)</Text>
+                      <Text style={styles.subRowDesc}>Show blue ticks when you read messages</Text>
+                    </View>
+                    <Switch
+                      value={readReceipts}
+                      onValueChange={handleToggleReadReceipts}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {/* Typing Indicators */}
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#1E88E5' }]}>
+                      <Icon name="chat" size={19} color="#FFFFFF" strokeWidth={2.4} />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Typing Indicators</Text>
+                      <Text style={styles.subRowDesc}>Show when you're typing</Text>
+                    </View>
+                    <Switch
+                      value={typingIndicators}
+                      onValueChange={setTypingIndicators}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {/* Disappearing Messages */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Disappearing Messages Timer',
+                        disappearingMessages,
+                        [
+                          { label: 'Off', value: 'Off' },
+                          { label: '24 Hours', value: '24 Hours' },
+                          { label: '7 Days', value: '7 Days' },
+                          { label: '90 Days', value: '90 Days' },
+                        ],
+                        (val) => setDisappearingMessages(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA726' }]}>
+                      <Icon name="clock" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Disappearing Messages</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{disappearingMessages}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* GROUP 3: CALL PRIVACY */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>CALL PRIVACY</Text>
+
+                  {/* Who Can Call Me */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can Call Me',
+                        whoCanCallMe,
+                        [
+                          { label: 'Everyone', value: 'Everyone' },
+                          { label: 'My Contacts', value: 'My Contacts' },
+                          { label: 'Nobody', value: 'Nobody' },
+                        ],
+                        (val) => setWhoCanCallMe(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="volume" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Who Can Call Me</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{whoCanCallMe}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Who Can Video Call Me */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can Video Call Me',
+                        whoCanVideoCallMe,
+                        [
+                          { label: 'Everyone', value: 'Everyone' },
+                          { label: 'My Contacts', value: 'My Contacts' },
+                          { label: 'Nobody', value: 'Nobody' },
+                        ],
+                        (val) => setWhoCanVideoCallMe(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="videoCall" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Who Can Video Call Me</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{whoCanVideoCallMe}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* GROUP 4: SAFETY */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>SAFETY</Text>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Blocked Users', 'You have no blocked users.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="ban" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Blocked Users</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Report a User', 'To report player violations, contact support or use in-chat report.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="shield" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Report a User</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  {/* Password & Reset */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => setIsForgotPasswordVisible(true)}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FF7A00' }]}>
+                      <Icon name="lock" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Password & Reset</Text>
+                      <Text style={styles.subRowDesc}>Change or reset your password</Text>
+                    </View>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* =========================================================================
+                  PAGE 3: NOTIFICATIONS (SCREEN 3)
+                 ========================================================================= */}
+              {activePage === 'notifications' && (
+                <View style={styles.subPageContainer}>
+                  {/* GROUP 1: GENERAL */}
+                  <Text style={styles.sectionHeaderLabel}>GENERAL</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="bell" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Do Not Disturb</Text>
+                      <Text style={styles.subRowDesc}>Mute all notifications</Text>
+                    </View>
+                    <Switch
+                      value={doNotDisturb}
+                      onValueChange={setDoNotDisturb}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#7E57C2' }]}>
+                      <Icon name="clock" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Quiet Hours</Text>
+                      <Text style={styles.subRowDesc}>10:00 PM - 7:00 AM</Text>
+                    </View>
+                    <Switch
+                      value={quietHours}
+                      onValueChange={setQuietHours}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {/* GROUP 2: MESSAGES */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>MESSAGES</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#43A047' }]}>
+                      <Icon name="chat" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Message Notifications</Text>
+                    <Switch
+                      value={messageNotifications}
+                      onValueChange={setMessageNotifications}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#43A047' }]}>
+                      <Icon name="users" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Group Notifications</Text>
+                    <Switch
+                      value={groupNotifications}
+                      onValueChange={setGroupNotifications}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="award" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Mentions</Text>
+                      <Text style={styles.subRowDesc}>Notify when you are mentioned</Text>
+                    </View>
+                    <Switch
+                      value={mentionsAlert}
+                      onValueChange={setMentionsAlert}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFA000' }]}>
+                      <Icon name="heart" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Reaction Notifications</Text>
+                      <Text style={styles.subRowDesc}>Notify for message reactions</Text>
+                    </View>
+                    <Switch
+                      value={reactionNotifications}
+                      onValueChange={setReactionNotifications}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#00BCD4' }]}>
+                      <Icon name="eye" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Show Message Preview</Text>
+                    <Switch
+                      value={showMessagePreview}
+                      onValueChange={setShowMessagePreview}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Notification Sound',
+                        notificationSound,
+                        [
+                          { label: 'Default', value: 'Default' },
+                          { label: 'Chime', value: 'Chime' },
+                          { label: 'Bell', value: 'Bell' },
+                          { label: 'Harp', value: 'Harp' },
+                        ],
+                        (val) => setNotificationSound(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#8E24AA' }]}>
+                      <Icon name="volume" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Notification Sound</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{notificationSound}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#7E57C2' }]}>
+                      <Icon name="target" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Vibration</Text>
+                    <Switch
+                      value={messageVibration}
+                      onValueChange={setMessageVibration}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  {/* GROUP 3: CALLS */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>CALLS</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#43A047' }]}>
+                      <Icon name="volume" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Incoming Call Notifications</Text>
+                    <Switch
+                      value={incomingCallNotifications}
+                      onValueChange={setIncomingCallNotifications}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#43A047' }]}>
+                      <Icon name="videoCall" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Missed Call Notifications</Text>
+                    <Switch
+                      value={missedCallNotifications}
+                      onValueChange={setMissedCallNotifications}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Ringtone',
+                        ringtone,
+                        [
+                          { label: 'Default', value: 'Default' },
+                          { label: 'Guitar', value: 'Guitar' },
+                          { label: 'Electronic', value: 'Electronic' },
+                          { label: 'Classic', value: 'Classic' },
+                        ],
+                        (val) => setRingtone(val)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#8E24AA' }]}>
+                      <Icon name="volume" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Ringtone</Text>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{ringtone}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#7E57C2' }]}>
+                      <Icon name="target" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Vibration</Text>
+                    <Switch
+                      value={callVibration}
+                      onValueChange={setCallVibration}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* =========================================================================
+                  PAGE 4: ACCOUNT
+                 ========================================================================= */}
+              {activePage === 'account' && (
+                <View style={styles.subPageContainer}>
+                  <View style={styles.accountHeaderBox}>
+                    <Avatar
+                      displayName={user?.displayName || 'Player'}
+                      avatarUrl={user?.avatarUrl}
+                      size="xl"
+                    />
+                    <Text style={styles.accountNameBig}>{user?.displayName || 'Anirudh Sharma'}</Text>
+                    <Text style={styles.accountUserHandle}>@{user?.username || 'anirudh.sharma'}</Text>
+                    {user?.email && <Text style={styles.accountEmailText}>{user.email}</Text>}
+                  </View>
+
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 20 }]}>SECURITY & LOGIN</Text>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => setIsForgotPasswordVisible(true)}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FF8A00' }]}>
+                      <Icon name="lock" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Change Password</Text>
+                      <Text style={styles.subRowDesc}>Update via email verification code</Text>
+                    </View>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>PLATFORM VERIFICATION</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="shield" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Verified Gaming Platform</Text>
+                      <Text style={styles.subRowDesc}>Zero real money stakes • Safe community</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#607D8B' }]}>
+                      <Icon name="info" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>App Version</Text>
+                      <Text style={styles.subRowDesc}>v1.19.0 (Stable Release)</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>SESSION</Text>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={handleSignOut}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="logOut" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={[styles.subRowTitle, { color: '#FF4B4B' }]}>Sign Out of Account</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* =========================================================================
+                  PAGE 5: GAMING
+                 ========================================================================= */}
+              {activePage === 'gaming' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>GAMEPLAY PREFERENCES</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="volume" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Game Sound Effects</Text>
+                      <Text style={styles.subRowDesc}>Board move, dice roll & win sounds</Text>
+                    </View>
+                    <Switch
+                      value={soundEffects}
+                      onValueChange={setSoundEffects}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FFB300' }]}>
+                      <Icon name="target" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Haptic Feedback</Text>
+                      <Text style={styles.subRowDesc}>Tactile vibration on turn timers & moves</Text>
+                    </View>
+                    <Switch
+                      value={hapticFeedback}
+                      onValueChange={setHapticFeedback}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#2196F3' }]}>
+                      <Icon name="refresh" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Instant Rematch Offers</Text>
+                      <Text style={styles.subRowDesc}>Quick rematch banner on game completion</Text>
+                    </View>
+                    <Switch
+                      value={autoRematchOffers}
+                      onValueChange={setAutoRematchOffers}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#9C27B0' }]}>
+                      <Icon name="gamepad" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>In-Game Direct Challenges</Text>
+                      <Text style={styles.subRowDesc}>Receive live invitations in chat</Text>
+                    </View>
+                    <Switch
+                      value={allowGameChallenges}
+                      onValueChange={setAllowGameChallenges}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="eye" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Online Presence Broadcast</Text>
+                      <Text style={styles.subRowDesc}>Broadcast playing status to friends</Text>
+                    </View>
+                    <Switch
+                      value={showOnlinePresence}
+                      onValueChange={setShowOnlinePresence}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* =========================================================================
+                  PAGE 6: APPEARANCE
+                 ========================================================================= */}
+              {activePage === 'appearance' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>DISPLAY MODE</Text>
+
+                  {[
+                    { mode: 'system' as AppearanceMode, label: 'System Default', icon: 'palette' as const },
+                    { mode: 'light' as AppearanceMode, label: 'Light Mode', icon: 'sun' as const },
+                    { mode: 'dark' as AppearanceMode, label: 'Dark Mode', icon: 'moon' as const },
+                  ].map((opt) => {
+                    const isSelected = appearanceMode === opt.mode;
+                    return (
+                      <TouchableOpacity
+                        key={opt.mode}
+                        style={styles.subRow}
+                        activeOpacity={0.65}
+                        onPress={() => setAppearanceMode(opt.mode)}
+                      >
+                        <View style={[styles.squircleIcon, { backgroundColor: '#00BCD4' }]}>
+                          <Icon name={opt.icon} size={19} color="#FFFFFF" />
                         </View>
-                        <View style={styles.themeItemMeta}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Text
-                              style={[
-                                styles.themeItemName,
-                                {
-                                  color: theme.colors.textPrimary,
-                                  fontWeight: isSelected ? '700' : '600',
-                                },
-                              ]}
-                            >
-                              {item.name}
-                            </Text>
-                            {isSelected && (
-                              <View style={[styles.activeThemeMiniBadge, { backgroundColor: theme.colors.primary + '20' }]}>
-                                <Text style={[styles.activeThemeMiniText, { color: theme.colors.primary }]}>Active</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={[styles.themeItemDesc, { color: theme.colors.textSecondary }]}>
+                        <Text style={[styles.subRowTitle, isSelected && { color: '#F58220', fontWeight: '700' }]}>
+                          {opt.label}
+                        </Text>
+                        {isSelected && <Icon name="check" size={18} color="#F58220" strokeWidth={2.5} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>COLOR PALETTES</Text>
+
+                  {THEME_METADATA.map((item) => {
+                    const isSelected = themeId === item.id;
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={styles.subRow}
+                        activeOpacity={0.65}
+                        onPress={() => setThemeId(item.id)}
+                      >
+                        <View style={styles.paletteCircleWrap}>
+                          <View style={[styles.colorCircle, { backgroundColor: item.previewColor }]} />
+                          <View style={[styles.colorCircle, { backgroundColor: item.accentColor, marginLeft: -8 }]} />
+                        </View>
+                        <View style={styles.subRowTextCol}>
+                          <Text style={[styles.subRowTitle, isSelected && { color: '#F58220', fontWeight: '700' }]}>
+                            {item.name}
+                          </Text>
+                          <Text style={styles.subRowDesc}>
                             {item.id === 'midnightNeutral' ? 'Modern Slate & Obsidian' :
                              item.id === 'coralMarble' ? 'Vibrant Coral & Rose' :
                              item.id === 'forestGold' ? 'Emerald Forest & Gold' :
@@ -251,701 +1147,520 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                              'Deep Twilight & Indigo'}
                           </Text>
                         </View>
-                      </View>
+                        {isSelected && <Icon name="check" size={18} color="#F58220" strokeWidth={2.5} />}
+                      </TouchableOpacity>
+                    );
+                  })}
 
-                      <View
-                        style={[
-                          styles.themeRadioCircle,
-                          {
-                            borderColor: isSelected ? theme.colors.primary : theme.colors.border,
-                            backgroundColor: isSelected ? theme.colors.primary : 'transparent',
-                          },
-                        ]}
-                      >
-                        {isSelected && (
-                          <Icon name="check" size={12} color={theme.colors.textOnPrimary} strokeWidth={3} />
-                        )}
-                      </View>
+                  {onPressOpenThemesPage && (
+                    <TouchableOpacity
+                      onPress={() => {
+                        onClose();
+                        onPressOpenThemesPage();
+                      }}
+                      style={styles.studioLinkBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Icon name="palette" size={18} color="#F58220" />
+                      <Text style={styles.studioLinkText}>Open Dedicated Theme Studio →</Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {onPressOpenThemesPage && (
-                <TouchableOpacity
-                  onPress={() => {
-                    onClose();
-                    onPressOpenThemesPage();
-                  }}
-                  style={[
-                    styles.openStudioSecondaryBtn,
-                    {
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                    },
-                  ]}
-                  activeOpacity={0.75}
-                >
-                  <Icon name="palette" size={15} color={theme.colors.primary} />
-                  <Text style={[styles.openStudioSecondaryText, { color: theme.colors.primary }]}>
-                    Open Dedicated Theme Studio →
-                  </Text>
-                </TouchableOpacity>
+                  )}
+                </View>
               )}
 
-              {/* SECTION 2: NOTIFICATIONS & ALERTS */}
-              <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                <Icon name="bell" size={16} color={theme.colors.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Notifications & Alerts
-                </Text>
-              </View>
+              {/* =========================================================================
+                  PAGE 7: CHAT
+                 ========================================================================= */}
+              {activePage === 'chat' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>MESSAGING SETTINGS</Text>
 
-
-
-              {/* Notification Preference Toggles Group */}
-              <View
-                style={[
-                  styles.settingsGroup,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, marginTop: 10 },
-                ]}
-              >
-                {/* Push Notifications Master Toggle */}
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Push Notifications
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Receive alerts on lockscreen and banners
-                    </Text>
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#25D366' }]}>
+                      <Icon name="chat" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Enter Is Send</Text>
+                      <Text style={styles.subRowDesc}>Enter key dispatches chat message</Text>
+                    </View>
+                    <Switch
+                      value={enterIsSend}
+                      onValueChange={setEnterIsSend}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
                   </View>
-                  <Switch
-                    value={pushNotifications}
-                    onValueChange={setPushNotifications}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={pushNotifications ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
 
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-
-                {/* Game Invites Toggle */}
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Game Match Invites
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Instant alerts when invited to live multiplayer rooms
-                    </Text>
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#2196F3' }]}>
+                      <Icon name="image" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Media Visibility</Text>
+                      <Text style={styles.subRowDesc}>Automatically download incoming media</Text>
+                    </View>
+                    <Switch
+                      value={mediaAutoDownload}
+                      onValueChange={setMediaAutoDownload}
+                      trackColor={{ false: '#222938', true: '#F58220' }}
+                      thumbColor="#FFFFFF"
+                    />
                   </View>
-                  <Switch
-                    value={gameInvitesAlert}
-                    onValueChange={setGameInvitesAlert}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={gameInvitesAlert ? theme.colors.surface : theme.colors.textSecondary}
-                  />
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Chat Wallpaper', 'Wallpapers are customizable in Theme Studio.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FF8A00' }]}>
+                      <Icon name="palette" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Chat Wallpaper</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
                 </View>
+              )}
 
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
+              {/* =========================================================================
+                  PAGE 8: GROUPS
+                 ========================================================================= */}
+              {activePage === 'groups' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>GROUP PERMISSIONS</Text>
 
-                {/* Turn Clocks Toggle */}
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Turn Reminders & Clocks
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Vibration alerts when your turn timer begins
-                    </Text>
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Group Invites', 'Anyone in your friends list can invite you to a group.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#9C27B0' }]}>
+                      <Icon name="users" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Who Can Add Me to Groups</Text>
+                      <Text style={styles.subRowDesc}>My Friends Only</Text>
+                    </View>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Group Notifications', 'Manage per-group sound and mute states from the group conversation header.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#43A047' }]}>
+                      <Icon name="bell" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Group Notification Rules</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* =========================================================================
+                  PAGE 9: STORAGE AND DATA
+                 ========================================================================= */}
+              {activePage === 'storage' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>DATA USAGE</Text>
+
+                  <View style={styles.subRow}>
+                    <View style={[styles.squircleIcon, { backgroundColor: '#607D8B' }]}>
+                      <Icon name="archive" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Storage Used</Text>
+                      <Text style={styles.subRowDesc}>38.4 MB in cache & images</Text>
+                    </View>
                   </View>
-                  <Switch
-                    value={turnAlerts}
-                    onValueChange={setTurnAlerts}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={turnAlerts ? theme.colors.surface : theme.colors.textSecondary}
-                  />
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Clear Cache', 'Cache cleared successfully.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#E53935' }]}>
+                      <Icon name="refresh" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={[styles.subRowTitle, { color: '#FF4B4B' }]}>Clear Temporary Cache</Text>
+                  </TouchableOpacity>
                 </View>
+              )}
 
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
+              {/* =========================================================================
+                  PAGE 10: HELP & SUPPORT
+                 ========================================================================= */}
+              {activePage === 'help' && (
+                <View style={styles.subPageContainer}>
+                  <Text style={styles.sectionHeaderLabel}>ASSISTANCE</Text>
 
-                {/* Friend Requests Toggle */}
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Friend Requests & Social
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Notifications for new friendship requests
-                    </Text>
-                  </View>
-                  <Switch
-                    value={friendAlerts}
-                    onValueChange={setFriendAlerts}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={friendAlerts ? theme.colors.surface : theme.colors.textSecondary}
-                  />
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('FAQ', 'Frequently asked questions: Check our in-app game rules.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#FF4081' }]}>
+                      <Icon name="info" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Help Center & FAQ</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Contact Us', 'Reach us anytime at support@marviegameapp.com')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#2196F3' }]}>
+                      <Icon name="chat" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Contact Support</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() => Alert.alert('Terms & Privacy', 'Marvie Platform is committed to user safety and GDPR compliance.')}
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#4CAF50' }]}>
+                      <Icon name="shield" size={19} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.subRowTitle}>Terms & Privacy Policy</Text>
+                    <Icon name="chevronRight" size={16} color="#556275" />
+                  </TouchableOpacity>
                 </View>
-              </View>
-
-              {/* SECTION 3: AUDIO & GAMEPLAY FX */}
-              <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                <Icon name="target" size={16} color={theme.colors.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Gameplay & Audio
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.settingsGroup,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-              >
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Game Sound Effects
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Authoritative move, roll & check sounds
-                    </Text>
-                  </View>
-                  <Switch
-                    value={soundEffects}
-                    onValueChange={setSoundEffects}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={soundEffects ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
-
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Haptic Feedback
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Vibration impulses on turns & captures
-                    </Text>
-                  </View>
-                  <Switch
-                    value={hapticFeedback}
-                    onValueChange={setHapticFeedback}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={hapticFeedback ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
-
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Instant Rematch Offers
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Show one-tap rematch dialog upon game conclusion
-                    </Text>
-                  </View>
-                  <Switch
-                    value={autoRematchOffers}
-                    onValueChange={setAutoRematchOffers}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={autoRematchOffers ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
-              </View>
-
-              {/* SECTION 3: PRIVACY & PASSWORDS */}
-              <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                <Icon name="lock" size={16} color={theme.colors.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Privacy & Passwords
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.settingsGroup,
-                  { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                ]}
-              >
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Online Presence Status
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Broadcast online activity to friends
-                    </Text>
-                  </View>
-                  <Switch
-                    value={showOnlinePresence}
-                    onValueChange={setShowOnlinePresence}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={showOnlinePresence ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
-
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-
-                <View style={styles.settingItemRow}>
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      In-Game Direct Challenges
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Receive challenge invites in direct messages
-                    </Text>
-                  </View>
-                  <Switch
-                    value={allowGameChallenges}
-                    onValueChange={setAllowGameChallenges}
-                    trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-                    thumbColor={allowGameChallenges ? theme.colors.surface : theme.colors.textSecondary}
-                  />
-                </View>
-
-                <View style={[styles.settingDivider, { backgroundColor: theme.colors.border }]} />
-
-                <TouchableOpacity
-                  style={styles.settingItemRow}
-                  onPress={() => setIsForgotPasswordVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.settingItemMeta}>
-                    <Text style={[styles.settingItemLabel, { color: theme.colors.textPrimary }]}>
-                      Forgot Password / Reset Password
-                    </Text>
-                    <Text style={[styles.settingItemDesc, { color: theme.colors.textSecondary }]}>
-                      Send a verification code to reset your account password
-                    </Text>
-                  </View>
-                  <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
-                </TouchableOpacity>
-              </View>
-
-              {/* SECTION 4: ACCOUNT & PLATFORM COMPLIANCE */}
-              <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-                <Icon name="shield" size={16} color={theme.colors.primary} />
-                <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-                  Account & Platform
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.accountCard,
-                  {
-                    backgroundColor: theme.colors.surfaceElevated,
-                    borderColor: theme.colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.accountUserRow}>
-                  <Avatar
-                    displayName={user?.displayName || 'Player'}
-                    avatarUrl={user?.avatarUrl}
-                    size="md"
-                    status="online"
-                  />
-                  <View style={styles.accountUserMeta}>
-                    <Text style={[styles.accountDisplayName, { color: theme.colors.textPrimary }]}>
-                      {user?.displayName || 'Player'}
-                    </Text>
-                    <Text style={[styles.accountUsername, { color: theme.colors.textSecondary }]}>
-                      @{user?.username || 'user'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Platform Compliance Badge */}
-                <View
-                  style={[
-                    styles.complianceBadge,
-                    { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-                  ]}
-                >
-                  <Icon name="shield" size={14} color={theme.colors.primary} />
-                  <Text style={[styles.complianceText, { color: theme.colors.textSecondary }]}>
-                    Verified Entertainment Gaming • Zero Real Money Stakes
-                  </Text>
-                </View>
-
-                <View style={styles.platformMetaRow}>
-                  <Text style={[styles.versionLabel, { color: theme.colors.textMuted }]}>
-                    App Version
-                  </Text>
-                  <Text style={[styles.versionValue, { color: theme.colors.textPrimary }]}>
-                    v1.19.0 (Marvie iOS Engine)
-                  </Text>
-                </View>
-
-                {/* Sign Out Button */}
-                <TouchableOpacity
-                  onPress={handleSignOut}
-                  style={[
-                    styles.signOutBtn,
-                    { borderColor: theme.colors.error + '55', backgroundColor: theme.colors.surface },
-                  ]}
-                  activeOpacity={0.8}
-                >
-                  <Icon name="logOut" size={16} color={theme.colors.error} />
-                  <Text style={[styles.signOutBtnText, { color: theme.colors.error }]}>
-                    Sign Out of Account
-                  </Text>
-                </TouchableOpacity>
-              </View>
+              )}
             </ScrollView>
           </View>
         </SafeAreaView>
-      </View>
-    </Modal>
+      </Modal>
 
-    <ForgotPasswordModal
-      visible={isForgotPasswordVisible}
-      onClose={() => setIsForgotPasswordVisible(false)}
-      initialIdentifier={user?.email || user?.username}
-    />
-  </>
+      {/* =========================================================================
+          DROPDOWN / OPTION SELECTION BOTTOM MODAL
+         ========================================================================= */}
+      <Modal
+        visible={pickerVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerBackdrop}
+          activeOpacity={1}
+          onPress={() => setPickerVisible(false)}
+        >
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitleText}>{pickerTitle}</Text>
+              <TouchableOpacity onPress={() => setPickerVisible(false)}>
+                <Icon name="close" size={20} color="#7E8B9B" />
+              </TouchableOpacity>
+            </View>
+
+            {pickerOptions.map((opt) => {
+              const isSelected =
+                pickerCurrentValue.toLowerCase() === opt.label.toLowerCase() ||
+                pickerCurrentValue.toLowerCase() === opt.value.toLowerCase();
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={styles.pickerRow}
+                  activeOpacity={0.7}
+                  onPress={() => onSelectOption(opt.value)}
+                >
+                  <Text
+                    style={[
+                      styles.pickerRowText,
+                      isSelected && { color: '#F58220', fontWeight: '700' },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  {isSelected && <Icon name="check" size={18} color="#F58220" strokeWidth={2.5} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <ForgotPasswordModal
+        visible={isForgotPasswordVisible}
+        onClose={() => setIsForgotPasswordVisible(false)}
+        initialIdentifier={user?.email || user?.username}
+      />
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  backdrop: {
+  safeArea: {
     flex: 1,
-    justifyContent: 'flex-end',
+    backgroundColor: '#0B0E14',
   },
-  sheetContainer: {
-    maxHeight: '92%',
-  },
-  content: {
-    borderTopWidth: 1,
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    maxHeight: '100%',
-  },
-  grabHandleWrapper: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  grabHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
+  container: {
+    flex: 1,
+    backgroundColor: '#0B0E14',
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? 14 : 8,
+    paddingBottom: 14,
+    position: 'relative',
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    marginRight: 6,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+
+  /* PROFILE CARD (COPPER / AMBER GRADIENT WITH CROWN WATERMARK) */
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(235, 115, 34, 0.12)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 115, 34, 0.32)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 4,
+    marginBottom: 18,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  cardGraphicWrap: {
+    position: 'absolute',
+    right: -10,
+    top: -8,
+    bottom: -8,
+    width: 155,
+  },
+  cardGraphic: {
+    width: '100%',
+    height: '100%',
+    opacity: 0.22,
+  },
+  avatarWrap: {
+    position: 'relative',
+    marginRight: 14,
+  },
+  onlineBadgeDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#25D366',
+    borderWidth: 2,
+    borderColor: '#0B0E14',
+  },
+  profileMeta: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  profileDisplayName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  profileUsername: {
+    fontSize: 13,
+    color: '#D8893F',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+
+  /* ROOT MENU LIST */
+  menuList: {
+    paddingTop: 4,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  squircleIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  menuRowContent: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  menuRowTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
+  },
+  menuRowDesc: {
+    fontSize: 13,
+    color: '#7E8B9B',
+    marginTop: 2,
+  },
+
+  /* SUB-PAGES */
+  subPageContainer: {
+    paddingTop: 4,
+  },
+  sectionHeaderLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6A788A',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  subRowTitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  subRowTextCol: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  subRowDesc: {
+    fontSize: 12,
+    color: '#7E8B9B',
+    marginTop: 2,
+  },
+  subRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  subRowValue: {
+    fontSize: 14,
+    color: '#8E9AA8',
+    fontWeight: '500',
+  },
+
+  /* ACCOUNT DETAILS SPECIFIC */
+  accountHeaderBox: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  accountNameBig: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 12,
+  },
+  accountUserHandle: {
+    fontSize: 14,
+    color: '#D8893F',
+    marginTop: 3,
+  },
+  accountEmailText: {
+    fontSize: 13,
+    color: '#7E8B9B',
+    marginTop: 2,
+  },
+
+  /* PALETTE CIRCLES */
+  paletteCircleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  colorCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#0B0E14',
+  },
+  studioLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    marginTop: 16,
+  },
+  studioLinkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#F58220',
+  },
+
+  /* SELECTION PICKER SHEET MODAL */
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: '#121620',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 36,
+  },
+  pickerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  settingsHeaderIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  subtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  scroll: {
-    paddingBottom: 36,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  subSectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  modeContainer: {
-    flexDirection: 'row',
-    borderRadius: 14,
-    padding: 4,
-    borderWidth: 1,
-  },
-  modeOption: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  modeText: {
-    fontSize: 13,
-    marginLeft: 6,
-  },
-  themesGrid: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  themeItemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 14,
-  },
-  themeItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  themeColorCircles: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  paletteCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  themeItemMeta: {
-    flex: 1,
-  },
-  themeItemName: {
-    fontSize: 14,
-  },
-  activeThemeMiniBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  activeThemeMiniText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  themeItemDesc: {
-    fontSize: 11,
-    marginTop: 2,
-  },
-  themeRadioCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-  },
-  openStudioSecondaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 4,
-    marginBottom: 10,
-  },
-  openStudioSecondaryText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  settingsGroup: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    marginBottom: 10,
-  },
-  settingItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-  },
-  settingItemMeta: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  settingItemLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  settingItemDesc: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  settingDivider: {
-    height: 1,
-  },
-  accountCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    padding: 16,
-    marginTop: 4,
-  },
-  accountUserRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
-  },
-  accountUserMeta: {
-    flex: 1,
-  },
-  accountDisplayName: {
+  pickerTitleText: {
     fontSize: 16,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
-  accountUsername: {
-    fontSize: 13,
-    marginTop: 1,
-  },
-  complianceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-  },
-  complianceText: {
-    fontSize: 11,
-    fontWeight: '500',
-    flex: 1,
-  },
-  platformMetaRow: {
+  pickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
-    marginBottom: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
-  versionLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  versionValue: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginTop: 4,
-  },
-  signOutBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  notificationCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  notificationCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 10,
-  },
-  notificationIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  notificationCardMeta: {
-    flex: 1,
-  },
-  notificationCardTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  notificationCardDesc: {
-    fontSize: 12,
-  },
-  notificationBadgePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  notificationBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  notificationsListWrapper: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 12,
-    marginBottom: 8,
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-  },
-  notifDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 5,
-  },
-  notifItemTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  notifItemBody: {
-    fontSize: 12,
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  notifItemTime: {
-    fontSize: 10,
+  pickerRowText: {
+    fontSize: 15,
+    color: '#FFFFFF',
   },
 });

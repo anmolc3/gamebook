@@ -357,6 +357,75 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
     }
   };
 
+  // --- CHESS MOVE SUGGESTIONS (authoritative & client-side pseudo-legal) ---
+  const getChessValidMoves = (board: any[][], row: number, col: number, myColor: string): [number, number][] => {
+    const piece = board?.[row]?.[col];
+    if (!piece) return [];
+    const type = (piece.type || '').toLowerCase();
+    const rawColor = (piece.color || '').toUpperCase();
+    const color = rawColor === 'W' || rawColor === 'WHITE' ? 'W' : 'B';
+    const moves: [number, number][] = [];
+    const inBounds = (r: number, c: number) => r >= 0 && r < 8 && c >= 0 && c < 8;
+    const isEmpty = (r: number, c: number) => inBounds(r, c) && !board[r][c];
+    const isEnemy = (r: number, c: number) => {
+      if (!inBounds(r, c) || !board[r][c]) return false;
+      const targetRaw = (board[r][c].color || '').toUpperCase();
+      const targetColor = targetRaw === 'W' || targetRaw === 'WHITE' ? 'W' : 'B';
+      return targetColor !== color;
+    };
+    const canLand = (r: number, c: number) => isEmpty(r, c) || isEnemy(r, c);
+    const slide = (dr: number, dc: number) => {
+      let r = row + dr, c = col + dc;
+      while (inBounds(r, c)) {
+        if (isEmpty(r, c)) {
+          moves.push([r, c]);
+        } else {
+          if (isEnemy(r, c)) moves.push([r, c]);
+          break;
+        }
+        r += dr;
+        c += dc;
+      }
+    };
+
+    if (type === 'p') {
+      const dir = color === 'W' ? -1 : 1;
+      const startRow = color === 'W' ? 6 : 1;
+      if (isEmpty(row + dir, col)) {
+        moves.push([row + dir, col]);
+        if (row === startRow && isEmpty(row + 2 * dir, col)) {
+          moves.push([row + 2 * dir, col]);
+        }
+      }
+      if (isEnemy(row + dir, col - 1)) moves.push([row + dir, col - 1]);
+      if (isEnemy(row + dir, col + 1)) moves.push([row + dir, col + 1]);
+    } else if (type === 'r') {
+      [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc]) => slide(dr, dc));
+    } else if (type === 'b') {
+      [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc]) => slide(dr, dc));
+    } else if (type === 'q') {
+      [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([dr,dc]) => slide(dr, dc));
+    } else if (type === 'n') {
+      [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => {
+        if (canLand(row+dr, col+dc)) moves.push([row+dr, col+dc]);
+      });
+    } else if (type === 'k') {
+      [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => {
+        if (canLand(row+dr, col+dc)) moves.push([row+dr, col+dc]);
+      });
+      // Castling hints
+      if (!piece.hasMoved && col === 4) {
+        if (board[row]?.[7] && !board[row][7].hasMoved && isEmpty(row, 5) && isEmpty(row, 6)) {
+          moves.push([row, 6]);
+        }
+        if (board[row]?.[0] && !board[row][0].hasMoved && isEmpty(row, 3) && isEmpty(row, 2) && isEmpty(row, 1)) {
+          moves.push([row, 2]);
+        }
+      }
+    }
+    return moves;
+  };
+
   // --- CHESS HANDLERS ---
   const handleChessCellPress = (row: number, col: number) => {
     if (!isMyTurn || isSubmitting || !gameState) return;
@@ -858,63 +927,152 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
     );
   };
 
-  // 5. CHESS RENDERER (8x8)
+  // 5. CHESS RENDERER (8x8) with move suggestions
   const renderChess = () => {
     const board = gameState?.board || Array(8).fill(Array(8).fill(null));
     const lastMove = gameState?.lastMove as { from: [number, number]; to: [number, number] } | undefined;
     const inCheck = !!gameState?.inCheck;
     const cellSize = BOARD_SIZE / 8;
 
+    // Compute valid moves for the currently selected piece
+    const isWhitePlayer =
+      gameState?.players?.W === user?.id ||
+      gameState?.players?.WHITE === user?.id ||
+      (Array.isArray(gameState?.players) && gameState?.players[0] === user?.id);
+    const myColorCode = isWhitePlayer ? 'W' : 'B';
+
+    const validMovesForSelected: Array<[number, number]> = selectedCell && isMyTurn && !isMatchOver
+      ? getChessValidMoves(board, selectedCell[0], selectedCell[1], myColorCode)
+      : [];
+
+    const isValidTarget = (r: number, c: number) =>
+      validMovesForSelected.some(([vr, vc]) => vr === r && vc === c);
+
+    // Precompute all movable tokens for player's turn so tokens that can move are visually suggested
+    const movableTokens = useMemo(() => {
+      const set = new Set<string>();
+      if (!isMyTurn || isMatchOver) return set;
+      board.forEach((rArr: any[], r: number) => {
+        rArr.forEach((cell: any, c: number) => {
+          if (!cell) return;
+          const pieceColorRaw = (cell.color || '').toUpperCase();
+          const pColor = pieceColorRaw === 'W' || pieceColorRaw === 'WHITE' ? 'W' : 'B';
+          if (pColor === myColorCode) {
+            const valid = getChessValidMoves(board, r, c, myColorCode);
+            if (valid.length > 0) {
+              set.add(`${r}-${c}`);
+            }
+          }
+        });
+      });
+      return set;
+    }, [board, isMyTurn, isMatchOver, myColorCode]);
+
     return (
-      <View style={[styles.boardWrapper, { width: BOARD_SIZE, height: BOARD_SIZE }]}>
-        <View style={[styles.standardGridBoard, { width: BOARD_SIZE, height: BOARD_SIZE }]}>
-          {board.map((row: any[], rIdx: number) => (
-            <View key={`chs-r-${rIdx}`} style={styles.gridRow}>
-              {row.map((cell: any, cIdx: number) => {
-                const isLightSquare = (rIdx + cIdx) % 2 === 0;
-                const isSelected = selectedCell && selectedCell[0] === rIdx && selectedCell[1] === cIdx;
-                const isLastFrom = lastMove && lastMove.from[0] === rIdx && lastMove.from[1] === cIdx;
-                const isLastTo = lastMove && lastMove.to[0] === rIdx && lastMove.to[1] === cIdx;
-                const isKingInCheck =
-                  inCheck &&
-                  cell &&
-                  (cell.type || '').toLowerCase() === 'k' &&
-                  (cell.color || '').toUpperCase() === (gameState?.turnColor || gameState?.turn || '').toUpperCase();
+      <View style={{ alignItems: 'center' }}>
+        {/* Move Suggestions Info Banner */}
+        {isMyTurn && !isMatchOver && (
+          <View style={styles.chessSuggestionsBanner}>
+            <View style={styles.chessSuggestionDot} />
+            <Text style={styles.chessSuggestionsText}>
+              {selectedCell
+                ? `Showing ${validMovesForSelected.length} move suggestions for selected piece`
+                : `${movableTokens.size} tokens can move • Tap any highlighted piece`}
+            </Text>
+          </View>
+        )}
 
-                let bgColor = isLightSquare ? '#425866' : '#23343E';
-                if (isLastFrom || isLastTo) bgColor = '#2F4B43';
-                if (isSelected) bgColor = '#4E5328';
-                if (isKingInCheck) bgColor = '#5C272C';
+        <View style={[styles.boardWrapper, { width: BOARD_SIZE, height: BOARD_SIZE }]}>
+          {/* Rank & File Labels */}
+          <View style={[styles.standardGridBoard, { width: BOARD_SIZE, height: BOARD_SIZE }]}>
+            {board.map((row: any[], rIdx: number) => (
+              <View key={`chs-r-${rIdx}`} style={styles.gridRow}>
+                {row.map((cell: any, cIdx: number) => {
+                  const isLightSquare = (rIdx + cIdx) % 2 === 0;
+                  const isSelected = selectedCell && selectedCell[0] === rIdx && selectedCell[1] === cIdx;
+                  const isLastFrom = lastMove && lastMove.from[0] === rIdx && lastMove.from[1] === cIdx;
+                  const isLastTo = lastMove && lastMove.to[0] === rIdx && lastMove.to[1] === cIdx;
+                  const isKingInCheck =
+                    inCheck &&
+                    cell &&
+                    (cell.type || '').toLowerCase() === 'k' &&
+                    (cell.color || '').toUpperCase() === (gameState?.turnColor || gameState?.turn || '').toUpperCase();
+                  const isTarget = isValidTarget(rIdx, cIdx);
+                  const isMovablePiece = movableTokens.has(`${rIdx}-${cIdx}`);
 
-                return (
-                  <TouchableOpacity
-                    key={`chs-c-${rIdx}-${cIdx}`}
-                    style={[
-                      styles.chessCell,
-                      {
-                        width: cellSize,
-                        height: cellSize,
-                        backgroundColor: bgColor,
-                        borderColor: isSelected ? '#FFC542' : 'transparent',
-                        borderWidth: isSelected ? 2 : 0,
-                      },
-                    ]}
-                    onPress={() => handleChessCellPress(rIdx, cIdx)}
-                    disabled={!isMyTurn || isMatchOver}
-                    activeOpacity={0.8}
-                  >
-                    {cell && (
-                      <ChessPieceSvg
-                        type={cell.type}
-                        color={cell.color}
-                        size={cellSize * 0.86}
-                      />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
+                  let bgColor = isLightSquare ? '#425866' : '#23343E';
+                  if (isLastFrom || isLastTo) bgColor = '#2F4B43';
+                  if (isTarget && !cell) bgColor = isLightSquare ? '#3A5E48' : '#2C4D3B';
+                  if (isTarget && cell) bgColor = '#5C2B2B'; // capture highlight
+                  if (isSelected) bgColor = '#4E5328';
+                  if (isKingInCheck) bgColor = '#5C272C';
+
+                  return (
+                    <TouchableOpacity
+                      key={`chs-c-${rIdx}-${cIdx}`}
+                      style={[
+                        styles.chessCell,
+                        {
+                          width: cellSize,
+                          height: cellSize,
+                          backgroundColor: bgColor,
+                          borderColor: isSelected ? '#FFC542' : isTarget ? '#3ED598' : 'transparent',
+                          borderWidth: isSelected ? 2 : isTarget ? 1.5 : 0,
+                        },
+                      ]}
+                      onPress={() => handleChessCellPress(rIdx, cIdx)}
+                      disabled={!isMyTurn || isMatchOver}
+                      activeOpacity={0.8}
+                    >
+                      {cell && (
+                        <ChessPieceSvg
+                          type={cell.type}
+                          color={cell.color}
+                          size={cellSize * 0.86}
+                        />
+                      )}
+
+                      {/* Movable token indicator dot (suggests player pieces that have legal moves) */}
+                      {isMovablePiece && !selectedCell && !isTarget && (
+                        <View style={styles.movableTokenDot} pointerEvents="none" />
+                      )}
+
+                      {/* Move suggestion dot (empty target square) */}
+                      {isTarget && !cell && (
+                        <View
+                          style={[
+                            styles.legalMoveDot,
+                            {
+                              width: cellSize * 0.28,
+                              height: cellSize * 0.28,
+                              borderRadius: (cellSize * 0.28) / 2,
+                              backgroundColor: '#3ED598AA',
+                            },
+                          ]}
+                          pointerEvents="none"
+                        />
+                      )}
+                      {/* Capture highlight ring */}
+                      {isTarget && cell && (
+                        <View
+                          style={[
+                            styles.captureRing,
+                            {
+                              width: cellSize - 4,
+                              height: cellSize - 4,
+                              borderRadius: (cellSize - 4) / 2,
+                              borderColor: '#FF575FAA',
+                            },
+                          ]}
+                          pointerEvents="none"
+                        />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
         </View>
       </View>
     );
@@ -1545,5 +1703,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  captureRing: {
+    position: 'absolute',
+    borderWidth: 3,
+    backgroundColor: 'transparent',
+  },
+  chessSuggestionsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1E2F28',
+    borderColor: '#3ED59844',
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginBottom: 10,
+  },
+  chessSuggestionDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3ED598',
+  },
+  chessSuggestionsText: {
+    color: '#3ED598',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  movableTokenDot: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3ED598',
+    borderWidth: 1.5,
+    borderColor: '#141E24',
+    shadowColor: '#3ED598',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 3,
+    elevation: 3,
   },
 });

@@ -12,14 +12,17 @@ import {
   Modal,
   TextInput,
   Alert,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import { useTheme } from '../../theme';
 import { Icon, IconName } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { EditProfileModal } from '../../components/organisms/EditProfileModal';
-import { SettingsModal } from '../../components/organisms/SettingsModal';
+import { SettingsModal, SettingsPage } from '../../components/organisms/SettingsModal';
+import { ImageCropperModal } from '../../components/organisms/ImageCropperModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import {
   ProfileService,
@@ -56,7 +59,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [isSettingsModalVisible, setIsSettingsModalVisible] = useState(false);
+  const [settingsInitialPage, setSettingsInitialPage] = useState<SettingsPage>('root');
   const [isMenuModalVisible, setIsMenuModalVisible] = useState(false);
+  const [isPeerMenuModalVisible, setIsPeerMenuModalVisible] = useState(false);
+  const [fullSizeImage, setFullSizeImage] = useState<string | null>(null);
+  const [cropperImageUri, setCropperImageUri] = useState<string | null>(null);
+  const [isCropperVisible, setIsCropperVisible] = useState(false);
   const [activeSlide, setActiveSlide] = useState<'posts' | 'stats'>('posts');
 
   // Real-time Posts State for Profile
@@ -154,11 +162,12 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   const handlePickPostImage = async () => {
     const res = await ImagePickerService.pickImageFromDevice({
-      allowsEditing: false, // allows any aspect ratio
+      allowsEditing: false, // allows any aspect ratio in custom cropper
       quality: 0.88,
     });
     if (res && !res.canceled && res.uri) {
-      setNewPostImage(res.uri);
+      setCropperImageUri(res.uri);
+      setIsCropperVisible(true);
     }
   };
 
@@ -225,7 +234,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const handlePickBanner = async () => {
     const res = await ImagePickerService.pickImageFromDevice({
       aspect: [16, 9],
-      quality: 0.85,
+      quality: 0.5,
     });
     if (res && !res.canceled && res.uri) {
       try {
@@ -371,7 +380,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <Icon name="menu" size={26} strokeWidth={2.4} color={theme.colors.textPrimary} />
           </TouchableOpacity>
         ) : (
-          <View style={styles.navIconButtonPlaceholder} />
+          <TouchableOpacity
+            onPress={() => setIsPeerMenuModalVisible(true)}
+            style={styles.navMenuButton}
+            activeOpacity={0.7}
+            accessibilityLabel="Player Options"
+          >
+            <Icon name="menu" size={24} strokeWidth={2.2} color={theme.colors.textPrimary} />
+          </TouchableOpacity>
         )}
       </View>
 
@@ -390,7 +406,11 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         {/* Layered Profile Banner / Hero - Edge to Edge */}
         <View style={[styles.heroSection, { borderBottomColor: theme.colors.divider }]}>
           {profile?.bannerUrl ? (
-            <View style={styles.heroBannerImageWrap}>
+            <TouchableOpacity
+              style={styles.heroBannerImageWrap}
+              activeOpacity={0.9}
+              onPress={() => setFullSizeImage(profile.bannerUrl || null)}
+            >
               <Image
                 source={{ uri: profile.bannerUrl }}
                 style={styles.heroBannerImage}
@@ -400,7 +420,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)']}
                 style={StyleSheet.absoluteFill}
               />
-            </View>
+            </TouchableOpacity>
           ) : (
             <View
               style={[
@@ -464,8 +484,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             {/* Right: Round Profile Photo with Presence & Edit capability */}
             <TouchableOpacity
               style={styles.avatarContainer}
-              onPress={() => isOwnProfile && setIsEditModalVisible(true)}
-              activeOpacity={isOwnProfile ? 0.8 : 1}
+              onPress={() => {
+                if (profile?.avatarUrl) {
+                  setFullSizeImage(profile.avatarUrl);
+                } else if (isOwnProfile) {
+                  setIsEditModalVisible(true);
+                }
+              }}
+              activeOpacity={0.8}
             >
               <View
                 style={[
@@ -535,20 +561,17 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               )}
 
               {relationship === 'FRIENDS' && (
-                <TouchableOpacity
-                  onPress={handleRemoveFriend}
+                <View
                   style={[
-                    styles.primaryActionBtn,
-                    { backgroundColor: theme.colors.surfaceElevated, borderColor: '#EF4444' },
+                    styles.friendsBadgeBtn,
+                    { backgroundColor: theme.colors.primary + '18', borderColor: theme.colors.primary + '40' },
                   ]}
-                  activeOpacity={0.8}
-                  accessibilityLabel="Unfriend this player"
                 >
-                  <Icon name="userX" size={18} color="#EF4444" />
-                  <Text style={[styles.primaryActionBtnText, { color: '#EF4444' }]}>
-                    Unfriend
+                  <Icon name="userCheck" size={16} color={theme.colors.primary} />
+                  <Text style={[styles.friendsBadgeBtnText, { color: theme.colors.primary }]}>
+                    Friends ✓
                   </Text>
-                </TouchableOpacity>
+                </View>
               )}
 
               {/* Direct Message Button */}
@@ -927,7 +950,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       <Modal
         visible={isMenuModalVisible}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setIsMenuModalVisible(false)}
       >
         <TouchableOpacity
@@ -936,85 +959,92 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           onPress={() => setIsMenuModalVisible(false)}
         >
           <View
-            style={[
-              styles.menuContent,
-              {
-                backgroundColor: theme.colors.surfaceElevated,
-                borderColor: theme.colors.border,
-              },
-              theme.shadows.modal,
-            ]}
+            style={styles.menuContent}
+            onStartShouldSetResponder={() => true}
           >
-            <View style={[styles.menuGrabBar, { backgroundColor: theme.colors.border }]} />
-            <Text style={[styles.menuHeaderTitle, { color: theme.colors.textPrimary }]}>
-              Profile Options
-            </Text>
+            {/* Grab Handle */}
+            <View style={styles.menuGrabBar} />
 
-            <TouchableOpacity
-              style={[styles.menuItem, { borderBottomColor: theme.colors.divider }]}
-              activeOpacity={0.7}
-              onPress={() => {
-                setIsMenuModalVisible(false);
-                setIsEditModalVisible(true);
-              }}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.primary + '18' }]}>
-                <Icon name="edit" size={18} color={theme.colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={[styles.menuItemTitle, { color: theme.colors.textPrimary }]}>
-                  Edit Profile
-                </Text>
-                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
-                  Avatar, display name, and bio
-                </Text>
-              </View>
-              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
-            </TouchableOpacity>
+            {/* Header with Title & Close button */}
+            <View style={styles.menuHeaderRow}>
+              <Text style={styles.menuHeaderTitle}>
+                Profile Options
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsMenuModalVisible(false)}
+                style={styles.menuCloseBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon name="close" size={20} color="#7E8B9B" />
+              </TouchableOpacity>
+            </View>
 
-            <TouchableOpacity
-              style={[styles.menuItem, { borderBottomColor: theme.colors.divider }]}
-              activeOpacity={0.7}
-              onPress={() => {
-                setIsMenuModalVisible(false);
-                setIsSettingsModalVisible(true);
-              }}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.primary + '18' }]}>
-                <Icon name="settings" size={18} color={theme.colors.primary} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={[styles.menuItemTitle, { color: theme.colors.textPrimary }]}>
-                  Settings & Preferences
-                </Text>
-                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
-                  Themes, sound, and notifications
-                </Text>
-              </View>
-              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
-            </TouchableOpacity>
+            {/* Squircle Menu Rows (Only options NOT already inside Settings & Preferences) */}
+            <View style={{ paddingTop: 4 }}>
+              {/* 1. Edit Profile */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsMenuModalVisible(false);
+                  setIsEditModalVisible(true);
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#00BCD4' }]}>
+                  <Icon name="edit" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={styles.menuItemTitle}>Edit Profile</Text>
+                  <Text style={styles.menuItemDesc}>Avatar, display name, and bio</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              activeOpacity={0.7}
-              onPress={() => {
-                setIsMenuModalVisible(false);
-                logout();
-              }}
-            >
-              <View style={[styles.menuIconCircle, { backgroundColor: theme.colors.error + '18' }]}>
-                <Icon name="logOut" size={18} color={theme.colors.error} />
-              </View>
-              <View style={styles.menuItemTextWrap}>
-                <Text style={[styles.menuItemTitle, { color: theme.colors.error }]}>
-                  Sign Out
-                </Text>
-                <Text style={[styles.menuItemDesc, { color: theme.colors.textSecondary }]}>
-                  Log out of your account
-                </Text>
-              </View>
-              <Icon name="chevronRight" size={16} color={theme.colors.textMuted} />
-            </TouchableOpacity>
+              {/* 2. Share Profile */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsMenuModalVisible(false);
+                  const profileUrl = `marvie.gg/@${profile?.username || authUser?.username || 'player'}`;
+                  Share.share({
+                    title: `${profile?.displayName || 'Player'}'s Profile`,
+                    message: `Connect with me on Marvie Arena! marvie.gg/@${profile?.username || authUser?.username || 'player'}`,
+                  }).catch(() => {
+                    Alert.alert('Share Profile', `Share profile link: ${profileUrl}`);
+                  });
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#9C27B0' }]}>
+                  <Icon name="share" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={styles.menuItemTitle}>Share Profile</Text>
+                  <Text style={styles.menuItemDesc}>Share player invite link</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
+
+              {/* 3. Settings & Preferences */}
+              <TouchableOpacity
+                style={[styles.menuItem, { borderBottomWidth: 0 }]}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsMenuModalVisible(false);
+                  setSettingsInitialPage('root');
+                  setIsSettingsModalVisible(true);
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#FF8A00' }]}>
+                  <Icon name="settings" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={styles.menuItemTitle}>Settings & Preferences</Text>
+                  <Text style={styles.menuItemDesc}>Themes, sound, privacy, and gaming controls</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -1033,6 +1063,174 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       <SettingsModal
         visible={isSettingsModalVisible}
         onClose={() => setIsSettingsModalVisible(false)}
+        initialPage={settingsInitialPage}
+      />
+
+      {/* Peer Profile Actions Modal (Unfriend, Report, Challenge, Message) */}
+      <Modal
+        visible={isPeerMenuModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsPeerMenuModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsPeerMenuModalVisible(false)}
+        >
+          <View
+            style={styles.menuContent}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.menuGrabBar} />
+
+            <View style={styles.menuHeaderRow}>
+              <Text style={styles.menuHeaderTitle}>
+                Player Options
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsPeerMenuModalVisible(false)}
+                style={styles.menuCloseBtn}
+              >
+                <Icon name="close" size={20} color="#7E8B9B" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Peer Card */}
+            <View style={styles.menuProfileCard}>
+              <Avatar
+                displayName={profile?.displayName || 'Player'}
+                avatarUrl={profile?.avatarUrl}
+                size="md"
+              />
+              <View style={[styles.menuProfileMeta, { marginLeft: 12 }]}>
+                <Text style={styles.menuProfileDisplayName} numberOfLines={1}>
+                  {profile?.displayName || 'Player'}
+                </Text>
+                <Text style={styles.menuProfileUsername} numberOfLines={1}>
+                  @{profile?.username || 'player'}
+                </Text>
+              </View>
+            </View>
+
+            {onChallenge && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsPeerMenuModalVisible(false);
+                  onChallenge(userId!, profile?.username || 'Player');
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#FFA000' }]}>
+                  <Icon name="gamepad" size={18} color="#FFFFFF" />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={styles.menuItemTitle}>Challenge to Game</Text>
+                  <Text style={styles.menuItemDesc}>Invite to 1-on-1 multiplayer battle</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
+            )}
+
+            {onNavigateToChat && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsPeerMenuModalVisible(false);
+                  onNavigateToChat(userId!, profile?.username || 'Player');
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#25D366' }]}>
+                  <Icon name="chat" size={18} color="#FFFFFF" />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={styles.menuItemTitle}>Send Message</Text>
+                  <Text style={styles.menuItemDesc}>Open chat conversation</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
+            )}
+
+            {relationship === 'FRIENDS' && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                activeOpacity={0.65}
+                onPress={() => {
+                  setIsPeerMenuModalVisible(false);
+                  handleRemoveFriend();
+                }}
+              >
+                <View style={[styles.menuSquircleIcon, { backgroundColor: '#EF4444' }]}>
+                  <Icon name="userX" size={18} color="#FFFFFF" />
+                </View>
+                <View style={styles.menuItemTextWrap}>
+                  <Text style={[styles.menuItemTitle, { color: '#EF4444' }]}>
+                    Unfriend @{profile?.username}
+                  </Text>
+                  <Text style={styles.menuItemDesc}>Remove from friends list</Text>
+                </View>
+                <Icon name="chevronRight" size={16} color="#4B5565" />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.menuItem, { borderBottomWidth: 0 }]}
+              activeOpacity={0.65}
+              onPress={() => {
+                setIsPeerMenuModalVisible(false);
+                Alert.alert('Report Player', 'Thank you for reporting. Our moderation team will review this user.');
+              }}
+            >
+              <View style={[styles.menuSquircleIcon, { backgroundColor: '#E53935' }]}>
+                <Icon name="shield" size={18} color="#FFFFFF" />
+              </View>
+              <View style={styles.menuItemTextWrap}>
+                <Text style={styles.menuItemTitle}>Report Player</Text>
+                <Text style={styles.menuItemDesc}>Flag inappropriate behavior</Text>
+              </View>
+              <Icon name="chevronRight" size={16} color="#4B5565" />
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Full Size Image Viewer Modal */}
+      <Modal
+        visible={!!fullSizeImage}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFullSizeImage(null)}
+      >
+        <View style={styles.fullScreenBackdrop}>
+          <TouchableOpacity
+            style={styles.fullScreenCloseBtn}
+            onPress={() => setFullSizeImage(null)}
+            activeOpacity={0.8}
+            accessibilityLabel="Close full screen photo"
+          >
+            <Icon name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {fullSizeImage && (
+            <Image
+              source={{ uri: fullSizeImage }}
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
+
+      {/* Image Cropper Modal with all aspect ratios */}
+      <ImageCropperModal
+        visible={isCropperVisible}
+        imageUri={cropperImageUri}
+        onClose={() => setIsCropperVisible(false)}
+        onCropDone={(resultUri) => {
+          setNewPostImage(resultUri);
+          setIsCropperVisible(false);
+        }}
       />
     </SafeAreaView>
   );
@@ -1103,7 +1301,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scrollContent: {
-    paddingBottom: 96,
+    paddingBottom: 60,
   },
   heroSection: {
     paddingTop: 0,
@@ -1559,14 +1757,15 @@ const styles = StyleSheet.create({
   // Hamburger Menu Modal Sheet Styles
   menuBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.72)',
     justifyContent: 'flex-end',
   },
   menuContent: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderBottomWidth: 0,
+    backgroundColor: '#10141D',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    borderTopWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 36,
@@ -1575,37 +1774,142 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+  },
+  menuHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+    paddingBottom: 4,
   },
   menuHeaderTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 14,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  menuCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuProfileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(235, 115, 34, 0.12)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(235, 115, 34, 0.32)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  menuWatermark: {
+    position: 'absolute',
+    right: 30,
+    top: -4,
+  },
+  menuAvatarWrap: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  menuOnlineDot: {
+    position: 'absolute',
+    bottom: -1,
+    right: -1,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#25D366',
+    borderWidth: 2,
+    borderColor: '#10141D',
+  },
+  menuProfileMeta: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  menuProfileDisplayName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+  },
+  menuProfileUsername: {
+    fontSize: 12,
+    color: '#D8893F',
+    marginTop: 2,
+    fontWeight: '500',
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    gap: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
-  menuIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+  menuSquircleIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
   },
   menuItemTextWrap: {
     flex: 1,
+    paddingRight: 10,
   },
   menuItemTitle: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: -0.1,
   },
   menuItemDesc: {
-    fontSize: 11,
+    fontSize: 12,
+    color: '#7E8B9B',
     marginTop: 2,
+  },
+  friendsBadgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  friendsBadgeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  fullScreenBackdrop: {
+    flex: 1,
+    backgroundColor: '#000000F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenCloseBtn: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullScreenImage: {
+    width: '92%',
+    height: '78%',
   },
 });

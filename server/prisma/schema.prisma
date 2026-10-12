@@ -19,6 +19,12 @@ enum PresenceStatus {
   OFFLINE
 }
 
+enum PresencePrivacy {
+  EVERYONE
+  MY_FRIENDS
+  NOBODY
+}
+
 enum FriendRequestStatus {
   PENDING
   ACCEPTED
@@ -26,10 +32,16 @@ enum FriendRequestStatus {
   CANCELLED
 }
 
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
 enum MessageType {
   TEXT
   GAME_INVITE
   GAME_RESULT
+  SYSTEM
 }
 
 enum MessageStatus {
@@ -182,6 +194,7 @@ model User {
   storyReplies      StoryReply[]
   notifications     Notification[]
   achievements      UserAchievement[]
+  messageReceipts   MessageReceipt[]
 
   @@index([username])
   @@index([email])
@@ -196,9 +209,12 @@ model Profile {
   avatarUrl       String?
   themePreference String   @default("coralMarble")
   appearanceMode  String   @default("system")
-  isOnline        Boolean  @default(false)
-  lastSeen        DateTime @default(now())
-  createdAt       DateTime @default(now())
+  isOnline        Boolean         @default(false)
+  lastSeen        DateTime        @default(now())
+  onlinePrivacy   PresencePrivacy @default(EVERYONE)
+  lastSeenPrivacy PresencePrivacy @default(EVERYONE)
+  readReceipts    Boolean         @default(true)
+  createdAt       DateTime        @default(now())
   updatedAt       DateTime @updatedAt
 }
 
@@ -243,24 +259,34 @@ model BlockedUser {
 }
 
 model Conversation {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  isGroup     Boolean  @default(false)
+  title       String?
+  description String?
+  avatarUrl   String?
+  creatorId   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   members  ConversationMember[]
   messages Message[]
+  receipts MessageReceipt[]
+
+  @@index([isGroup])
 }
 
 model ConversationMember {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   conversationId String
   userId         String
-  createdAt      DateTime @default(now())
+  role           GroupRole @default(MEMBER)
+  createdAt      DateTime  @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([conversationId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -273,10 +299,32 @@ model Message {
   metadata       Json?
   createdAt      DateTime      @default(now())
 
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  conversation Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  receipts     MessageReceipt[]
 
   @@index([conversationId, createdAt])
+}
+
+model MessageReceipt {
+  id             String        @id @default(uuid())
+  messageId      String
+  conversationId String
+  userId         String
+  status         MessageStatus @default(DELIVERED)
+  deliveredAt    DateTime      @default(now())
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  message      Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([conversationId, userId])
+  @@index([messageId])
+  @@index([userId, status])
 }
 
 model GameRoom {

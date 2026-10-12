@@ -1,3 +1,5 @@
+export type PresencePrivacy = 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+
 export interface UserSummary {
   id: string;
   username: string;
@@ -5,7 +7,7 @@ export interface UserSummary {
   displayName: string;
   avatarUrl?: string | null;
   isOnline: boolean;
-  lastSeen?: string | Date;
+  lastSeen?: string | Date | null;
 }
 
 export type PresenceStatus = 'online' | 'inGame' | 'away' | 'offline';
@@ -14,6 +16,9 @@ export interface UserProfile extends UserSummary {
   bio?: string | null;
   themePreference: ThemeId;
   appearanceMode: AppearanceMode;
+  onlinePrivacy?: PresencePrivacy;
+  lastSeenPrivacy?: PresencePrivacy;
+  readReceipts?: boolean;
   createdAt: string | Date;
   stats: {
     totalMatches: number;
@@ -59,4 +64,26 @@ export interface ChatMessage {
   status: MessageStatus;
   metadata?: Record<string, any>;
   createdAt: string;
+}
+
+export interface MessageReceiptItem {
+  userId: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  timestamp?: string | Date | null;
+}
+
+export interface MessageReceiptsInfo {
+  messageId: string;
+  content: string;
+  type: string;
+  status: MessageStatus;
+  createdAt: string;
+  senderId: string;
+  isGroup: boolean;
+  totalRecipients: number;
+  readBy: MessageReceiptItem[];
+  deliveredTo: MessageReceiptItem[];
+  pending: MessageReceiptItem[];
 }

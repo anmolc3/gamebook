@@ -15,6 +15,9 @@ export const updateProfileSchema = z.object({
     .enum(['coralMarble', 'moonViolet', 'violetDusk', 'midnightNeutral', 'forestGold'])
     .optional(),
   appearanceMode: z.enum(['system', 'light', 'dark']).optional(),
+  onlinePrivacy: z.enum(['EVERYONE', 'MY_FRIENDS', 'NOBODY']).optional(),
+  lastSeenPrivacy: z.enum(['EVERYONE', 'MY_FRIENDS', 'NOBODY']).optional(),
+  readReceipts: z.boolean().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

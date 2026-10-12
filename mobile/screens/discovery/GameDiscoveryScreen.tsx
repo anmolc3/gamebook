@@ -9,7 +9,9 @@ import {
   ActivityIndicator,
   Image,
   RefreshControl,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import {
   SearchIcon,
@@ -61,6 +63,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   onPressAchievements,
 }) => {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [games, setGames] = useState<CatalogGame[]>([]);
@@ -120,7 +123,15 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       {/* Top Header */}
-      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
+      <View
+        style={[
+          styles.header,
+          {
+            borderBottomColor: theme.colors.border,
+            paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 12 : 8),
+          },
+        ]}
+      >
         <View style={styles.titleRow}>
           <Text style={[styles.mainTitle, { color: theme.colors.textPrimary }]}>
             Game Arena
@@ -426,7 +437,6 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
     gap: 12,
@@ -435,13 +445,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 44,
   },
   mainTitle: {
     fontSize: 22,
     fontWeight: '800',
+    letterSpacing: -0.3,
   },
   headerActions: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   headerIconBtn: {

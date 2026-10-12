@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,22 @@ import {
   RefreshControl,
   ActivityIndicator,
   StatusBar,
+  ScrollView,
+  Modal,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { useAuth } from '../../features/auth/AuthContext';
+import { useCall } from '../../features/call/CallContext';
 import { ChatService, ConversationItem } from '../../services/chat.service';
 import { MobileSocketService } from '../../services/socket.service';
+import { FriendsService, FriendUser } from '../../services/friends.service';
+import { CreateGroupModal } from '../../components/organisms/CreateGroupModal';
+import { MessageReceiptTicks } from '../../components/atoms/MessageReceiptTicks';
 
 export interface ChatListScreenProps {
   onBack?: () => void;
@@ -26,9 +33,23 @@ export interface ChatListScreenProps {
     peerName: string,
     peerUsername: string,
     peerAvatarUrl: string | null,
-    conversationId?: string
+    conversationId?: string,
+    isGroup?: boolean,
+    groupMeta?: any
   ) => void;
   onNavigateToFriends?: () => void;
+}
+
+export interface CallHistoryItem {
+  id: string;
+  peerId: string;
+  peerName: string;
+  peerUsername: string;
+  peerAvatarUrl: string | null;
+  callType: 'audio' | 'video';
+  direction: 'incoming' | 'outgoing' | 'missed';
+  timestamp: string;
+  durationSeconds?: number;
 }
 
 function formatTimeAgo(dateString?: string): string {
@@ -49,6 +70,8 @@ function formatTimeAgo(dateString?: string): string {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+export type ChatFilterType = 'ALL' | 'UNREAD' | 'FAVORITES' | 'GROUPS' | 'ARCHIVED';
+
 export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   onBack,
   onSelectConversation,
@@ -56,16 +79,90 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user: authUser } = useAuth();
+  const { startCall } = useCall();
+  const insets = useSafeAreaInsets();
+
+  // Top Nav Tab: Chats vs Calls (WhatsApp standard)
+  const [activeTab, setActiveTab] = useState<'chats' | 'calls'>('chats');
+
+  // Filter Chips in Chats
+  const [filterChip, setFilterChip] = useState<ChatFilterType>('ALL');
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Archive & Favorites state
+  const [archivedIds, setArchivedIds] = useState<string[]>([]);
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
+  const [isActionModalVisible, setIsActionModalVisible] = useState(false);
+
+  // New Call Launcher Drawer
+  const [isNewCallModalVisible, setIsNewCallModalVisible] = useState(false);
+  const [isCreateGroupModalVisible, setIsCreateGroupModalVisible] = useState(false);
+  const [callHistory, setCallHistory] = useState<CallHistoryItem[]>([]);
+
+  // Load archived & favorite IDs
+  useEffect(() => {
+    (async () => {
+      try {
+        const [savedArchived, savedFavs] = await Promise.all([
+          AsyncStorage.getItem('@gameapp:archived_convs'),
+          AsyncStorage.getItem('@gameapp:favorite_convs'),
+        ]);
+        if (savedArchived) setArchivedIds(JSON.parse(savedArchived));
+        if (savedFavs) setFavoriteIds(JSON.parse(savedFavs));
+      } catch (err) {
+        console.warn('Failed to load local chat state:', err);
+      }
+    })();
+  }, []);
+
+  // Save archived IDs
+  const toggleArchive = async (convId: string) => {
+    const next = archivedIds.includes(convId)
+      ? archivedIds.filter((id) => id !== convId)
+      : [...archivedIds, convId];
+    setArchivedIds(next);
+    await AsyncStorage.setItem('@gameapp:archived_convs', JSON.stringify(next)).catch(() => null);
+  };
+
+  // Save favorite IDs
+  const toggleFavorite = async (convId: string) => {
+    const next = favoriteIds.includes(convId)
+      ? favoriteIds.filter((id) => id !== convId)
+      : [...favoriteIds, convId];
+    setFavoriteIds(next);
+    await AsyncStorage.setItem('@gameapp:favorite_convs', JSON.stringify(next)).catch(() => null);
+  };
+
   const loadConversations = useCallback(async () => {
     try {
-      const data = await ChatService.fetchConversations();
+      const [data, friendsData] = await Promise.all([
+        ChatService.fetchConversations().catch(() => []),
+        FriendsService.fetchFriends().catch(() => []),
+      ]);
       setConversations(data);
+      setFriends(friendsData);
+
+      // Initialize mock recent calls if empty
+      if (friendsData.length > 0) {
+        const sampleCalls: CallHistoryItem[] = friendsData.slice(0, 4).map((f, idx) => ({
+          id: `call_${f.id}_${idx}`,
+          peerId: f.id,
+          peerName: f.displayName,
+          peerUsername: f.username,
+          peerAvatarUrl: f.avatarUrl,
+          callType: idx % 2 === 0 ? 'video' : 'audio',
+          direction: idx === 0 ? 'incoming' : idx === 1 ? 'missed' : 'outgoing',
+          timestamp: new Date(Date.now() - (idx + 1) * 3600000 * 4).toISOString(),
+          durationSeconds: idx === 1 ? 0 : 142 + idx * 80,
+        }));
+        setCallHistory(sampleCalls);
+      }
     } catch (err) {
       console.warn('Failed to load conversations:', err);
     } finally {
@@ -96,16 +193,25 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
           return c;
         })
       );
+      setFriends((prev) =>
+        prev.map((f) => (f.id === userId ? { ...f, isOnline } : f))
+      );
     });
 
     // Real-time message incoming listener
     const unsubMsg = MobileSocketService.onMessageReceived((msg) => {
+      const isOwn = msg.senderId === authUser?.id;
+
+      // Acknowledge delivery to sender if incoming on this device
+      if (!isOwn) {
+        MobileSocketService.sendDeliveryConfirmation(msg.conversationId, [msg.id]);
+      }
+
       setConversations((prev) => {
         const index = prev.findIndex((c) => c.id === msg.conversationId);
         if (index !== -1) {
           const updated = [...prev];
           const existing = updated[index];
-          const isOwn = msg.senderId === authUser?.id;
           updated[index] = {
             ...existing,
             updatedAt: msg.createdAt,
@@ -130,8 +236,28 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
       });
     });
 
-    // Real-time message read receipts
-    const unsubRead = MobileSocketService.onMessagesRead(({ conversationId }) => {
+    // Real-time message delivered receipts (2 grey ticks)
+    const unsubDelivered = MobileSocketService.onMessageDelivered(({ conversationId, messageId, status }) => {
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id === conversationId && c.lastMessage && c.lastMessage.senderId === authUser?.id) {
+            if (c.lastMessage.status === 'SENT' || status === 'DELIVERED') {
+              return {
+                ...c,
+                lastMessage: {
+                  ...c.lastMessage,
+                  status: c.lastMessage.status === 'READ' ? 'READ' : 'DELIVERED',
+                },
+              };
+            }
+          }
+          return c;
+        })
+      );
+    });
+
+    // Real-time message read receipts (2 blue ticks)
+    const unsubRead = MobileSocketService.onMessagesRead(({ conversationId, status }) => {
       setConversations((prev) =>
         prev.map((c) => {
           if (c.id === conversationId && c.lastMessage && c.lastMessage.senderId === authUser?.id) {
@@ -139,7 +265,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               ...c,
               lastMessage: {
                 ...c.lastMessage,
-                status: 'READ',
+                status: status || 'READ',
               },
             };
           }
@@ -148,10 +274,57 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
       );
     });
 
+    // Group real-time events
+    const unsubGroupCreated = MobileSocketService.onGroupCreated((groupConv) => {
+      setConversations((prev) => {
+        if (prev.some((c) => c.id === groupConv.id)) return prev;
+        return [groupConv, ...prev];
+      });
+    });
+
+    const unsubGroupUpdated = MobileSocketService.onGroupUpdated((data) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === data.groupId && c.group
+            ? {
+                ...c,
+                group: {
+                  ...c.group,
+                  title: data.title !== undefined ? data.title : c.group.title,
+                  description: data.description !== undefined ? data.description : c.group.description,
+                  avatarUrl: data.avatarUrl !== undefined ? data.avatarUrl : c.group.avatarUrl,
+                },
+              }
+            : c
+        )
+      );
+    });
+
+    const unsubGroupMembers = MobileSocketService.onGroupMembersUpdated((data) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === data.id && c.group
+            ? {
+                ...c,
+                group: {
+                  ...c.group,
+                  memberCount: data.memberCount,
+                  members: data.members,
+                },
+              }
+            : c
+        )
+      );
+    });
+
     return () => {
       unsubPresence();
       unsubMsg();
+      unsubDelivered();
       unsubRead();
+      unsubGroupCreated();
+      unsubGroupUpdated();
+      unsubGroupMembers();
     };
   }, [loadConversations, authUser?.id]);
 
@@ -160,38 +333,112 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     loadConversations();
   };
 
-  const filteredConversations = conversations.filter((c) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    const displayName = c.peer?.displayName?.toLowerCase() || '';
-    const username = c.peer?.username?.toLowerCase() || '';
-    return displayName.includes(q) || username.includes(q);
-  });
+  // Filter conversations by search and filter chip
+  const filteredConversations = useMemo(() => {
+    let result = conversations;
+
+    // Search query filtering
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((c) => {
+        if (c.isGroup) {
+          const title = c.group?.title?.toLowerCase() || '';
+          const desc = c.group?.description?.toLowerCase() || '';
+          return title.includes(q) || desc.includes(q);
+        }
+        const displayName = c.peer?.displayName?.toLowerCase() || '';
+        const username = c.peer?.username?.toLowerCase() || '';
+        return displayName.includes(q) || username.includes(q);
+      });
+    }
+
+    // Tab-level chip filtering
+    if (filterChip === 'ARCHIVED') {
+      return result.filter((c) => archivedIds.includes(c.id));
+    }
+
+    // Default: exclude archived unless specifically on Archived chip
+    result = result.filter((c) => !archivedIds.includes(c.id));
+
+    if (filterChip === 'UNREAD') {
+      result = result.filter((c) => c.unreadCount > 0);
+    } else if (filterChip === 'FAVORITES') {
+      result = result.filter((c) => favoriteIds.includes(c.id));
+    } else if (filterChip === 'GROUPS') {
+      result = result.filter((c) => c.isGroup === true);
+    }
+
+    return result;
+  }, [conversations, searchQuery, filterChip, archivedIds, favoriteIds]);
+
+  const onlineFriends = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; username: string; avatarUrl: string | null }>();
+    friends.filter((f) => f.isOnline).forEach((f) => {
+      map.set(f.id, { id: f.id, name: f.displayName, username: f.username, avatarUrl: f.avatarUrl });
+    });
+    conversations.filter((c) => c.peer?.isOnline).forEach((c) => {
+      if (c.peer && !map.has(c.peer.id)) {
+        map.set(c.peer.id, { id: c.peer.id, name: c.peer.displayName, username: c.peer.username, avatarUrl: c.peer.avatarUrl });
+      }
+    });
+    return Array.from(map.values());
+  }, [friends, conversations]);
+
+  const archivedCount = archivedIds.length;
 
   const renderConversationItem = ({ item }: { item: ConversationItem }) => {
-    if (!item.peer) return null;
+    const isGroup = item.isGroup;
+    if (!item.peer && !isGroup) return null;
 
     const isOwnLastMessage = item.lastMessage?.senderId === authUser?.id;
     const isUnread = item.unreadCount > 0;
+    const isFavorited = favoriteIds.includes(item.id);
+
+    const displayName = isGroup
+      ? item.group?.title || 'Group Chat'
+      : item.peer?.displayName || 'Player';
 
     let previewContent = item.lastMessage ? item.lastMessage.content : 'No messages yet';
     if (item.lastMessage?.type === 'GAME_INVITE') {
       previewContent = 'Challenge: Game Invitation';
     } else if (item.lastMessage?.type === 'GAME_RESULT') {
       previewContent = 'Match Result Summary';
+    } else if (item.lastMessage?.type === 'SYSTEM') {
+      previewContent = item.lastMessage.content;
+    } else if (isGroup && item.lastMessage) {
+      const senderPrefix = isOwnLastMessage ? 'You: ' : `${item.lastMessage.senderName || 'Member'}: `;
+      previewContent = `${senderPrefix}${item.lastMessage.content}`;
     }
 
     return (
       <TouchableOpacity
-        onPress={() =>
-          onSelectConversation(
-            item.peer!.id,
-            item.peer!.displayName,
-            item.peer!.username,
-            item.peer!.avatarUrl,
-            item.id
-          )
-        }
+        onPress={() => {
+          if (isGroup) {
+            onSelectConversation(
+              item.id,
+              item.group?.title || 'Group Chat',
+              `${item.group?.memberCount || 0} members`,
+              item.group?.avatarUrl || null,
+              item.id,
+              true,
+              item.group
+            );
+          } else {
+            onSelectConversation(
+              item.peer!.id,
+              item.peer!.displayName,
+              item.peer!.username,
+              item.peer!.avatarUrl,
+              item.id,
+              false,
+              null
+            );
+          }
+        }}
+        onLongPress={() => {
+          setSelectedConversation(item);
+          setIsActionModalVisible(true);
+        }}
         style={[
           styles.conversationCard,
           {
@@ -201,27 +448,59 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
         ]}
         activeOpacity={0.7}
       >
-        {/* Peer Avatar with Presence */}
-        <Avatar
-          displayName={item.peer.displayName}
-          avatarUrl={item.peer.avatarUrl}
-          size="md"
-          status={item.peer.isOnline ? 'online' : 'offline'}
-        />
+        {/* Avatar */}
+        {isGroup ? (
+          item.group?.avatarUrl ? (
+            <Avatar
+              displayName={item.group.title}
+              avatarUrl={item.group.avatarUrl}
+              size="md"
+            />
+          ) : (
+            <View
+              style={[
+                styles.groupAvatarCircle,
+                { backgroundColor: theme.colors.primary + '20' },
+              ]}
+            >
+              <Icon name="users" size={24} color={theme.colors.primary} />
+            </View>
+          )
+        ) : (
+          <Avatar
+            displayName={item.peer!.displayName}
+            avatarUrl={item.peer!.avatarUrl}
+            size="md"
+            status={item.peer!.isOnline ? 'online' : 'offline'}
+          />
+        )}
 
         {/* Conversation Metadata */}
         <View style={styles.cardContent}>
           <View style={styles.topRow}>
-            <Text
-              style={[
-                styles.displayNameText,
-                { color: theme.colors.textPrimary },
-                isUnread && styles.unreadTextBold,
-              ]}
-              numberOfLines={1}
-            >
-              {item.peer.displayName}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+              <Text
+                style={[
+                  styles.displayNameText,
+                  { color: theme.colors.textPrimary },
+                  isUnread && styles.unreadTextBold,
+                ]}
+                numberOfLines={1}
+              >
+                {displayName}
+              </Text>
+              {isGroup && (
+                <View style={[styles.groupTagPill, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <Icon name="users" size={10} color={theme.colors.primary} />
+                  <Text style={[styles.groupTagText, { color: theme.colors.primary }]}>
+                    {item.group?.memberCount || 0}
+                  </Text>
+                </View>
+              )}
+              {isFavorited && (
+                <Icon name="star" size={13} color="#F59E0B" />
+              )}
+            </View>
             <Text style={[styles.timeAgoText, { color: theme.colors.textMuted }]}>
               {formatTimeAgo(item.lastMessage?.createdAt || item.updatedAt)}
             </Text>
@@ -229,15 +508,9 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
 
           <View style={styles.bottomRow}>
             <View style={styles.previewContainer}>
-              {isOwnLastMessage && item.lastMessage && (
+              {isOwnLastMessage && item.lastMessage && item.lastMessage.type !== 'SYSTEM' && (
                 <View style={styles.deliveryStatusTick}>
-                  {item.lastMessage.status === 'READ' ? (
-                    <Icon name="doubleCheck" size={14} color={theme.colors.primary} />
-                  ) : item.lastMessage.status === 'DELIVERED' ? (
-                    <Icon name="doubleCheck" size={14} color={theme.colors.textMuted} />
-                  ) : (
-                    <Icon name="check" size={14} color={theme.colors.textMuted} />
-                  )}
+                  <MessageReceiptTicks status={item.lastMessage.status} size={14} />
                 </View>
               )}
               {item.lastMessage?.type === 'GAME_INVITE' && (
@@ -250,6 +523,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                   styles.previewText,
                   {
                     color: isUnread ? theme.colors.textPrimary : theme.colors.textSecondary,
+                    fontStyle: item.lastMessage?.type === 'SYSTEM' ? 'italic' : 'normal',
                   },
                   isUnread && styles.unreadTextBold,
                 ]}
@@ -270,47 +544,117 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
           </View>
         </View>
 
-        {/* Quick Call Action Shortcuts */}
-        <View style={styles.cardCallActions}>
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Voice Call',
-                `Starting voice call with ${item.peer?.displayName} (@${item.peer?.username || 'player'})...`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Connect', onPress: () => {} },
-                ]
-              );
-            }}
-            style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            activeOpacity={0.7}
-            accessibilityLabel="Audio Call"
-          >
-            <Icon name="audioCall" size={16} color={theme.colors.primary} />
-          </TouchableOpacity>
+        {/* Quick Call Action Shortcuts (only for 1-on-1 chats) */}
+        {!isGroup && item.peer && (
+          <View style={styles.cardCallActions}>
+            <TouchableOpacity
+              onPress={() =>
+                startCall(
+                  item.peer!.id,
+                  item.peer!.displayName,
+                  item.peer!.username,
+                  item.peer!.avatarUrl,
+                  'audio'
+                )
+              }
+              style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              activeOpacity={0.7}
+              accessibilityLabel="Audio Call"
+            >
+              <Icon name="audioCall" size={16} color={theme.colors.primary} />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => {
-              Alert.alert(
-                'Video Call',
-                `Starting HD video call with ${item.peer?.displayName} (@${item.peer?.username || 'player'})...`,
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Connect', onPress: () => {} },
-                ]
-              );
-            }}
-            style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            activeOpacity={0.7}
-            accessibilityLabel="Video Call"
-          >
-            <Icon name="videoCall" size={17} color={theme.colors.primary} />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              onPress={() =>
+                startCall(
+                  item.peer!.id,
+                  item.peer!.displayName,
+                  item.peer!.username,
+                  item.peer!.avatarUrl,
+                  'video'
+                )
+              }
+              style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              activeOpacity={0.7}
+              accessibilityLabel="Video Call"
+            >
+              <Icon name="videoCall" size={16} color={theme.colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
       </TouchableOpacity>
+    );
+  };
+
+  const renderCallHistoryItem = ({ item }: { item: CallHistoryItem }) => {
+    const isMissed = item.direction === 'missed';
+    const isIncoming = item.direction === 'incoming';
+
+    return (
+      <View
+        style={[
+          styles.callCard,
+          {
+            backgroundColor: theme.colors.surfaceElevated,
+            borderColor: theme.colors.border,
+          },
+        ]}
+      >
+        <Avatar
+          displayName={item.peerName}
+          avatarUrl={item.peerAvatarUrl}
+          size="md"
+        />
+
+        <View style={styles.callCardContent}>
+          <Text
+            style={[
+              styles.callPeerName,
+              { color: isMissed ? '#EF4444' : theme.colors.textPrimary },
+            ]}
+            numberOfLines={1}
+          >
+            {item.peerName}
+          </Text>
+
+          <View style={styles.callMetaRow}>
+            {/* Direction Arrow */}
+            <View style={{ transform: [{ rotate: isIncoming ? '45deg' : isMissed ? '135deg' : '-45deg' }] }}>
+              <Icon
+                name="arrowRight"
+                size={13}
+                color={isMissed ? '#EF4444' : isIncoming ? '#22C55E' : theme.colors.textMuted}
+              />
+            </View>
+            <Text style={[styles.callTimeText, { color: theme.colors.textMuted }]}>
+              {formatTimeAgo(item.timestamp)}
+              {item.durationSeconds ? ` • ${Math.floor(item.durationSeconds / 60)}m ${item.durationSeconds % 60}s` : ''}
+            </Text>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          onPress={() =>
+            startCall(
+              item.peerId,
+              item.peerName,
+              item.peerUsername,
+              item.peerAvatarUrl,
+              item.callType
+            )
+          }
+          style={[styles.callTriggerBtn, { backgroundColor: theme.colors.surface }]}
+          activeOpacity={0.7}
+        >
+          <Icon
+            name={item.callType === 'video' ? 'videoCall' : 'audioCall'}
+            size={18}
+            color={theme.colors.primary}
+          />
+        </TouchableOpacity>
+      </View>
     );
   };
 
@@ -334,112 +678,568 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
         )}
 
         <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          Messages
+          Social & Calls
         </Text>
 
-        {onNavigateToFriends ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
-            onPress={onNavigateToFriends}
-            style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
-            activeOpacity={0.7}
-            accessibilityLabel="Friends list"
+            onPress={() => setIsCreateGroupModalVisible(true)}
+            style={[styles.newGroupBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+            activeOpacity={0.75}
+            accessibilityLabel="Create New Group"
           >
-            <Icon name="friendsAdd" size={26} />
+            <Icon name="users" size={15} color={theme.colors.primary} />
+            <Text style={[styles.newGroupBtnText, { color: theme.colors.primary }]}>
+              New Group
+            </Text>
           </TouchableOpacity>
-        ) : (
-          <View style={styles.headerSpacer} />
-        )}
-      </View>
 
-      {/* Search Input Filter */}
-      <View style={styles.searchWrapper}>
-        <View
-          style={[
-            styles.searchBar,
-            {
-              backgroundColor: theme.colors.surfaceElevated,
-              borderColor: theme.colors.border,
-            },
-          ]}
-        >
-          <Icon name="search" size={18} color={theme.colors.textMuted} />
-          <TextInput
-            style={[styles.searchInput, { color: theme.colors.textPrimary }]}
-            placeholder="Search conversations..."
-            placeholderTextColor={theme.colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
-              <Icon name="close" size={16} color={theme.colors.textMuted} />
+          {onNavigateToFriends ? (
+            <TouchableOpacity
+              onPress={onNavigateToFriends}
+              style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Friends list"
+            >
+              <Icon name="friendsAdd" size={24} />
             </TouchableOpacity>
+          ) : (
+            <View style={styles.headerSpacer} />
           )}
         </View>
       </View>
 
-      {/* Content Area */}
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-            Loading conversations...
+      {/* WhatsApp-Style Top Tab Switcher: [ Chats ]  [ Calls ] */}
+      <View style={[styles.tabSwitcher, { borderBottomColor: theme.colors.divider }]}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('chats')}
+          style={[
+            styles.tabItem,
+            activeTab === 'chats' && [
+              styles.activeTabItem,
+              { borderBottomColor: theme.colors.primary },
+            ],
+          ]}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              {
+                color: activeTab === 'chats' ? theme.colors.primary : theme.colors.textMuted,
+                fontWeight: activeTab === 'chats' ? '700' : '500',
+              },
+            ]}
+          >
+            Chats
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setActiveTab('calls')}
+          style={[
+            styles.tabItem,
+            activeTab === 'calls' && [
+              styles.activeTabItem,
+              { borderBottomColor: theme.colors.primary },
+            ],
+          ]}
+          activeOpacity={0.8}
+        >
+          <Text
+            style={[
+              styles.tabItemText,
+              {
+                color: activeTab === 'calls' ? theme.colors.primary : theme.colors.textMuted,
+                fontWeight: activeTab === 'calls' ? '700' : '500',
+              },
+            ]}
+          >
+            Calls
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* CHATS TAB VIEW */}
+      {activeTab === 'chats' && (
+        <>
+          {/* Search Input Filter */}
+          <View style={styles.searchWrapper}>
+            <View
+              style={[
+                styles.searchBar,
+                {
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+            >
+              <Icon name="search" size={18} color={theme.colors.textMuted} />
+              <TextInput
+                style={[styles.searchInput, { color: theme.colors.textPrimary }]}
+                placeholder="Search conversations..."
+                placeholderTextColor={theme.colors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+                  <Icon name="close" size={16} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* WhatsApp-Style Filter Chips (All, Unread, Favorites, Groups, Archived) */}
+          <View style={styles.filterChipsRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              {(['ALL', 'UNREAD', 'FAVORITES', 'GROUPS', 'ARCHIVED'] as ChatFilterType[]).map((chip) => {
+                const isSelected = filterChip === chip;
+                const label =
+                  chip === 'ALL'
+                    ? 'All'
+                    : chip === 'UNREAD'
+                    ? 'Unread'
+                    : chip === 'FAVORITES'
+                    ? 'Favorites'
+                    : chip === 'GROUPS'
+                    ? 'Groups'
+                    : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}`;
+
+                return (
+                  <TouchableOpacity
+                    key={chip}
+                    onPress={() => setFilterChip(chip)}
+                    style={[
+                      styles.filterChipBtn,
+                      {
+                        backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceElevated,
+                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                      },
+                    ]}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        {
+                          color: isSelected ? theme.colors.textOnPrimary : theme.colors.textSecondary,
+                          fontWeight: isSelected ? '700' : '500',
+                        },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          {/* Archived Chats Header Banner (when not already on Archived chip and archives exist) */}
+          {filterChip !== 'ARCHIVED' && archivedCount > 0 && !searchQuery && (
+            <TouchableOpacity
+              onPress={() => setFilterChip('ARCHIVED')}
+              style={[
+                styles.archiveBanner,
+                {
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              activeOpacity={0.75}
+            >
+              <View style={styles.archiveBannerLeft}>
+                <View style={[styles.archiveIconCircle, { backgroundColor: theme.colors.primary + '18' }]}>
+                  <Icon name="archive" size={16} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.archiveBannerTitle, { color: theme.colors.textPrimary }]}>
+                  Archived
+                </Text>
+              </View>
+              <Text style={[styles.archiveBannerCount, { color: theme.colors.primary }]}>
+                {archivedCount}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Online Friends Horizontal Row */}
+          {onlineFriends.length > 0 && !searchQuery && filterChip === 'ALL' && (
+            <View style={[styles.onlineSection, { borderBottomColor: theme.colors.border }]}>
+              <View style={styles.onlineHeaderRow}>
+                <View style={[styles.onlineDotIndicator, { backgroundColor: theme.colors.online }]} />
+                <Text style={[styles.onlineHeaderTitle, { color: theme.colors.textMuted }]}>
+                  ONLINE NOW ({onlineFriends.length})
+                </Text>
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.onlineScrollContent}
+              >
+                {onlineFriends.map((f) => (
+                  <TouchableOpacity
+                    key={f.id}
+                    onPress={() => onSelectConversation(f.id, f.name, f.username, f.avatarUrl)}
+                    style={styles.onlineFriendItem}
+                    activeOpacity={0.7}
+                  >
+                    <Avatar
+                      displayName={f.name}
+                      avatarUrl={f.avatarUrl}
+                      size="md"
+                      status="online"
+                    />
+                    <Text
+                      style={[styles.onlineFriendName, { color: theme.colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {f.name.split(' ')[0]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Content Area */}
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
+                Loading conversations...
+              </Text>
+            </View>
+          ) : filteredConversations.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View
+                style={[
+                  styles.emptyCard,
+                  {
+                    backgroundColor: theme.colors.surfaceElevated,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
+                  <Icon name="chat" size={32} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+                  {searchQuery
+                    ? 'No Matches Found'
+                    : filterChip === 'ARCHIVED'
+                    ? 'No Archived Chats'
+                    : filterChip === 'UNREAD'
+                    ? 'No Unread Messages'
+                    : filterChip === 'GROUPS'
+                    ? 'No Groups Yet'
+                    : filterChip === 'FAVORITES'
+                    ? 'No Favorite Chats'
+                    : 'No Conversations Yet'}
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
+                  {searchQuery
+                    ? `No conversations match "${searchQuery}"`
+                    : filterChip === 'ARCHIVED'
+                    ? 'Long-press any conversation card to archive it.'
+                    : filterChip === 'FAVORITES'
+                    ? 'Long-press any conversation to mark as favorite.'
+                    : 'Add friends to see feeds and play! Start direct chats, voice & video calls, and challenges.'}
+                </Text>
+                {filterChip === 'GROUPS' && !searchQuery && (
+                  <TouchableOpacity
+                    onPress={() => setIsCreateGroupModalVisible(true)}
+                    style={[styles.emptyActionBtn, { backgroundColor: theme.colors.primary }]}
+                    activeOpacity={0.8}
+                  >
+                    <Icon name="users" size={16} color={theme.colors.textOnPrimary} />
+                    <Text style={[styles.emptyActionBtnText, { color: theme.colors.textOnPrimary }]}>
+                      Create a Group
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {onNavigateToFriends && !searchQuery && filterChip === 'ALL' && (
+                  <TouchableOpacity
+                    onPress={onNavigateToFriends}
+                    style={[styles.emptyActionBtn, { backgroundColor: theme.colors.primary }]}
+                    activeOpacity={0.8}
+                  >
+                    <Icon name="users" size={16} color={theme.colors.textOnPrimary} />
+                    <Text style={[styles.emptyActionBtnText, { color: theme.colors.textOnPrimary }]}>
+                      Find Friends to Message
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredConversations}
+              keyExtractor={(item) => item.id}
+              renderItem={renderConversationItem}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl
+                  refreshing={isRefreshing}
+                  onRefresh={onRefresh}
+                  tintColor={theme.colors.primary}
+                  colors={[theme.colors.primary]}
+                />
+              }
+            />
+          )}
+        </>
+      )}
+
+      {/* CALLS TAB VIEW */}
+      {activeTab === 'calls' && (
+        <View style={{ flex: 1 }}>
+          {callHistory.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View
+                style={[
+                  styles.emptyCard,
+                  {
+                    backgroundColor: theme.colors.surfaceElevated,
+                    borderColor: theme.colors.border,
+                  },
+                ]}
+              >
+                <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
+                  <Icon name="audioCall" size={32} color={theme.colors.primary} />
+                </View>
+                <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
+                  No Recent Calls
+                </Text>
+                <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
+                  Tap the green call button below to start a crystal-clear audio or video call with any friend!
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <FlatList
+              data={callHistory}
+              keyExtractor={(item) => item.id}
+              renderItem={renderCallHistoryItem}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+
+          {/* WhatsApp-Style Floating Action Call Button (FAB) */}
+          <TouchableOpacity
+            style={[
+              styles.floatingCallFab,
+              {
+                backgroundColor: '#22C55E',
+                bottom: Math.max(98, 70 + (insets.bottom || 0)),
+              },
+            ]}
+            onPress={() => setIsNewCallModalVisible(true)}
+            activeOpacity={0.85}
+            accessibilityLabel="Start a new call"
+          >
+            <Icon name="audioCall" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
-      ) : filteredConversations.length === 0 ? (
-        <View style={styles.emptyContainer}>
+      )}
+
+      {/* Conversation Long-Press Actions Modal */}
+      <Modal
+        visible={isActionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsActionModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsActionModalVisible(false)}
+        >
           <View
             style={[
-              styles.emptyCard,
+              styles.actionSheetContent,
               {
-                backgroundColor: theme.colors.surfaceElevated,
+                backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
               },
             ]}
           >
-            <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
-              <Icon name="chat" size={32} color={theme.colors.primary} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
-              {searchQuery ? 'No Matches Found' : 'No Conversations Yet'}
+            <View style={[styles.actionSheetGrab, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.actionSheetTitle, { color: theme.colors.textPrimary }]}>
+              {selectedConversation?.peer?.displayName || 'Chat Options'}
             </Text>
-            <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
-              {searchQuery
-                ? `No conversations match "${searchQuery}"`
-                : 'Add friends to see feeds and play with them! Start direct chats, voice & video calls, and challenge them to matches.'}
-            </Text>
-            {onNavigateToFriends && !searchQuery && (
-              <TouchableOpacity
-                onPress={onNavigateToFriends}
-                style={[styles.emptyActionBtn, { backgroundColor: theme.colors.primary }]}
-                activeOpacity={0.8}
-              >
-                <Icon name="users" size={16} color={theme.colors.textOnPrimary} />
-                <Text style={[styles.emptyActionBtnText, { color: theme.colors.textOnPrimary }]}>
-                  Find Friends to Message
-                </Text>
-              </TouchableOpacity>
-            )}
+
+            {/* Archive / Unarchive */}
+            <TouchableOpacity
+              style={[styles.actionSheetItem, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => {
+                if (selectedConversation) {
+                  toggleArchive(selectedConversation.id);
+                  setIsActionModalVisible(false);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon name="archive" size={18} color={theme.colors.primary} />
+              <Text style={[styles.actionSheetText, { color: theme.colors.textPrimary }]}>
+                {selectedConversation && archivedIds.includes(selectedConversation.id)
+                  ? 'Unarchive Chat'
+                  : 'Archive Chat'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Favorite / Unfavorite */}
+            <TouchableOpacity
+              style={[styles.actionSheetItem, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => {
+                if (selectedConversation) {
+                  toggleFavorite(selectedConversation.id);
+                  setIsActionModalVisible(false);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon name="star" size={18} color="#F59E0B" />
+              <Text style={[styles.actionSheetText, { color: theme.colors.textPrimary }]}>
+                {selectedConversation && favoriteIds.includes(selectedConversation.id)
+                  ? 'Remove from Favorites'
+                  : 'Mark as Favorite'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Delete Chat */}
+            <TouchableOpacity
+              style={styles.actionSheetItem}
+              onPress={() => {
+                if (selectedConversation) {
+                  setIsActionModalVisible(false);
+                  Alert.alert(
+                    'Delete Conversation',
+                    `Are you sure you want to delete this chat with ${selectedConversation.peer?.displayName}?`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: () => {
+                          setConversations((prev) =>
+                            prev.filter((c) => c.id !== selectedConversation.id)
+                          );
+                        },
+                      },
+                    ]
+                  );
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon name="userX" size={18} color="#EF4444" />
+              <Text style={[styles.actionSheetText, { color: '#EF4444' }]}>
+                Delete Conversation
+              </Text>
+            </TouchableOpacity>
           </View>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredConversations}
-          keyExtractor={(item) => item.id}
-          renderItem={renderConversationItem}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.colors.primary}
-              colors={[theme.colors.primary]}
-            />
-          }
-        />
-      )}
+        </TouchableOpacity>
+      </Modal>
+
+      {/* WhatsApp-Style New Call Drawer Modal */}
+      <Modal
+        visible={isNewCallModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsNewCallModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setIsNewCallModalVisible(false)}
+        >
+          <View
+            style={[
+              styles.newCallDrawerContent,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            <View style={[styles.actionSheetGrab, { backgroundColor: theme.colors.border }]} />
+            <Text style={[styles.actionSheetTitle, { color: theme.colors.textPrimary }]}>
+              New Call with Friends
+            </Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              {friends.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: theme.colors.textMuted, marginVertical: 20 }}>
+                  No friends found yet. Add friends to start live calls!
+                </Text>
+              ) : (
+                friends.map((friend) => (
+                  <View
+                    key={friend.id}
+                    style={[styles.friendCallRow, { borderBottomColor: theme.colors.divider }]}
+                  >
+                    <Avatar
+                      displayName={friend.displayName}
+                      avatarUrl={friend.avatarUrl}
+                      size="md"
+                      status={friend.isOnline ? 'online' : 'offline'}
+                    />
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={[styles.friendCallName, { color: theme.colors.textPrimary }]}>
+                        {friend.displayName}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: friend.isOnline ? theme.colors.online : theme.colors.textMuted }}>
+                        {friend.isOnline ? 'online' : `@${friend.username}`}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setIsNewCallModalVisible(false);
+                          startCall(friend.id, friend.displayName, friend.username, friend.avatarUrl, 'audio');
+                        }}
+                        style={[styles.quickCallActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+                      >
+                        <Icon name="audioCall" size={18} color="#22C55E" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setIsNewCallModalVisible(false);
+                          startCall(friend.id, friend.displayName, friend.username, friend.avatarUrl, 'video');
+                        }}
+                        style={[styles.quickCallActionBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+                      >
+                        <Icon name="videoCall" size={18} color={theme.colors.primary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        visible={isCreateGroupModalVisible}
+        onClose={() => setIsCreateGroupModalVisible(false)}
+        onGroupCreated={(newGroup) => {
+          setConversations((prev) => [newGroup, ...prev.filter((c) => c.id !== newGroup.id)]);
+          onSelectConversation(
+            newGroup.id,
+            newGroup.group?.title || 'Group Chat',
+            `${newGroup.group?.memberCount || 0} members`,
+            newGroup.group?.avatarUrl || null,
+            newGroup.id,
+            true,
+            newGroup.group
+          );
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -449,7 +1249,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerBar: {
-    height: 56,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -457,52 +1257,149 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerSpacer: {
-    width: 38,
+    width: 36,
+  },
+  newGroupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  newGroupBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  groupAvatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupTagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  groupTagText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
+  tabSwitcher: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+  },
+  tabItem: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2.5,
+    borderBottomColor: 'transparent',
+  },
+  activeTabItem: {
+    borderBottomWidth: 2.5,
+  },
+  tabItemText: {
+    fontSize: 14,
+  },
   searchWrapper: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingTop: 10,
+    paddingBottom: 6,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
-    borderRadius: 14,
+    height: 42,
+    borderRadius: 12,
     borderWidth: 1,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     paddingVertical: 0,
+  },
+  filterChipsRow: {
+    paddingVertical: 6,
+  },
+  filterScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  filterChipBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  filterChipText: {
+    fontSize: 12,
+  },
+  archiveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  archiveBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  archiveIconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archiveBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  archiveBannerCount: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 96,
-    gap: 12,
+    paddingTop: 6,
+    paddingBottom: 120,
+    gap: 10,
   },
   conversationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 22,
+    padding: 14,
+    borderRadius: 18,
     borderWidth: 1,
-    gap: 14,
+    gap: 12,
   },
   cardContent: {
     flex: 1,
@@ -516,112 +1413,52 @@ const styles = StyleSheet.create({
   displayNameText: {
     fontSize: 15,
     fontWeight: '600',
-    flex: 1,
-    marginRight: 8,
   },
   unreadTextBold: {
     fontWeight: '700',
   },
   timeAgoText: {
-    fontSize: 12,
-    fontWeight: '400',
+    fontSize: 11,
   },
   bottomRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   previewContainer: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    flex: 1,
     marginRight: 8,
+    gap: 4,
   },
   deliveryStatusTick: {
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginRight: 2,
   },
   inviteIconBadge: {
     marginRight: 2,
   },
   previewText: {
     fontSize: 13,
-    fontWeight: '400',
     flex: 1,
   },
   unreadBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 5,
   },
   unreadBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
-  emptyContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyCard: {
-    width: '100%',
-    padding: 28,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-    paddingHorizontal: 8,
-  },
-  emptyActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 8,
-  },
-  emptyActionBtnText: {
-    fontSize: 14,
+    fontSize: 10,
     fontWeight: '700',
   },
   cardCallActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginLeft: 6,
+    marginLeft: 4,
   },
   cardCallBtn: {
     width: 32,
@@ -629,5 +1466,200 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  onlineSection: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    marginBottom: 6,
+  },
+  onlineHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    gap: 6,
+  },
+  onlineDotIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  onlineHeaderTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  onlineScrollContent: {
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  onlineFriendItem: {
+    alignItems: 'center',
+    gap: 5,
+    width: 58,
+  },
+  onlineFriendName: {
+    fontSize: 11,
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyCard: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  emptyActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 6,
+  },
+  emptyActionBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  callCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+  },
+  callCardContent: {
+    flex: 1,
+    gap: 3,
+  },
+  callPeerName: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  callMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  callTimeText: {
+    fontSize: 12,
+  },
+  callTriggerBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  floatingCallFab: {
+    position: 'absolute',
+    bottom: 98,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    zIndex: 99,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  actionSheetContent: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: 1,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  actionSheetGrab: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  actionSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  actionSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  actionSheetText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  newCallDrawerContent: {
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderTopWidth: 1,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  friendCallRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  friendCallName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  quickCallActionBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
