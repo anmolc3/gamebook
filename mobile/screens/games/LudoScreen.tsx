@@ -28,6 +28,7 @@ import { useTheme } from '../../theme';
 import { Icon, TrophyIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameRulesModal } from '../../components';
+import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
 import { RoomDetails } from '../../services/room.service';
@@ -210,6 +211,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
   // UI & Animation State
   const [isRulesModalVisible, setIsRulesModalVisible] = useState<boolean>(false);
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState<boolean>(false);
   const [isRolling, setIsRolling] = useState<boolean>(false);
   const [isMoving, setIsMoving] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1081,14 +1083,25 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           <Text style={styles.headerTitleText}>Classic - {players.length || 4} Players</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.headerIconButton}
-          onPress={() => setIsRulesModalVisible(true)}
-          activeOpacity={0.7}
-          accessibilityLabel="Rules & Settings"
-        >
-          <Icon name="settings" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => setIsInviteModalVisible(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Invite Friends"
+          >
+            <Icon name="users" size={20} color="#FFB800" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerIconButton}
+            onPress={() => setIsRulesModalVisible(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Rules & Settings"
+          >
+            <Icon name="settings" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Top Players Row: Red (Left) | Green (Right) */}
@@ -1821,6 +1834,14 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         gameTitle="Ludo Classic"
         category="BOARD"
         onClose={() => setIsRulesModalVisible(false)}
+      />
+
+      <InvitePlayersModal
+        visible={isInviteModalVisible}
+        roomCode={roomCode}
+        gameType="LUDO"
+        gameName="Ludo World Arena"
+        onClose={() => setIsInviteModalVisible(false)}
       />
     </SafeAreaView>
   );

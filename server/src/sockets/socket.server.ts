@@ -276,6 +276,55 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
       }
     });
 
+    // Real-Time Direct Game Room Invites Across All Games
+    socket.on('room:invite', async (data: { recipientId: string; roomCode: string; gameType: string; gameName?: string }, cb?: any) => {
+      if (!userId || !data?.recipientId || !data?.roomCode) {
+        if (typeof cb === 'function') cb({ success: false, error: 'Invalid invite parameters' });
+        return;
+      }
+      try {
+        const inviter = socket.data.user;
+        const inviterName = inviter?.displayName || inviter?.username || username || 'A player';
+        const normalizedCode = data.roomCode.trim().toUpperCase();
+        const payload = {
+          inviterId: userId,
+          inviterName,
+          inviterAvatarUrl: inviter?.avatarUrl || null,
+          roomCode: normalizedCode,
+          gameType: data.gameType,
+          gameName: data.gameName || data.gameType,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Emit real-time invite directly to recipient's personal socket room
+        emitToUser(data.recipientId, 'game:invite_received', payload);
+
+        // Also post in chat conversation if one exists or create it
+        try {
+          const { ChatService } = require('../chat/chat.service');
+          const conv = await ChatService.getOrCreateConversation(userId, data.recipientId);
+          if (conv?.id) {
+            await ChatService.sendMessage(userId, conv.id, {
+              content: `Challenged you to play ${data.gameName || data.gameType}! Room code: ${normalizedCode}`,
+              type: 'GAME_INVITE',
+              metadata: {
+                roomCode: normalizedCode,
+                gameType: data.gameType,
+                gameName: data.gameName || data.gameType,
+                hostName: inviterName,
+              },
+            });
+          }
+        } catch (chatErr) {
+          console.warn('[Socket] Optional chat invite delivery note:', chatErr);
+        }
+
+        if (typeof cb === 'function') cb({ success: true, payload });
+      } catch (err: any) {
+        if (typeof cb === 'function') cb({ success: false, error: err.message });
+      }
+    });
+
     // ------------------------------------------------------------------------
     // Real-Time Solo / AI Opponent Mode Events
     // ------------------------------------------------------------------------

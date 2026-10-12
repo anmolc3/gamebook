@@ -16,8 +16,9 @@ import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
-import { RoomService, RoomDetails, RoomPlayer } from '../../services/room.service';
 import { MobileSocketService } from '../../services/socket.service';
+import { RoomService, RoomDetails, RoomPlayer } from '../../services/room.service';
+import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 
 export interface RoomLobbyScreenProps {
   roomCode: string;
@@ -42,6 +43,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   const [room, setRoom] = useState<RoomDetails | null>(initialRoom || null);
   const [isLoading, setIsLoading] = useState(!initialRoom);
   const [isRulesModalVisible, setIsRulesModalVisible] = useState(false);
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isTogglingReady, setIsTogglingReady] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [disconnectedPlayer, setDisconnectedPlayer] = useState<{
@@ -149,7 +151,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     if (!room || isTogglingReady) return;
     try {
       setIsTogglingReady(true);
-      const myPlayer = room.players.find((p) => p.userId === authUser?.id);
+      const myPlayer = room.players.find((p: RoomPlayer) => p.userId === authUser?.id);
       const nextReady = !myPlayer?.isReady;
       const updated = await RoomService.toggleReady(room.code, nextReady);
       setRoom(updated);
@@ -209,17 +211,17 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   };
 
   const isHost = room?.hostId === authUser?.id;
-  const myPlayer = room?.players.find((p) => p.userId === authUser?.id);
+  const myPlayer = room?.players.find((p: RoomPlayer) => p.userId === authUser?.id);
   const isReady = myPlayer?.isReady || false;
   const isTicTacToe = room?.gameType === 'TICTACTOE';
   const allReady =
     (room?.players.length || 0) >= 2 &&
-    room?.players.every((p) => p.isReady);
+    room?.players.every((p: RoomPlayer) => p.isReady);
 
   const maxSlots = room?.maxPlayers || 2;
   const slots: (RoomPlayer | null)[] = [];
   for (let i = 0; i < maxSlots; i++) {
-    const playerInSlot = room?.players.find((p) => p.slotIndex === i) || null;
+    const playerInSlot = room?.players.find((p: RoomPlayer) => p.slotIndex === i) || null;
     slots.push(playerInSlot);
   }
 
@@ -289,16 +291,17 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
             <Icon name="info" size={18} color={theme.colors.primary} />
           </TouchableOpacity>
 
-          {onInviteFriends && (
-            <TouchableOpacity
-              onPress={() => onInviteFriends(roomCode)}
-              style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
-              activeOpacity={0.7}
-              accessibilityLabel="Invite Friends"
-            >
-              <Icon name="users" size={18} color={theme.colors.primary} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            onPress={() => {
+              setIsInviteModalVisible(true);
+              onInviteFriends?.(roomCode);
+            }}
+            style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Invite Friends"
+          >
+            <Icon name="users" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -519,17 +522,19 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
                       Waiting for player to join...
                     </Text>
                   </View>
-                  {onInviteFriends && (
-                    <TouchableOpacity
-                      onPress={() => onInviteFriends(roomCode)}
-                      style={[styles.inviteBtn, { backgroundColor: theme.colors.primary }]}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.inviteBtnText, { color: theme.colors.textOnPrimary }]}>
-                        Invite
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setIsInviteModalVisible(true);
+                      onInviteFriends?.(roomCode);
+                    }}
+                    style={[styles.inviteBtn, { backgroundColor: theme.colors.primary }]}
+                    activeOpacity={0.8}
+                    accessibilityLabel={`Invite friend to slot ${idx + 1}`}
+                  >
+                    <Text style={[styles.inviteBtnText, { color: theme.colors.textOnPrimary }]}>
+                      Invite
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               );
             })}
@@ -620,6 +625,15 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
         gameType={room?.gameType || 'TICTACTOE'}
         gameTitle={room?.gameType?.replace(/_/g, ' ')}
         onClose={() => setIsRulesModalVisible(false)}
+      />
+
+      {/* Planned Players Invite Modal for All Games */}
+      <InvitePlayersModal
+        visible={isInviteModalVisible}
+        roomCode={roomCode}
+        gameType={room?.gameType || 'GAME'}
+        gameName={getGameLabel(room?.gameType)}
+        onClose={() => setIsInviteModalVisible(false)}
       />
     </SafeAreaView>
   );

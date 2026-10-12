@@ -111,100 +111,6 @@ function MainNavigator() {
   const insets = useSafeAreaInsets();
   const processedMessageIdsRef = React.useRef<Set<string>>(new Set());
 
-  // Listen globally to incoming messages & invites over socket to post system notifications
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    MobileSocketService.connect();
-
-    const unsubscribeChat = MobileSocketService.onMessageReceived((msg: any) => {
-      if (!msg) return;
-
-      // Ignore own messages
-      if (user?.id && msg.senderId === user.id) return;
-
-      // Deduplicate by message id
-      if (msg.id && processedMessageIdsRef.current.has(msg.id)) return;
-      if (msg.id) {
-        processedMessageIdsRef.current.add(msg.id);
-        if (processedMessageIdsRef.current.size > 100) {
-          const first = processedMessageIdsRef.current.values().next().value;
-          if (first) processedMessageIdsRef.current.delete(first);
-        }
-      }
-
-      // Don't duplicate notification if the user is already actively chatting with this peer
-      if (
-        currentScreen === 'conversation' &&
-        activePeer &&
-        (activePeer.id === msg.senderId || activePeer.conversationId === msg.conversationId)
-      ) {
-        return;
-      }
-
-      const senderTitle = msg.sender?.displayName || msg.sender?.username || 'New Message';
-      const previewText = msg.metadata?.isViewOnce
-        ? '📷 Sent a view-once photo'
-        : msg.content || 'Sent an attachment';
-
-      NotificationService.displayLocalNotification(
-        `💬 ${senderTitle}`,
-        previewText,
-        {
-          type: 'CHAT_MESSAGE',
-          conversationId: msg.conversationId,
-          senderId: msg.senderId,
-          senderName: senderTitle,
-          messageId: msg.id,
-        },
-        CHANNELS.MESSAGES
-      );
-    });
-
-    return () => {
-      unsubscribeChat();
-    };
-  }, [isAuthenticated, currentScreen, activePeer, user?.id]);
-
-  const MAIN_SWIPE_TABS: Array<'home' | 'friends' | 'discovery' | 'chatList' | 'profile'> = [
-    'home',
-    'friends',
-    'discovery',
-    'chatList',
-    'profile',
-  ];
-
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) => {
-          const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
-          const isSignificant = Math.abs(gestureState.dx) > 35;
-          const isMainScreen = MAIN_SWIPE_TABS.includes(currentScreen as any) && !profileUserId;
-          return isHorizontal && isSignificant && isMainScreen;
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          if (!MAIN_SWIPE_TABS.includes(currentScreen as any) || profileUserId) return;
-          const currentIndex = MAIN_SWIPE_TABS.indexOf(currentScreen as any);
-          if (currentIndex === -1) return;
-
-          // Swipe Left (finger moves left) -> Next Tab
-          if (gestureState.dx < -50 && currentIndex < MAIN_SWIPE_TABS.length - 1) {
-            const nextScreen = MAIN_SWIPE_TABS[currentIndex + 1];
-            setProfileUserId(undefined);
-            setCurrentScreen(nextScreen);
-          }
-          // Swipe Right (finger moves right) -> Previous Tab
-          else if (gestureState.dx > 50 && currentIndex > 0) {
-            const prevScreen = MAIN_SWIPE_TABS[currentIndex - 1];
-            setProfileUserId(undefined);
-            setCurrentScreen(prevScreen);
-          }
-        },
-      }),
-    [currentScreen, profileUserId]
-  );
-
   const handleJoinedRoom = (room: any) => {
     setCurrentRoomCode(room.code);
     setCurrentRoomDetails(room);
@@ -326,6 +232,145 @@ function MainNavigator() {
       setCurrentScreen('roomLobby');
     }
   };
+
+  // Listen globally to incoming messages & invites over socket to post system notifications
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    MobileSocketService.connect();
+
+    const unsubscribeChat = MobileSocketService.onMessageReceived((msg: any) => {
+      if (!msg) return;
+
+      // Ignore own messages
+      if (user?.id && msg.senderId === user.id) return;
+
+      // Deduplicate by message id
+      if (msg.id && processedMessageIdsRef.current.has(msg.id)) return;
+      if (msg.id) {
+        processedMessageIdsRef.current.add(msg.id);
+        if (processedMessageIdsRef.current.size > 100) {
+          const first = processedMessageIdsRef.current.values().next().value;
+          if (first) processedMessageIdsRef.current.delete(first);
+        }
+      }
+
+      // Don't duplicate notification if the user is already actively chatting with this peer
+      if (
+        currentScreen === 'conversation' &&
+        activePeer &&
+        (activePeer.id === msg.senderId || activePeer.conversationId === msg.conversationId)
+      ) {
+        return;
+      }
+
+      const senderTitle = msg.sender?.displayName || msg.sender?.username || 'New Message';
+      const previewText = msg.metadata?.isViewOnce
+        ? '📷 Sent a view-once photo'
+        : msg.type === 'GAME_INVITE'
+        ? `🎮 Challenged you to play ${msg.metadata?.gameName || msg.metadata?.gameType || 'a match'}! (#${msg.metadata?.roomCode || ''})`
+        : msg.content || 'Sent an attachment';
+
+      NotificationService.displayLocalNotification(
+        `💬 ${senderTitle}`,
+        previewText,
+        {
+          type: msg.type === 'GAME_INVITE' ? 'GAME_INVITE' : 'CHAT_MESSAGE',
+          conversationId: msg.conversationId,
+          senderId: msg.senderId,
+          senderName: senderTitle,
+          messageId: msg.id,
+          roomCode: msg.metadata?.roomCode,
+        },
+        CHANNELS.MESSAGES
+      );
+    });
+
+    const unsubscribeInvite = MobileSocketService.onGameInviteReceived((invite: any) => {
+      if (!invite || !invite.roomCode) return;
+      if (user?.id && invite.inviterId === user.id) return;
+
+      const inviter = invite.inviterName || 'A friend';
+      const gameTitle = invite.gameName || invite.gameType || 'Multiplayer Game';
+
+      NotificationService.displayLocalNotification(
+        `🎮 Game Invite: ${inviter}`,
+        `${inviter} invited you to play ${gameTitle}! Room #${invite.roomCode}`,
+        {
+          type: 'GAME_INVITE',
+          roomCode: invite.roomCode,
+          gameType: invite.gameType,
+        },
+        CHANNELS.MESSAGES
+      );
+
+      Alert.alert(
+        '🎮 Game Invite!',
+        `${inviter} invited you to play ${gameTitle}!\n\nRoom Code: #${invite.roomCode}`,
+        [
+          {
+            text: 'Decline',
+            style: 'cancel',
+          },
+          {
+            text: 'Accept & Join',
+            onPress: async () => {
+              try {
+                const joined = await RoomService.joinRoom(invite.roomCode);
+                handleJoinedRoom(joined);
+              } catch (err: any) {
+                Alert.alert('Unable to Join', err?.message || 'Room could not be joined');
+              }
+            },
+          },
+        ]
+      );
+    });
+
+    return () => {
+      unsubscribeChat();
+      unsubscribeInvite();
+    };
+  }, [isAuthenticated, currentScreen, activePeer, user?.id]);
+
+  const MAIN_SWIPE_TABS: Array<'home' | 'friends' | 'discovery' | 'chatList' | 'profile'> = [
+    'home',
+    'friends',
+    'discovery',
+    'chatList',
+    'profile',
+  ];
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 2;
+          const isSignificant = Math.abs(gestureState.dx) > 35;
+          const isMainScreen = MAIN_SWIPE_TABS.includes(currentScreen as any) && !profileUserId;
+          return isHorizontal && isSignificant && isMainScreen;
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          if (!MAIN_SWIPE_TABS.includes(currentScreen as any) || profileUserId) return;
+          const currentIndex = MAIN_SWIPE_TABS.indexOf(currentScreen as any);
+          if (currentIndex === -1) return;
+
+          // Swipe Left (finger moves left) -> Next Tab
+          if (gestureState.dx < -50 && currentIndex < MAIN_SWIPE_TABS.length - 1) {
+            const nextScreen = MAIN_SWIPE_TABS[currentIndex + 1];
+            setProfileUserId(undefined);
+            setCurrentScreen(nextScreen);
+          }
+          // Swipe Right (finger moves right) -> Previous Tab
+          else if (gestureState.dx > 50 && currentIndex > 0) {
+            const prevScreen = MAIN_SWIPE_TABS[currentIndex - 1];
+            setProfileUserId(undefined);
+            setCurrentScreen(prevScreen);
+          }
+        },
+      }),
+    [currentScreen, profileUserId]
+  );
 
   if (isLoading) {
     return (
@@ -563,7 +608,7 @@ function MainNavigator() {
           }
         }}
         onInviteFriends={() => {
-          setCurrentScreen('friends');
+          // Handled directly via in-lobby InvitePlayersModal
         }}
       />
     );

@@ -15,6 +15,7 @@ import { useTheme } from '../../theme';
 import { Icon, CrossMarkIcon, CircleMarkIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameRulesModal } from '../../components';
+import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
 import { RoomPlayer, RoomDetails } from '../../services/room.service';
@@ -50,6 +51,7 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
 
   // Rules & Rematch state
   const [isRulesModalVisible, setIsRulesModalVisible] = useState(false);
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState(false);
   const [isSubmittingMove, setIsSubmittingMove] = useState(false);
   const [isRematchModalVisible, setIsRematchModalVisible] = useState(false);
   const [rematchRequestedByMe, setRematchRequestedByMe] = useState(false);
@@ -285,6 +287,15 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => setIsInviteModalVisible(true)}
+            style={[styles.headerIconBtn, { backgroundColor: theme.colors.cardTintMint }]}
+            activeOpacity={0.7}
+            accessibilityLabel="Invite Friends"
+          >
+            <Icon name="users" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => setIsRulesModalVisible(true)}
             style={[styles.headerIconBtn, { backgroundColor: theme.colors.cardTintMint }]}
@@ -729,6 +740,14 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
         visible={isRulesModalVisible}
         gameType="TICTACTOE"
         onClose={() => setIsRulesModalVisible(false)}
+      />
+
+      <InvitePlayersModal
+        visible={isInviteModalVisible}
+        roomCode={roomCode}
+        gameType="TICTACTOE"
+        gameName="Tic-Tac-Toe Arena"
+        onClose={() => setIsInviteModalVisible(false)}
       />
     </SafeAreaView>
   );

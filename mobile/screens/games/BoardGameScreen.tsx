@@ -24,6 +24,7 @@ import { useTheme } from '../../theme';
 import { Icon, TrophyIcon, CrownIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameRulesModal } from '../../components';
+import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
 import { RoomPlayer, RoomDetails } from '../../services/room.service';
@@ -151,6 +152,7 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isRulesModalVisible, setIsRulesModalVisible] = useState<boolean>(false);
+  const [isInviteModalVisible, setIsInviteModalVisible] = useState<boolean>(false);
 
   // Rematch State
   const [isRematchModalVisible, setIsRematchModalVisible] = useState<boolean>(false);
@@ -1100,6 +1102,15 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
             style={[styles.iconBtn, { backgroundColor: theme.colors.cardTintMint }]}
+            onPress={() => setIsInviteModalVisible(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Invite Friends"
+          >
+            <Icon name="users" size={18} color={theme.colors.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: theme.colors.cardTintMint }]}
             onPress={() => setIsRulesModalVisible(true)}
             activeOpacity={0.8}
             accessibilityLabel="Game Rules & Steps"
@@ -1321,6 +1332,14 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
         gameTitle={getGameTitle()}
         category="BOARD"
         onClose={() => setIsRulesModalVisible(false)}
+      />
+
+      <InvitePlayersModal
+        visible={isInviteModalVisible}
+        roomCode={roomCode}
+        gameType={gameType}
+        gameName={getGameTitle()}
+        onClose={() => setIsInviteModalVisible(false)}
       />
     </SafeAreaView>
   );

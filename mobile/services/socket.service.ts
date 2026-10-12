@@ -104,6 +104,42 @@ export class MobileSocketService {
     return registerListener('friend:request_accepted', callback);
   }
 
+  // Real-Time Game Room Invites Across All Games
+  static sendGameInvite(
+    recipientId: string,
+    roomCode: string,
+    gameType: string,
+    gameName?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      if (!socket || !socket.connected) {
+        resolve({ success: false, error: 'Socket not connected' });
+        return;
+      }
+      socket.emit(
+        'room:invite',
+        { recipientId, roomCode, gameType, gameName },
+        (res: any) => {
+          resolve(res || { success: true });
+        }
+      );
+    });
+  }
+
+  static onGameInviteReceived(
+    callback: (invite: {
+      inviterId: string;
+      inviterName: string;
+      inviterAvatarUrl?: string | null;
+      roomCode: string;
+      gameType: string;
+      gameName: string;
+      timestamp: string;
+    }) => void
+  ): () => void {
+    return registerListener('game:invite_received', callback);
+  }
+
   // Chat real-time room joining & events
   static joinConversation(conversationId: string): void {
     if (socket) {
