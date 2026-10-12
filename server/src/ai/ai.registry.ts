@@ -14,6 +14,7 @@ import { RpsAI } from './games/rps.ai';
 import { BlackjackAI } from './games/blackjack.ai';
 import { UnoAI } from './games/uno.ai';
 import { WarAI } from './games/war.ai';
+import { WordleAI } from './games/wordle.ai';
 
 export class AiRegistry {
   private static aiInstances = new Map<string, GameAI>();
@@ -37,6 +38,9 @@ export class AiRegistry {
     this.register('BLACKJACK', new BlackjackAI());
     this.register('UNO_STYLE', new UnoAI());
     this.register('WAR', new WarAI());
+
+    // Priority 3 Puzzle & Word games
+    this.register('WORDLE_DUEL', new WordleAI());
   }
 
   static register(gameType: string, ai: GameAI): void {

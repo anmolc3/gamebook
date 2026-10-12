@@ -189,13 +189,13 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
   },
   WORDLE_DUEL: {
     id: 'WORDLE_DUEL',
-    name: 'Wordle Solo Guess',
+    name: 'Wordle Duel vs AI',
     category: 'PUZZLE',
-    type: 'SOLO_PUZZLE',
-    difficulties: ['EASY', 'MEDIUM', 'HARD'],
+    type: 'AI_OPPONENT',
+    difficulties: ['EASY', 'MEDIUM', 'HARD', 'EXPERT'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Deduce the secret 5-letter word in 6 attempts.',
-    iconName: 'edit',
+    description: 'Race against an intelligent AI bot to deduce the 5-letter secret word in 6 attempts.',
+    iconName: 'type',
   },
   HANGMAN: {
     id: 'HANGMAN',

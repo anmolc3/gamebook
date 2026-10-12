@@ -69,8 +69,8 @@ export class SoloManager {
 
     this.userActiveSolo.set(userId, virtualCode);
 
-    // If AI is configured to move first (e.g. state.turnPlayerId === botProfile.id)
-    if (isAiGame && match.state?.turnPlayerId === botProfile.id) {
+    // If AI is configured to move first (or simultaneous race games like WORDLE_DUEL)
+    if (isAiGame && (match.state?.turnPlayerId === botProfile.id || gameType === 'WORDLE_DUEL')) {
       this.scheduleAiTurn(match);
     }
 
@@ -94,7 +94,11 @@ export class SoloManager {
     const isAiTurn =
       state?.turnPlayerId === match.aiPlayerId ||
       // Simultaneous games like RPS where AI hasn't made its choice yet
-      (state?.choices && state?.choices[match.aiPlayerId] === null);
+      (state?.choices && state?.choices[match.aiPlayerId] === null) ||
+      // Simultaneous puzzle race games like Wordle Duel
+      (match.gameType === 'WORDLE_DUEL' &&
+        !state?.isFinished?.[match.aiPlayerId] &&
+        !this.pendingAiTimers.has(match.roomCode));
 
     if (isAiTurn) {
       this.scheduleAiTurn(match);
@@ -126,6 +130,12 @@ export class SoloManager {
       } else {
         extraPacing = 600; // Pause before AI rolls dice
       }
+    } else if (match.gameType === 'WORDLE_DUEL') {
+      // Natural human-like deduction and keyboard typing pacing
+      if (difficulty === 'EASY') extraPacing = 3200;
+      else if (difficulty === 'MEDIUM') extraPacing = 2200;
+      else if (difficulty === 'HARD') extraPacing = 1200;
+      else extraPacing = 600;
     }
     const delayMs = baseDelayMs + extraPacing;
 
@@ -158,6 +168,15 @@ export class SoloManager {
 
         // Apply action through the exact same authoritative MatchManager
         await MatchManager.handleAction(roomCode, aiPlayerId, aiMove);
+
+        // For simultaneous games like WORDLE_DUEL, schedule next AI guess if not finished
+        if (
+          match.gameType === 'WORDLE_DUEL' &&
+          !match.isConcluded &&
+          !match.state?.isFinished?.[aiPlayerId]
+        ) {
+          this.scheduleAiTurn(match);
+        }
       } catch (err: any) {
         console.error(`[SoloManager] Error during AI turn in room ${roomCode}:`, err);
       }

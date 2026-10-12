@@ -19,6 +19,17 @@ export class WordleEngine implements GameEngine<WordleState, WordleAction, Wordl
     'CRANE', 'GHOST', 'PLANT', 'SPARK', 'BRAVE',
     'CLOUD', 'FLAME', 'LIGHT', 'OCEAN', 'STORM',
     'WATER', 'EARTH', 'SPACE', 'DREAM', 'MAGIC',
+    'APPLE', 'HOUSE', 'HEART', 'MUSIC', 'SMILE',
+    'RIVER', 'BEACH', 'TIGER', 'BREAD', 'TRAIN',
+    'NIGHT', 'HORSE', 'SUGAR', 'FRESH', 'SMART',
+    'CLEAR', 'FAITH', 'ROYAL', 'PRIDE', 'POWER',
+    'SOUND', 'STONE', 'TRACK', 'GUIDE', 'FOCUS',
+    'STAND', 'TRUTH', 'UNITY', 'CROWN', 'SWORD',
+    'GREEN', 'WHITE', 'BLACK', 'SOLAR', 'LUNAR',
+    'FORCE', 'SPORT', 'SKILL', 'QUEST', 'PIXEL',
+    'SHINE', 'BLOOM', 'CLOCK', 'SWEET', 'DANCE',
+    'FLASH', 'FROST', 'EAGLE', 'CHIEF', 'PEACE',
+    'BRING', 'SHIELD', 'FLIGHT', 'SHARP', 'NOBLE',
   ];
 
   constructor() {

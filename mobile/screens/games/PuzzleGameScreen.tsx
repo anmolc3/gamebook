@@ -431,8 +431,79 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
   // 8. Wordle Duel
   const renderWordle = () => {
     const guesses = gameState?.guesses?.[user?.id || ''] || [];
+    const opponentPlayer = playerList.find((p: RoomPlayer) => p.userId !== user?.id);
+    const opponentId =
+      opponentPlayer?.userId ||
+      (gameState?.players ? gameState.players.find((id: string) => id !== user?.id) : undefined);
+    const opponentGuesses = opponentId ? gameState?.guesses?.[opponentId] || [] : [];
+    const isFinishedMe = gameState?.isFinished?.[user?.id || ''];
+    const isMatchEnded = !!gameState?.winnerId;
+    const opponentName =
+      opponentPlayer?.user?.displayName ||
+      opponentPlayer?.user?.username ||
+      (opponentId ? 'AI Opponent' : 'Opponent');
+
     return (
       <View style={styles.puzzleBox}>
+        {/* Opponent Live Progress HUD */}
+        {opponentId && (
+          <View style={styles.wordleOpponentBanner}>
+            <View style={styles.wordleOpponentHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.wordleOpponentTitle}>
+                  🤖 {opponentName}
+                </Text>
+                {opponentGuesses.length > 0 &&
+                  opponentGuesses[opponentGuesses.length - 1]?.feedback?.every(
+                    (f: string) => f === 'CORRECT'
+                  ) && (
+                    <View style={styles.wordleSolvedPill}>
+                      <Text style={styles.wordleSolvedPillText}>SOLVED!</Text>
+                    </View>
+                  )}
+              </View>
+              <Text style={styles.wordleOpponentAttempts}>
+                {opponentGuesses.length}/6 attempts
+              </Text>
+            </View>
+
+            {/* Mini Opponent Guess Feedback Rows */}
+            <View style={styles.wordleOpponentGrid}>
+              {Array.from({ length: 6 }).map((_, rIdx) => {
+                const oppGuess = opponentGuesses[rIdx];
+                return (
+                  <View key={`opp-${rIdx}`} style={styles.wordleMiniRow}>
+                    {Array.from({ length: 5 }).map((_, cIdx) => {
+                      const status = oppGuess?.feedback?.[cIdx];
+                      let dotBg = '#1E293B';
+                      if (status === 'CORRECT') dotBg = '#3ED598';
+                      else if (status === 'PRESENT') dotBg = '#FFC542';
+                      else if (status === 'ABSENT') dotBg = '#475569';
+
+                      return (
+                        <View
+                          key={cIdx}
+                          style={[
+                            styles.wordleMiniCell,
+                            { backgroundColor: dotBg },
+                          ]}
+                        >
+                          {isMatchEnded && oppGuess?.word && (
+                            <Text style={styles.wordleMiniText}>
+                              {oppGuess.word[cIdx]}
+                            </Text>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* Player's Main Board */}
         <View style={styles.wordleBoard}>
           {Array.from({ length: 6 }).map((_, rIdx) => {
             const rowGuess = guesses[rIdx];
@@ -456,28 +527,42 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
             );
           })}
         </View>
-        <View style={styles.inputRow}>
-          <TextInput
-            style={[styles.wordleInput, { backgroundColor: theme.colors.surface, color: theme.colors.textPrimary }]}
-            value={wordleInput}
-            onChangeText={setWordleInput}
-            maxLength={5}
-            autoCapitalize="characters"
-            placeholder="5 LETTERS"
-            placeholderTextColor="#64748B"
-          />
-          <TouchableOpacity
-            style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
-            onPress={() => {
-              if (wordleInput.length === 5) {
-                sendAction({ type: 'GUESS_WORD', word: wordleInput });
-                setWordleInput('');
-              }
-            }}
-          >
-            <Text style={styles.actionBtnText}>ENTER</Text>
-          </TouchableOpacity>
-        </View>
+
+        {/* Input Row or Completion Notice */}
+        {!isFinishedMe && !isMatchEnded ? (
+          <View style={styles.inputRow}>
+            <TextInput
+              style={[styles.wordleInput, { backgroundColor: theme.colors.surface, color: theme.colors.textPrimary }]}
+              value={wordleInput}
+              onChangeText={setWordleInput}
+              maxLength={5}
+              autoCapitalize="characters"
+              placeholder="5 LETTERS"
+              placeholderTextColor="#64748B"
+            />
+            <TouchableOpacity
+              style={[styles.primaryActionBtn, { backgroundColor: theme.colors.primary }]}
+              onPress={() => {
+                if (wordleInput.length === 5) {
+                  sendAction({ type: 'GUESS_WORD', word: wordleInput });
+                  setWordleInput('');
+                }
+              }}
+            >
+              <Text style={styles.actionBtnText}>ENTER</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.wordleCompleteBanner}>
+            <Text style={styles.wordleCompleteText}>
+              {guesses.some((g: any) => g.word === gameState?.targetWord)
+                ? '🎉 You deduced the word!'
+                : isMatchEnded
+                ? `Word was: ${gameState?.targetWord || ''}`
+                : 'Attempts finished. Waiting for opponent...'}
+            </Text>
+          </View>
+        )}
       </View>
     );
   };
@@ -1281,6 +1366,79 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 2,
+  },
+  wordleOpponentBanner: {
+    width: '100%',
+    padding: 10,
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: '#1E293B',
+    marginBottom: 12,
+  },
+  wordleOpponentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  wordleOpponentTitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  wordleOpponentAttempts: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  wordleOpponentGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  wordleMiniRow: {
+    gap: 3,
+    alignItems: 'center',
+  },
+  wordleMiniCell: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wordleMiniText: {
+    fontSize: 8,
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  wordleSolvedPill: {
+    backgroundColor: '#3ED59820',
+    borderColor: '#3ED598',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  wordleSolvedPillText: {
+    color: '#3ED598',
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  wordleCompleteBanner: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#1E293B',
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  wordleCompleteText: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '800',
   },
   hangmanBlanks: {
     flexDirection: 'row',
