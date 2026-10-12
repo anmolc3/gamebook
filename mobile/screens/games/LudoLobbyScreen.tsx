@@ -91,9 +91,15 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
       </View>
 
       <ScrollView
-        showsVerticalScrollIndicator={false}
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
         keyboardShouldPersistTaps="handled"
+        bounces={true}
+        alwaysBounceVertical={true}
+        nestedScrollEnabled={true}
+        overScrollMode="always"
+        scrollEventThrottle={16}
       >
         {/* Hero 3D Ludo Art Container */}
         <View style={styles.heroSection}>
@@ -443,8 +449,13 @@ const styles = StyleSheet.create({
     color: '#8E9CAE',
     letterSpacing: 0.4,
   },
+  scrollView: {
+    flex: 1,
+    width: '100%',
+  },
   scrollContent: {
-    paddingBottom: 32,
+    flexGrow: 1,
+    paddingBottom: 140,
   },
   heroSection: {
     alignItems: 'center',
