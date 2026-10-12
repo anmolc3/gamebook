@@ -1,4 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { GameAlertService } from './services/alert.service';
+
+// Initialize global game-themed alert interceptor immediately across the whole app
+GameAlertService.init();
+
 import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform, PanResponder } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './theme';
@@ -37,10 +42,6 @@ import { MobileSocketService } from './services/socket.service';
 import { CallProvider } from './features/call/CallContext';
 import { CallModal } from './components/organisms/CallModal';
 import { GameAlertModal } from './components/organisms/GameAlertModal';
-import { GameAlertService } from './services/alert.service';
-
-// Initialize global game-themed alert interceptor
-GameAlertService.init();
 
 interface ConversationPeer {
   id: string;
@@ -902,11 +903,6 @@ function MainNavigator() {
         }}
       />
 
-      {/* Global Real-Time 1-on-1 Audio & Video Call Overlay */}
-      <CallModal />
-
-      {/* Global Game-Themed Alert Dialog Overlay */}
-      <GameAlertModal />
     </View>
   );
 }
@@ -918,6 +914,10 @@ export default function App() {
         <AuthProvider>
           <CallProvider>
             <MainNavigator />
+            {/* Global Real-Time 1-on-1 Audio & Video Call Overlay */}
+            <CallModal />
+            {/* Global Game-Themed Alert Dialog Overlay - Mounted across 100% of screens */}
+            <GameAlertModal />
           </CallProvider>
         </AuthProvider>
       </ThemeProvider>
