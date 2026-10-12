@@ -140,13 +140,14 @@ export class RoomService {
   }
 
   static async matchmake(
-    gameType: SupportedGameType = 'TICTACTOE'
+    gameType: SupportedGameType = 'TICTACTOE',
+    maxPlayers?: number
   ): Promise<{ matched: boolean; waitingForOpponent?: boolean; room: RoomDetails }> {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/rooms/matchmake`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ gameType }),
+      body: JSON.stringify({ gameType, maxPlayers }),
     });
     const json = await res.json();
     if (!res.ok) {

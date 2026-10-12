@@ -827,11 +827,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
   // Helper to find player for corner slot
   const getPlayerForCorner = (color: LudoColor): LudoPlayerState | null => {
-    const direct = players.find((p) => p.color === color);
-    if (direct) return direct;
-    const cornerOrder: LudoColor[] = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
-    const idx = cornerOrder.indexOf(color);
-    return players[idx] || null;
+    return players.find((p) => p.color === color) || null;
   };
 
   const redPlayer = getPlayerForCorner('RED');
@@ -959,12 +955,12 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     const colorMeta = COLOR_MAP[cornerColor];
     if (!player) {
       return (
-        <View style={[styles.playerQuadrantCard, isRight && styles.playerQuadrantRight, { opacity: 0.4 }]}>
+        <View style={[styles.playerQuadrantCard, isRight && styles.playerQuadrantRight, { opacity: 0.28 }]}>
           <View style={[styles.avatarWrap, { width: 36, height: 36 }]}>
             <View style={[styles.emptyAvatarRing, { borderColor: '#1F2937' }]} />
           </View>
           <View style={[styles.playerMetaColumn, isRight && styles.playerMetaColumnRight]}>
-            <Text style={styles.waitingSlotText}>Waiting...</Text>
+            <Text style={styles.waitingSlotText}>Inactive</Text>
           </View>
         </View>
       );
@@ -1068,18 +1064,6 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     return bStepSum - aStepSum;
   });
 
-  const getRankRewardCoins = (rankIndex: number): string => {
-    switch (rankIndex) {
-      case 0:
-        return '+50';
-      case 1:
-        return '+20';
-      case 2:
-        return '+10';
-      default:
-        return '0';
-    }
-  };
 
   const isUserWinner = winnerIds.length > 0 && winnerIds[0] === user?.id;
 
@@ -1692,8 +1676,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             <View style={styles.rankingsCardList}>
               {sortedRankedPlayers.map((p, idx) => {
                 const isRank1 = idx === 0;
-                const coinsReward = getRankRewardCoins(idx);
                 const userInfo = getPlayerUserInfo(p.userId);
+                const homeTokensCount = p.tokens.filter((t) => t.step === 56).length;
 
                 return (
                   <View
@@ -1753,26 +1737,16 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                       {userInfo.displayName || p.username} {p.userId === user?.id ? '(You)' : ''}
                     </Text>
 
-                    {/* Coins Reward Presentation */}
-                    <View style={styles.rankingCoinRewardRow}>
+                    {/* Token Progress Presentation */}
+                    <View style={styles.rankingHomeStatBadge}>
                       <Text
                         style={[
-                          styles.rankingCoinsText,
+                          styles.rankingHomeStatText,
                           isRank1 && { color: '#FFB800', fontWeight: '800' },
                         ]}
                       >
-                        {coinsReward}
+                        {homeTokensCount}/4 HOME
                       </Text>
-                      <Svg width={18} height={18} viewBox="0 0 20 20">
-                        <Circle cx="10" cy="10" r="9" fill="#FFB800" stroke="#F59E0B" strokeWidth="1.2" />
-                        <Circle cx="10" cy="10" r="6.5" fill="#FBBF24" stroke="#D97706" strokeWidth="0.8" />
-                        <Path
-                          d="M10 5.5 L10 14.5 M8 7.5 C8 6.5, 12 6.5, 12 8 C12 10, 8 10, 8 12 C8 13.5, 12 13.5, 12 12.5"
-                          stroke="#92400E"
-                          strokeWidth="1"
-                          strokeLinecap="round"
-                        />
-                      </Svg>
                     </View>
                   </View>
                 );
@@ -2374,15 +2348,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  rankingCoinRewardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  rankingHomeStatBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#334155',
   },
-  rankingCoinsText: {
-    color: '#E2E8F0',
-    fontSize: 14,
-    fontWeight: '700',
+  rankingHomeStatText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   victoryActionsArea: {
     width: '100%',

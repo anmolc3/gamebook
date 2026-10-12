@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,38 +8,60 @@ import {
   Dimensions,
   ScrollView,
   StatusBar,
+  TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Path, Circle, Polyline } from 'react-native-svg';
-import { useAuth } from '../../features/auth/AuthContext';
+import Svg, { Path, Circle, Polyline, Rect, G } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+export type LudoPlayerCount = 2 | 3 | 4;
+
 export interface LudoLobbyScreenProps {
   onBack: () => void;
-  onPlayOnline: () => void;
-  onPlayWithFriends: () => void;
-  onCreateRoom: () => void;
-  onJoinRoom: () => void;
+  onPlayOnline: (playerCount: LudoPlayerCount) => void;
+  onPlayWithFriends?: (playerCount: LudoPlayerCount) => void;
+  onCreateRoom: (playerCount: LudoPlayerCount) => void;
+  onJoinRoom: (roomCode: string) => Promise<void> | void;
+  onPlaySolo?: (playerCount: LudoPlayerCount) => void;
 }
 
 export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
   onBack,
   onPlayOnline,
-  onPlayWithFriends,
   onCreateRoom,
   onJoinRoom,
+  onPlaySolo,
 }) => {
-  const { user } = useAuth();
-  const coinsDisplay = (user as any)?.coins !== undefined
-    ? Number((user as any).coins).toLocaleString()
-    : '12,450';
+  const [selectedPlayers, setSelectedPlayers] = useState<LudoPlayerCount>(4);
+  const [roomCodeInput, setRoomCodeInput] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  const handleJoin = async () => {
+    const code = roomCodeInput.trim().toUpperCase();
+    if (code.length < 3) {
+      setJoinError('Please enter a valid room code');
+      return;
+    }
+    setJoinError(null);
+    setIsJoining(true);
+    try {
+      await onJoinRoom(code);
+    } catch (err: any) {
+      setJoinError(err?.message || 'Could not join room. Check code.');
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#080E13" />
 
-      {/* Top Header */}
+      {/* Top Header - No Coins */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
@@ -62,29 +84,16 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
           <Text style={styles.headerTitle}>Ludo</Text>
         </View>
 
-        {/* Coin Balance Capsule */}
-        <View style={styles.coinCapsule}>
-          <View style={styles.coinIconBadge}>
-            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-              <Circle cx="12" cy="12" r="10" fill="#FFB800" stroke="#FFE082" strokeWidth="1.5" />
-              <Circle cx="12" cy="12" r="7" stroke="#D97706" strokeWidth="1" strokeDasharray="2 2" />
-              <Path d="M12 7V17M9.5 9.5H14.5" stroke="#78350F" strokeWidth="1.5" strokeLinecap="round" />
-            </Svg>
-          </View>
-          <Text style={styles.coinBalanceText}>{coinsDisplay}</Text>
-          <TouchableOpacity
-            style={styles.coinAddBtn}
-            activeOpacity={0.7}
-            accessibilityLabel="Add coins"
-          >
-            <Text style={styles.coinAddText}>+</Text>
-          </TouchableOpacity>
+        {/* Format Badge Indicator */}
+        <View style={styles.headerRightBadge}>
+          <Text style={styles.headerRightBadgeText}>Classic Arena</Text>
         </View>
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Hero 3D Ludo Art Container */}
         <View style={styles.heroSection}>
@@ -95,12 +104,136 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
           />
         </View>
 
-        {/* Action Buttons Section */}
+        {/* Merged Player Count Selector */}
+        <View style={styles.selectorSection}>
+          <View style={styles.selectorHeader}>
+            <View style={styles.selectorTitleRow}>
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M17 21V19C17 17.9 16.1 17 15 17H9C7.9 17 7 17.9 7 19V21M12 13C14.2 13 16 11.2 16 9C16 6.8 14.2 5 12 5C9.8 5 8 6.8 8 9C8 11.2 9.8 13 12 13Z"
+                  stroke="#FFB800"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              </Svg>
+              <Text style={styles.selectorTitle}>PLAYERS</Text>
+            </View>
+            <View style={styles.activePlayerCountPill}>
+              <Text style={styles.activePlayerCountText}>{selectedPlayers} Players Selected</Text>
+            </View>
+          </View>
+
+          {/* 3 Segmented Selector Cards */}
+          <View style={styles.segmentedRow}>
+            {/* 2 Players */}
+            <TouchableOpacity
+              style={[
+                styles.segmentCard,
+                selectedPlayers === 2 && styles.segmentCardActive,
+              ]}
+              onPress={() => setSelectedPlayers(2)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.segmentDotsRow}>
+                <View style={[styles.playerColorDot, { backgroundColor: '#EF4444' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#F59E0B' }]} />
+              </View>
+              <Text
+                style={[
+                  styles.segmentCountText,
+                  selectedPlayers === 2 && styles.segmentCountTextActive,
+                ]}
+              >
+                2 Players
+              </Text>
+              <Text style={styles.segmentLabelText}>Duel (1v1)</Text>
+              {selectedPlayers === 2 && (
+                <View style={styles.activeCheckPill}>
+                  <Text style={styles.activeCheckPillText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* 3 Players */}
+            <TouchableOpacity
+              style={[
+                styles.segmentCard,
+                selectedPlayers === 3 && styles.segmentCardActive,
+              ]}
+              onPress={() => setSelectedPlayers(3)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.segmentDotsRow}>
+                <View style={[styles.playerColorDot, { backgroundColor: '#EF4444' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#10B981' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#F59E0B' }]} />
+              </View>
+              <Text
+                style={[
+                  styles.segmentCountText,
+                  selectedPlayers === 3 && styles.segmentCountTextActive,
+                ]}
+              >
+                3 Players
+              </Text>
+              <Text style={styles.segmentLabelText}>Clash</Text>
+              {selectedPlayers === 3 && (
+                <View style={styles.activeCheckPill}>
+                  <Text style={styles.activeCheckPillText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* 4 Players */}
+            <TouchableOpacity
+              style={[
+                styles.segmentCard,
+                selectedPlayers === 4 && styles.segmentCardActive,
+              ]}
+              onPress={() => setSelectedPlayers(4)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.segmentDotsRow}>
+                <View style={[styles.playerColorDot, { backgroundColor: '#EF4444' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#10B981' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#F59E0B' }]} />
+                <View style={[styles.playerColorDot, { backgroundColor: '#2563EB' }]} />
+              </View>
+              <Text
+                style={[
+                  styles.segmentCountText,
+                  selectedPlayers === 4 && styles.segmentCountTextActive,
+                ]}
+              >
+                4 Players
+              </Text>
+              <Text style={styles.segmentLabelText}>Classic</Text>
+              {selectedPlayers === 4 && (
+                <View style={styles.activeCheckPill}>
+                  <Text style={styles.activeCheckPillText}>✓</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Description Subtitle Banner */}
+          <View style={styles.formatDescriptionBanner}>
+            <Text style={styles.formatDescriptionText}>
+              {selectedPlayers === 2
+                ? '⚔️ 1v1 Head-to-Head Duel across opposite Red & Yellow corners'
+                : selectedPlayers === 3
+                ? '⚡ 3-Way Token Clash racing to the center triangle'
+                : '👑 Classic 4-Player Board Race with all corners active'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Merged Action Buttons Section */}
         <View style={styles.actionsContainer}>
           {/* 1. Play Online (Prominent Gold Action) */}
           <TouchableOpacity
             style={[styles.actionCard, styles.goldActionCard]}
-            onPress={onPlayOnline}
+            onPress={() => onPlayOnline(selectedPlayers)}
             activeOpacity={0.88}
           >
             <View style={styles.actionLeft}>
@@ -117,7 +250,9 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
               </View>
               <View style={styles.actionTexts}>
                 <Text style={styles.goldTitle}>Play Online</Text>
-                <Text style={styles.goldSubtitle}>Find random players</Text>
+                <Text style={styles.goldSubtitle}>
+                  Match with {selectedPlayers} players instantly
+                </Text>
               </View>
             </View>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -131,10 +266,10 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
             </Svg>
           </TouchableOpacity>
 
-          {/* 2. Play with Friends (Vibrant Blue Action) */}
+          {/* 2. Create Room (Vibrant Blue Action) */}
           <TouchableOpacity
             style={[styles.actionCard, styles.blueActionCard]}
-            onPress={onPlayWithFriends}
+            onPress={() => onCreateRoom(selectedPlayers)}
             activeOpacity={0.88}
           >
             <View style={styles.actionLeft}>
@@ -150,8 +285,8 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
                 </Svg>
               </View>
               <View style={styles.actionTexts}>
-                <Text style={styles.blueTitle}>Play with Friends</Text>
-                <Text style={styles.blueSubtitle}>Create or join a room</Text>
+                <Text style={styles.blueTitle}>Create Room ({selectedPlayers}P)</Text>
+                <Text style={styles.blueSubtitle}>Invite friends with a private room code</Text>
               </View>
             </View>
             <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -165,53 +300,15 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
             </Svg>
           </TouchableOpacity>
 
-          {/* 3. Create Room (Subtle Dark Gray Card) */}
-          <TouchableOpacity
-            style={[styles.actionCard, styles.darkActionCard]}
-            onPress={onCreateRoom}
-            activeOpacity={0.88}
-          >
-            <View style={styles.actionLeft}>
-              <View style={styles.darkIconWrapper}>
-                <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M3 9.5L12 3L21 9.5V20C21 20.55 20.55 21 20 21H15V15H9V21H4C3.45 21 3 20.55 3 20V9.5Z"
-                    stroke="#FFFFFF"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              </View>
-              <View style={styles.actionTexts}>
-                <Text style={styles.darkTitle}>Create Room</Text>
-                <Text style={styles.darkSubtitle}>Invite friends with a code</Text>
-              </View>
-            </View>
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M9 18L15 12L9 6"
-                stroke="#6B7A90"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </TouchableOpacity>
-
-          {/* 4. Join Room (Subtle Dark Gray Card) */}
-          <TouchableOpacity
-            style={[styles.actionCard, styles.darkActionCard]}
-            onPress={onJoinRoom}
-            activeOpacity={0.88}
-          >
-            <View style={styles.actionLeft}>
+          {/* 3. Inline Merged Join Room Card */}
+          <View style={styles.joinInlineCard}>
+            <View style={styles.joinHeaderRow}>
               <View style={styles.darkIconWrapper}>
                 <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
                   <Path
                     d="M3 7V5C3 3.9 3.9 3 5 3H7M17 3H19C20.1 3 21 3.9 21 5V7M21 17V19C21 20.1 20.1 21 19 21H17M7 21H5C3.9 21 3 20.1 3 19V17M7 9H9V11H7V9ZM15 9H17V11H15V9ZM7 15H9V17H7V15ZM15 15H17V17H15V15Z"
                     stroke="#FFFFFF"
-                    strokeWidth="2.2"
+                    strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
@@ -219,19 +316,82 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
               </View>
               <View style={styles.actionTexts}>
                 <Text style={styles.darkTitle}>Join Room</Text>
-                <Text style={styles.darkSubtitle}>Enter room code</Text>
+                <Text style={styles.darkSubtitle}>Enter 6-digit room code to join</Text>
               </View>
             </View>
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-              <Path
-                d="M9 18L15 12L9 6"
-                stroke="#6B7A90"
-                strokeWidth={2.5}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+
+            {/* Inline Input and Action Button Row */}
+            <View style={styles.joinInputRow}>
+              <TextInput
+                style={styles.joinInput}
+                placeholder="ROOM CODE"
+                placeholderTextColor="#6B7A90"
+                value={roomCodeInput}
+                onChangeText={(text) => {
+                  setRoomCodeInput(text.toUpperCase());
+                  setJoinError(null);
+                }}
+                maxLength={8}
+                autoCapitalize="characters"
+                autoCorrect={false}
               />
-            </Svg>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.joinSubmitBtn,
+                  roomCodeInput.trim().length < 3 && styles.joinSubmitBtnDisabled,
+                ]}
+                onPress={handleJoin}
+                disabled={roomCodeInput.trim().length < 3 || isJoining}
+                activeOpacity={0.85}
+              >
+                {isJoining ? (
+                  <ActivityIndicator size="small" color="#080E13" />
+                ) : (
+                  <Text style={styles.joinSubmitBtnText}>JOIN</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {joinError ? (
+              <Text style={styles.joinErrorText}>{joinError}</Text>
+            ) : null}
+          </View>
+
+          {/* 4. Play vs Computer (Solo Practice AI) */}
+          {onPlaySolo ? (
+            <TouchableOpacity
+              style={[styles.actionCard, styles.darkActionCard]}
+              onPress={() => onPlaySolo(selectedPlayers)}
+              activeOpacity={0.88}
+            >
+              <View style={styles.actionLeft}>
+                <View style={styles.darkIconWrapper}>
+                  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+                    <Rect x="4" y="4" width="16" height="16" rx="4" stroke="#FFFFFF" strokeWidth="2" />
+                    <Circle cx="9" cy="10" r="1.5" fill="#FFFFFF" />
+                    <Circle cx="15" cy="10" r="1.5" fill="#FFFFFF" />
+                    <Path d="M9 15H15" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                    <Path d="M12 2V4" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
+                  </Svg>
+                </View>
+                <View style={styles.actionTexts}>
+                  <Text style={styles.darkTitle}>Play vs Computer</Text>
+                  <Text style={styles.darkSubtitle}>
+                    Practice solo against {selectedPlayers - 1} AI bot{selectedPlayers > 2 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M9 18L15 12L9 6"
+                  stroke="#6B7A90"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -269,76 +429,175 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
-  coinCapsule: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111822',
-    borderColor: '#1D2838',
-    borderWidth: 1.2,
-    borderRadius: 24,
+  headerRightBadge: {
+    paddingHorizontal: 12,
     paddingVertical: 5,
-    paddingHorizontal: 10,
-    gap: 8,
+    borderRadius: 16,
+    backgroundColor: '#111822',
+    borderWidth: 1.2,
+    borderColor: '#1D2838',
   },
-  coinIconBadge: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  coinBalanceText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  coinAddBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFB800',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  coinAddText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#080E13',
-    lineHeight: 16,
+  headerRightBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8E9CAE',
+    letterSpacing: 0.4,
   },
   scrollContent: {
-    paddingBottom: 28,
+    paddingBottom: 32,
   },
   heroSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 10,
+    marginTop: 4,
+    marginBottom: 8,
   },
   heroImage: {
     width: Math.min(SCREEN_WIDTH - 40, 320),
-    height: 230,
+    height: 200,
   },
+  /* Merged Player Count Selector Styles */
+  selectorSection: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: '#0E1520',
+    borderWidth: 1.5,
+    borderColor: '#1D2838',
+    gap: 12,
+  },
+  selectorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectorTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectorTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFB800',
+    letterSpacing: 0.8,
+  },
+  activePlayerCountPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: '#192330',
+  },
+  activePlayerCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#CBD5E1',
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  segmentCard: {
+    flex: 1,
+    backgroundColor: '#111822',
+    borderWidth: 1.5,
+    borderColor: '#1D2838',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    gap: 5,
+    position: 'relative',
+  },
+  segmentCardActive: {
+    backgroundColor: '#152130',
+    borderColor: '#FFB800',
+    shadowColor: '#FFB800',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  segmentDotsRow: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  playerColorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  segmentCountText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#8E9CAE',
+  },
+  segmentCountTextActive: {
+    color: '#FFFFFF',
+  },
+  segmentLabelText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activeCheckPill: {
+    position: 'absolute',
+    top: 5,
+    right: 6,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FFB800',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeCheckPillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#080E13',
+    lineHeight: 12,
+  },
+  formatDescriptionBanner: {
+    backgroundColor: '#121A24',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1A2534',
+  },
+  formatDescriptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textAlign: 'center',
+  },
+  /* Action Cards Area */
   actionsContainer: {
     paddingHorizontal: 20,
-    gap: 14,
-    marginTop: 6,
+    gap: 12,
   },
   actionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     borderRadius: 20,
   },
   actionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     flex: 1,
   },
   actionTexts: {
     gap: 3,
     flex: 1,
   },
-  /* 1. Gold Action */
+  /* Gold Action */
   goldActionCard: {
     backgroundColor: '#FFB800',
     shadowColor: '#FFB800',
@@ -356,17 +615,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goldTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#080E13',
     letterSpacing: 0.2,
   },
   goldSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#2A1F04',
   },
-  /* 2. Blue Action */
+  /* Blue Action */
   blueActionCard: {
     backgroundColor: '#0066FF',
     shadowColor: '#0066FF',
@@ -384,17 +643,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   blueTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
   blueSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#B3D4FF',
   },
-  /* 3 & 4. Dark Action */
+  /* Dark Action */
   darkActionCard: {
     backgroundColor: '#111822',
     borderColor: '#1D2838',
@@ -415,8 +674,64 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   darkSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
     color: '#8E9CAE',
+  },
+  /* Inline Merged Join Room Card */
+  joinInlineCard: {
+    backgroundColor: '#111822',
+    borderColor: '#1D2838',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 16,
+    gap: 12,
+  },
+  joinHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  joinInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 2,
+  },
+  joinInput: {
+    flex: 1,
+    height: 46,
+    backgroundColor: '#090F16',
+    borderWidth: 1.5,
+    borderColor: '#243245',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
+  joinSubmitBtn: {
+    height: 46,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    backgroundColor: '#FFB800',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  joinSubmitBtnDisabled: {
+    opacity: 0.45,
+  },
+  joinSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#080E13',
+    letterSpacing: 0.5,
+  },
+  joinErrorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    fontWeight: '600',
+    marginTop: -4,
   },
 });

@@ -465,17 +465,18 @@ export class RoomService {
   /**
    * Public matchmaking queue: finds an existing public room or creates one
    */
-  static async matchmake(userId: string, gameType: string) {
+  static async matchmake(userId: string, gameType: string, customMaxPlayers?: number) {
     const gameDef = GameRegistry.getGame(gameType);
     const resolvedType = (gameDef?.id || gameType) as any;
-    const maxPlayers = gameDef?.defaultPlayers || 2;
+    const maxPlayers = customMaxPlayers || gameDef?.defaultPlayers || 2;
 
-    // Search for active public waiting room with available capacity
+    // Search for active public waiting room with available capacity and matching maxPlayers
     const availableRooms = await prisma.gameRoom.findMany({
       where: {
         gameType: resolvedType,
         isPrivate: false,
         status: 'WAITING',
+        ...(customMaxPlayers ? { maxPlayers: customMaxPlayers } : {}),
       },
       include: {
         players: true,

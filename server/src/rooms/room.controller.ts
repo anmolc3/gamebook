@@ -213,7 +213,7 @@ export class RoomController {
         });
       }
 
-      const result = await RoomService.matchmake(userId, parsed.data.gameType);
+      const result = await RoomService.matchmake(userId, parsed.data.gameType, parsed.data.maxPlayers);
       return res.status(200).json({
         status: 'success',
         data: result,

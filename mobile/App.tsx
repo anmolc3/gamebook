@@ -688,30 +688,52 @@ function MainNavigator() {
         {currentScreen === 'ludoLobby' && (
           <LudoLobbyScreen
             onBack={() => setCurrentScreen('discovery')}
-            onPlayOnline={async () => {
+            onPlayOnline={async (playerCount) => {
               try {
-                const room = await RoomService.matchmake('LUDO');
-                handleJoinedRoom(room);
+                const res = await RoomService.matchmake('LUDO', playerCount);
+                handleJoinedRoom(res.room || res);
               } catch (err: any) {
-                setJoinModalInitialGame('LUDO');
-                setJoinModalInitialTab('quick');
-                setIsJoinModalVisible(true);
+                try {
+                  const room = await RoomService.createRoom('LUDO', false, playerCount);
+                  handleJoinedRoom(room);
+                } catch (fallbackErr: any) {
+                  Alert.alert('Matchmaking Failed', fallbackErr.message || 'Could not find or create match');
+                }
               }
             }}
-            onPlayWithFriends={() => {
-              setJoinModalInitialGame('LUDO');
-              setJoinModalInitialTab('quick');
-              setIsJoinModalVisible(true);
+            onCreateRoom={async (playerCount) => {
+              try {
+                const room = await RoomService.createRoom('LUDO', true, playerCount);
+                handleJoinedRoom(room);
+              } catch (err: any) {
+                Alert.alert('Create Room Failed', err.message || 'Could not create private room');
+              }
             }}
-            onCreateRoom={() => {
-              setJoinModalInitialGame('LUDO');
-              setJoinModalInitialTab('create');
-              setIsJoinModalVisible(true);
+            onJoinRoom={async (code) => {
+              try {
+                const room = await RoomService.joinRoom(code);
+                handleJoinedRoom(room);
+              } catch (err: any) {
+                Alert.alert('Join Room Failed', err.message || 'Could not join room with this code');
+              }
             }}
-            onJoinRoom={() => {
-              setJoinModalInitialGame('LUDO');
-              setJoinModalInitialTab('join');
-              setIsJoinModalVisible(true);
+            onPlaySolo={async (playerCount) => {
+              try {
+                const res = await SoloService.startSoloMatch('LUDO', 'MEDIUM');
+                handleJoinedRoom({
+                  id: res.matchId,
+                  code: res.roomCode,
+                  gameType: 'LUDO',
+                  status: 'PLAYING',
+                  hostId: 'SOLO_HOST',
+                  isPrivate: true,
+                  maxPlayers: playerCount,
+                  createdAt: new Date().toISOString(),
+                  participants: [],
+                });
+              } catch (err: any) {
+                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs AI');
+              }
             }}
           />
         )}

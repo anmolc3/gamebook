@@ -22,6 +22,7 @@ export const toggleReadySchema = z.object({
 
 export const matchmakeSchema = z.object({
   gameType: z.string().trim().min(2).default('TICTACTOE'),
+  maxPlayers: z.number().int().min(2).max(10).optional(),
 });
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
