@@ -90,7 +90,8 @@ export class MobileAuthService {
   static async forgotPassword(emailOrUsername: string): Promise<{
     success: boolean;
     message: string;
-    resetCode: string;
+    resetCode?: string; // Always undefined — OTP is delivered via email only
+    emailSent: boolean;
     maskedEmail: string;
     username: string;
     expiresInMinutes: number;
