@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -45,12 +45,18 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   const [maskedEmail, setMaskedEmail] = useState<string | null>(null);
   const [emailSent, setEmailSent] = useState(false);
 
-  // Status
+  // Status & feedback
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  React.useEffect(() => {
+  // Field-level inline errors
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  useEffect(() => {
     if (visible) {
       if (initialIdentifier) {
         setEmailOrUsername(initialIdentifier);
@@ -66,8 +72,12 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     setConfirmPassword('');
     setMaskedEmail(null);
     setEmailSent(false);
-    setErrorMessage(null);
+    setGeneralError(null);
     setSuccessMessage(null);
+    setIdentifierError(null);
+    setCodeError(null);
+    setPasswordError(null);
+    setConfirmError(null);
   };
 
   const handleClose = () => {
@@ -77,10 +87,11 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
   // Step 1: Request Reset Code
   const handleRequestCode = async () => {
-    setErrorMessage(null);
+    setGeneralError(null);
+    setIdentifierError(null);
     const identifier = emailOrUsername.trim();
     if (!identifier) {
-      setErrorMessage('Please enter your registered email address or username');
+      setIdentifierError('Please enter your username or registered email');
       return;
     }
 
@@ -91,40 +102,123 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       setEmailSent(res.emailSent ?? false);
       setStep('verify');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to request reset code');
+      const msg = err.message || 'Failed to request reset code';
+      if (
+        msg.toLowerCase().includes('user') ||
+        msg.toLowerCase().includes('account') ||
+        msg.toLowerCase().includes('email')
+      ) {
+        setIdentifierError(msg);
+      } else {
+        setGeneralError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Step 2: Submit Reset Password
+  // Field change handlers with live error clearing & formatting
+  const handleCodeChange = (text: string) => {
+    const numeric = text.replace(/[^0-9]/g, '').slice(0, 6);
+    setResetCode(numeric);
+    if (codeError) {
+      if (numeric.length === 6) {
+        setCodeError(null);
+      } else if (numeric.length > 0 && numeric.length < 6) {
+        setCodeError('Code must be exactly 6 digits');
+      } else {
+        setCodeError(null);
+      }
+    }
+    if (generalError) setGeneralError(null);
+  };
+
+  const handlePasswordChange = (text: string) => {
+    setNewPassword(text);
+    if (passwordError && text.length >= 8) {
+      setPasswordError(null);
+    }
+    if (confirmError && confirmPassword && text === confirmPassword) {
+      setConfirmError(null);
+    }
+    if (generalError) setGeneralError(null);
+  };
+
+  const handleConfirmPasswordChange = (text: string) => {
+    setConfirmPassword(text);
+    if (confirmError && text === newPassword) {
+      setConfirmError(null);
+    }
+    if (generalError) setGeneralError(null);
+  };
+
+  // Step 2: Submit Reset Password with inline validations
   const handleResetPassword = async () => {
-    setErrorMessage(null);
-    if (!resetCode.trim()) {
-      setErrorMessage('Please enter the 6-digit verification code');
-      return;
+    setGeneralError(null);
+
+    let hasError = false;
+
+    // 1. Validate Code
+    const trimmedCode = resetCode.trim();
+    if (!trimmedCode) {
+      setCodeError('Verification code is required');
+      hasError = true;
+    } else if (!/^\d{6}$/.test(trimmedCode)) {
+      setCodeError('Code must be exactly 6 digits');
+      hasError = true;
+    } else {
+      setCodeError(null);
     }
-    if (!newPassword || newPassword.length < 8) {
-      setErrorMessage('New password must be at least 8 characters long');
-      return;
+
+    // 2. Validate Password
+    if (!newPassword) {
+      setPasswordError('New password is required');
+      hasError = true;
+    } else if (newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters');
+      hasError = true;
+    } else {
+      setPasswordError(null);
     }
-    if (newPassword !== confirmPassword) {
-      setErrorMessage('New passwords do not match');
-      return;
+
+    // 3. Validate Confirm Password
+    if (!confirmPassword) {
+      setConfirmError('Please confirm your new password');
+      hasError = true;
+    } else if (newPassword !== confirmPassword) {
+      setConfirmError('New passwords do not match');
+      hasError = true;
+    } else {
+      setConfirmError(null);
     }
+
+    if (hasError) return;
 
     try {
       setIsLoading(true);
       const res = await MobileAuthService.resetPassword({
         emailOrUsername: emailOrUsername.trim(),
-        resetCode: resetCode.trim(),
+        resetCode: trimmedCode,
         newPassword,
       });
       setSuccessMessage(res.message);
       setStep('success');
       onPasswordResetSuccess?.(emailOrUsername.trim());
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to reset password');
+      const msg = err.message || 'Failed to reset password';
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes('code') ||
+        lower.includes('otp') ||
+        lower.includes('expired') ||
+        lower.includes('invalid verification')
+      ) {
+        setCodeError(msg);
+      } else if (lower.includes('password')) {
+        setPasswordError(msg);
+      } else {
+        setGeneralError(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -138,11 +232,12 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       onRequestClose={handleClose}
     >
       <View style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}>
-        <SafeAreaView style={styles.sheetContainer}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={{ width: '100%' }}
-          >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+          style={styles.keyboardAvoid}
+        >
+          <SafeAreaView style={styles.sheetContainer}>
             <View
               style={[
                 styles.content,
@@ -179,15 +274,21 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                   >
                     <Icon name="lock" size={20} color={theme.colors.primary} />
                   </View>
-                  <View>
-                    <Text style={[styles.title, { color: theme.colors.textPrimary }]}>
+                  <View style={styles.headerTextCol}>
+                    <Text
+                      style={[styles.title, { color: theme.colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
                       {step === 'success'
                         ? 'Password Reset'
                         : step === 'verify'
                         ? 'Set New Password'
                         : 'Reset Password'}
                     </Text>
-                    <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+                    <Text
+                      style={[styles.subtitle, { color: theme.colors.textSecondary }]}
+                      numberOfLines={1}
+                    >
                       {step === 'success'
                         ? 'Account security updated'
                         : step === 'verify'
@@ -208,22 +309,24 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
               <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scroll}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.scrollContent}
+                bounces={false}
               >
-                {/* Error Banner */}
-                {errorMessage && (
+                {/* General / Server Error Banner (Only for non-field server errors) */}
+                {generalError && (
                   <View
                     style={[
-                      styles.banner,
+                      styles.generalErrorBanner,
                       {
-                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
                         borderColor: theme.colors.error,
                       },
                     ]}
                   >
-                    <Icon name="close" size={16} color={theme.colors.error} />
-                    <Text style={[styles.bannerText, { color: theme.colors.error }]}>
-                      {errorMessage}
+                    <Icon name="close" size={14} color={theme.colors.error} />
+                    <Text style={[styles.generalErrorText, { color: theme.colors.error }]}>
+                      {generalError}
                     </Text>
                   </View>
                 )}
@@ -237,7 +340,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                         { color: theme.colors.textSecondary },
                       ]}
                     >
-                      Enter your registered email address or account username. We'll generate a secure 6-digit verification code to reset your password.
+                      Enter your registered email address or account username. We'll send a secure 6-digit verification code to reset your password.
                     </Text>
 
                     <InputField
@@ -245,9 +348,16 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       placeholder="e.g. alex_rivera or alex@example.com"
                       leftIcon="user"
                       value={emailOrUsername}
-                      onChangeText={setEmailOrUsername}
+                      onChangeText={(text) => {
+                        setEmailOrUsername(text);
+                        if (identifierError) setIdentifierError(null);
+                        if (generalError) setGeneralError(null);
+                      }}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      error={identifierError || undefined}
+                      editable={!isLoading}
+                      containerStyle={styles.fieldContainer}
                     />
 
                     <PrimaryButton
@@ -257,7 +367,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       variant="filled"
                       onPress={handleRequestCode}
                       loading={isLoading}
-                      style={{ marginTop: 8 }}
+                      disabled={isLoading}
+                      style={styles.actionButton}
                     />
                   </View>
                 )}
@@ -265,75 +376,104 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 {/* STEP 2: VERIFY & SET NEW PASSWORD */}
                 {step === 'verify' && (
                   <View style={styles.stepContainer}>
-                    {/* Email sent confirmation card */}
+                    {/* Compact Email Sent Notice (No duplicate code) */}
                     <View
                       style={[
-                        styles.codeInfoBox,
+                        styles.codeNoticeCard,
                         {
                           backgroundColor: theme.colors.surfaceElevated,
-                          borderColor: theme.colors.primary,
+                          borderColor: theme.colors.border,
                         },
                       ]}
                     >
-                      <View style={styles.codeInfoTop}>
+                      <View
+                        style={[
+                          styles.noticeIconCircle,
+                          { backgroundColor: theme.colors.primary + '18' },
+                        ]}
+                      >
                         <Icon name="shield" size={16} color={theme.colors.primary} />
-                        <Text style={[styles.codeInfoTitle, { color: theme.colors.textPrimary }]}>
-                          {emailSent ? 'Verification Code Sent' : 'Code Requested'}
+                      </View>
+                      <View style={styles.noticeTextWrap}>
+                        <Text style={[styles.noticeTitle, { color: theme.colors.textPrimary }]}>
+                          Verification code sent
+                        </Text>
+                        <Text style={[styles.noticeSub, { color: theme.colors.textSecondary }]}>
+                          Code sent to{' '}
+                          <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>
+                            {maskedEmail || emailOrUsername}
+                          </Text>
+                          . Check your inbox and spam folder.
                         </Text>
                       </View>
-                      <Text style={[styles.codeInfoSub, { color: theme.colors.textSecondary }]}>
-                        {emailSent
-                          ? `A 6-digit code was sent to ${maskedEmail || emailOrUsername}. Check your inbox and spam folder.`
-                          : `Check your email inbox at ${maskedEmail || emailOrUsername} for the verification code.`}
-                      </Text>
                     </View>
 
+                    {/* 1. 6-Digit Verification Code */}
                     <InputField
                       label="6-Digit Verification Code"
                       placeholder="Enter 6-digit code..."
                       leftIcon="shield"
                       value={resetCode}
-                      onChangeText={setResetCode}
+                      onChangeText={handleCodeChange}
                       keyboardType="number-pad"
                       maxLength={6}
+                      error={codeError || undefined}
+                      editable={!isLoading}
+                      containerStyle={styles.fieldContainer}
                     />
 
-                    {/* New Password with Eye Button */}
+                    {/* 2. New Password (with eye toggle) */}
                     <InputField
                       label="New Password (min 8 characters)"
                       placeholder="Enter new password..."
                       leftIcon="lock"
                       value={newPassword}
-                      onChangeText={setNewPassword}
+                      onChangeText={handlePasswordChange}
                       secureTextEntry
                       autoCapitalize="none"
+                      error={passwordError || undefined}
+                      editable={!isLoading}
+                      containerStyle={styles.fieldContainer}
                     />
 
-                    {/* Confirm Password with Eye Button */}
+                    {/* 3. Confirm New Password (with eye toggle) */}
                     <InputField
                       label="Confirm New Password"
                       placeholder="Repeat new password..."
                       leftIcon="lock"
                       value={confirmPassword}
-                      onChangeText={setConfirmPassword}
+                      onChangeText={handleConfirmPasswordChange}
                       secureTextEntry
                       autoCapitalize="none"
+                      error={confirmError || undefined}
+                      editable={!isLoading}
+                      containerStyle={styles.fieldContainer}
                     />
 
+                    {/* Reset Password Button */}
                     <PrimaryButton
-                      label={isLoading ? 'Updating Password...' : 'Reset Password'}
+                      label={isLoading ? 'Resetting Password...' : 'Reset Password'}
                       icon="check"
                       rightIcon="chevronRight"
                       variant="filled"
                       onPress={handleResetPassword}
                       loading={isLoading}
-                      style={{ marginTop: 8 }}
+                      disabled={isLoading}
+                      style={styles.actionButton}
                     />
 
+                    {/* Change email or request new code link */}
                     <TouchableOpacity
-                      onPress={() => setStep('request')}
+                      onPress={() => {
+                        setCodeError(null);
+                        setPasswordError(null);
+                        setConfirmError(null);
+                        setGeneralError(null);
+                        setStep('request');
+                      }}
                       style={styles.backLink}
                       activeOpacity={0.7}
+                      disabled={isLoading}
                     >
                       <Text style={[styles.backLinkText, { color: theme.colors.textSecondary }]}>
                         ← Change email or request new code
@@ -361,21 +501,23 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       Password Updated!
                     </Text>
                     <Text style={[styles.successSubtitle, { color: theme.colors.textSecondary }]}>
-                      {successMessage || 'Your password has been reset successfully. You can now log into your account using your new credentials.'}
+                      {successMessage ||
+                        'Your password has been reset successfully. You can now log into your account using your new credentials.'}
                     </Text>
 
                     <PrimaryButton
                       label="Back to Sign In"
+                      rightIcon="chevronRight"
                       variant="filled"
                       onPress={handleClose}
-                      style={{ width: '100%', marginTop: 24 }}
+                      style={{ width: '100%', marginTop: 20 }}
                     />
                   </View>
                 )}
               </ScrollView>
             </View>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
+          </SafeAreaView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -386,21 +528,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
+  keyboardAvoid: {
+    width: '100%',
+    justifyContent: 'flex-end',
+  },
   sheetContainer: {
-    maxHeight: '92%',
+    maxHeight: '94%',
+    width: '100%',
   },
   content: {
     borderTopWidth: 1,
     paddingHorizontal: 20,
-    paddingBottom: 28,
+    paddingTop: 4,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 16,
     maxHeight: '100%',
   },
   grabHandleWrapper: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   grabHandle: {
-    width: 40,
+    width: 38,
     height: 4,
     borderRadius: 2,
   },
@@ -408,12 +556,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+    marginRight: 8,
   },
   headerIconBox: {
     width: 40,
@@ -423,69 +573,87 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerTextCol: {
+    flex: 1,
+  },
   title: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: -0.2,
   },
   subtitle: {
     fontSize: 12,
     marginTop: 2,
-    maxWidth: 240,
   },
-  scroll: {
-    paddingBottom: 24,
+  scrollContent: {
+    paddingBottom: 20,
   },
-  banner: {
+  generalErrorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    marginBottom: 14,
+    marginBottom: 10,
     gap: 8,
   },
-  bannerText: {
-    fontSize: 13,
-    fontWeight: '500',
+  generalErrorText: {
+    fontSize: 12,
+    fontWeight: '600',
     flex: 1,
   },
   stepContainer: {
-    paddingTop: 4,
+    paddingTop: 2,
   },
   description: {
     fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 16,
+    lineHeight: 18,
+    marginBottom: 12,
   },
-  codeInfoBox: {
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 14,
-    marginBottom: 16,
-  },
-  codeInfoTop: {
+  codeNoticeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+    gap: 10,
   },
-  codeInfoTitle: {
-    fontSize: 14,
+  noticeIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noticeTextWrap: {
+    flex: 1,
+  },
+  noticeTitle: {
+    fontSize: 13,
     fontWeight: '700',
   },
-  codeInfoSub: {
-    fontSize: 12,
+  noticeSub: {
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 1,
+  },
+  fieldContainer: {
     marginBottom: 10,
+  },
+  actionButton: {
+    marginTop: 6,
   },
   backLink: {
     alignSelf: 'center',
-    marginTop: 14,
-    paddingVertical: 6,
+    marginTop: 10,
+    paddingVertical: 4,
   },
   backLinkText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
   successContainer: {
     alignItems: 'center',
@@ -493,23 +661,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   successIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
   },
   successTitle: {
     fontSize: 20,
     fontWeight: '800',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   successSubtitle: {
     fontSize: 13,
-    lineHeight: 20,
+    lineHeight: 19,
     textAlign: 'center',
-    maxWidth: 280,
+    maxWidth: 290,
   },
 });
+
