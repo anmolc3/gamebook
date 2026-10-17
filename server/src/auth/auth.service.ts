@@ -246,8 +246,8 @@ export class AuthService {
       success: true,
       message: emailResult.sent
         ? `Verification code sent to ${maskedEmail}`
-        : `Verification code generated. Check your inbox at ${maskedEmail}`,
-      resetCode: undefined, // Never expose OTP in API response — always delivered via email only
+        : `Verification code generated. (Email notice: ${emailResult.message})`,
+      resetCode: emailResult.sent ? undefined : resetCode,
       emailSent: emailResult.sent,
       maskedEmail,
       username: user.username,

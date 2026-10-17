@@ -26,13 +26,16 @@ export class EmailService {
         service: 'gmail',
         auth: {
           user: gmailUser,
-          pass: gmailPass,
+          pass: gmailPass.replace(/\s+/g, ''),
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
       return this.transporter;
     }
 
-    // 2. Resend SMTP Configuration
+    // 2. Resend SMTP Configuration (Fallback if HTTP API not used)
     const resendApiKey = process.env.RESEND_API_KEY;
     if (resendApiKey) {
       this.transporter = nodemailer.createTransport({
@@ -43,6 +46,9 @@ export class EmailService {
           user: 'resend',
           pass: resendApiKey,
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
       return this.transporter;
     }
@@ -61,6 +67,9 @@ export class EmailService {
           user: smtpUser,
           pass: smtpPass,
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
       return this.transporter;
     }
@@ -77,45 +86,17 @@ export class EmailService {
     code,
     expiresInMinutes,
   }: SendPasswordResetOptions): Promise<{ sent: boolean; message: string }> {
-    const transporter = this.getTransporter();
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromAddress = resendApiKey
+      ? (process.env.EMAIL_FROM && !process.env.EMAIL_FROM.includes('@gmail.com')
+          ? process.env.EMAIL_FROM
+          : 'Social Gaming Arena <onboarding@resend.dev>')
+      : process.env.EMAIL_FROM ||
+        (process.env.GMAIL_USER
+          ? `"Social Gaming Arena" <${process.env.GMAIL_USER}>`
+          : '"Social Gaming Arena" <onboarding@resend.dev>');
 
-    // If no email provider is configured yet, log to console for development testing
-    if (!transporter) {
-      console.log('----------------------------------------------------');
-      console.log(`[EmailService] (Dev Fallback - No Email Provider Configured)`);
-      console.log(`To: ${toEmail} (@${username})`);
-      console.log(`Password Reset Verification Code: [ ${code} ]`);
-      console.log(`Expires in: ${expiresInMinutes} minutes`);
-      console.log('----------------------------------------------------');
-      return {
-        sent: false,
-        message: 'Email service unconfigured. Code logged to server console for testing.',
-      };
-    }
-
-    const fromAddress =
-      process.env.EMAIL_FROM ||
-      (process.env.GMAIL_USER ? `"Social Gaming Arena" <${process.env.GMAIL_USER}>` : '"Social Gaming Arena" <noreply@gamebook.app>');
-
-    // Resolve app icon image
-    const possibleIconPaths = [
-      path.resolve(process.cwd(), 'assets/app-icon.png'),
-      path.resolve(__dirname, '../../assets/app-icon.png'),
-      path.resolve(__dirname, '../../../assets/app-icon.png'),
-      path.resolve(__dirname, '../../../../mobile/assets/icon.png'),
-    ];
-    const resolvedIconPath = possibleIconPaths.find((p) => fs.existsSync(p));
-
-    const attachments = resolvedIconPath
-      ? [
-          {
-            filename: 'app-icon.png',
-            path: resolvedIconPath,
-            cid: 'applogo',
-          },
-        ]
-      : [];
-
+    // Build HTML template
     const htmlContent = `
 <!DOCTYPE html>
 <html>
@@ -177,8 +158,74 @@ export class EmailService {
 </html>
 `;
 
+    // 1. Prioritize Resend HTTP API if configured (Port 443 HTTPS - Works 100% on cloud platforms like Railway where SMTP is blocked)
+    if (resendApiKey) {
+      try {
+        const resendRes = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: fromAddress,
+            to: [toEmail],
+            subject: `Your Verification Code: ${code} - Social Gaming Arena`,
+            html: htmlContent,
+          }),
+        });
+
+        const data: any = await resendRes.json();
+        if (resendRes.ok) {
+          console.log(`[EmailService] Verification code successfully sent to ${toEmail} via Resend HTTP API`);
+          return { sent: true, message: 'Verification email sent successfully' };
+        } else {
+          console.error(`[EmailService] Resend API error:`, data);
+          return { sent: false, message: data.message || 'Resend API failed to send' };
+        }
+      } catch (err: any) {
+        console.error(`[EmailService] Resend HTTP call failed:`, err.message);
+        return { sent: false, message: err.message };
+      }
+    }
+
+    const transporter = this.getTransporter();
+
+    // If no email provider is configured yet, log to console for development testing
+    if (!transporter) {
+      console.log('----------------------------------------------------');
+      console.log(`[EmailService] (Dev Fallback - No Email Provider Configured)`);
+      console.log(`To: ${toEmail} (@${username})`);
+      console.log(`Password Reset Verification Code: [ ${code} ]`);
+      console.log(`Expires in: ${expiresInMinutes} minutes`);
+      console.log('----------------------------------------------------');
+      return {
+        sent: false,
+        message: 'Email service unconfigured. Code logged to server console for testing.',
+      };
+    }
+
+    // Resolve app icon image
+    const possibleIconPaths = [
+      path.resolve(process.cwd(), 'assets/app-icon.png'),
+      path.resolve(__dirname, '../../assets/app-icon.png'),
+      path.resolve(__dirname, '../../../assets/app-icon.png'),
+      path.resolve(__dirname, '../../../../mobile/assets/icon.png'),
+    ];
+    const resolvedIconPath = possibleIconPaths.find((p) => fs.existsSync(p));
+
+    const attachments = resolvedIconPath
+      ? [
+          {
+            filename: 'app-icon.png',
+            path: resolvedIconPath,
+            cid: 'applogo',
+          },
+        ]
+      : [];
+
     try {
-      await transporter.sendMail({
+      const sendPromise = transporter.sendMail({
         from: fromAddress,
         to: toEmail,
         subject: `Your Verification Code: ${code} - Social Gaming Arena`,
@@ -186,6 +233,20 @@ export class EmailService {
         html: htmlContent,
         attachments,
       });
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'SMTP connection timed out (outbound SMTP ports 465/587 are blocked on cloud hosts like Railway).'
+              )
+            ),
+          7000
+        )
+      );
+
+      await Promise.race([sendPromise, timeoutPromise]);
 
       console.log(`[EmailService] Password reset verification email successfully sent to ${toEmail}`);
       return { sent: true, message: 'Verification email sent successfully' };

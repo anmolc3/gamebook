@@ -90,24 +90,37 @@ export class MobileAuthService {
   static async forgotPassword(emailOrUsername: string): Promise<{
     success: boolean;
     message: string;
-    resetCode?: string; // Always undefined — OTP is delivered via email only
+    resetCode?: string;
     emailSent: boolean;
     maskedEmail: string;
     username: string;
     expiresInMinutes: number;
   }> {
-    const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ emailOrUsername }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
 
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to process request');
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailOrUsername }),
+        signal: controller.signal,
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to process request');
+      }
+
+      return json.data;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out. Please check your internet or server status.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return json.data;
   }
 
   static async resetPassword(data: {
@@ -115,17 +128,30 @@ export class MobileAuthService {
     resetCode: string;
     newPassword: string;
   }): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
 
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to reset password');
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to reset password');
+      }
+
+      return json.data;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out. Please check your internet or server status.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return json.data;
   }
 }

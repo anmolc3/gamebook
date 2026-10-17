@@ -100,6 +100,9 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       const res = await MobileAuthService.forgotPassword(identifier);
       setMaskedEmail(res.maskedEmail);
       setEmailSent(res.emailSent ?? false);
+      if (res.resetCode) {
+        setResetCode(res.resetCode);
+      }
       setStep('verify');
     } catch (err: any) {
       const msg = err.message || 'Failed to request reset code';
@@ -396,14 +399,22 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       </View>
                       <View style={styles.noticeTextWrap}>
                         <Text style={[styles.noticeTitle, { color: theme.colors.textPrimary }]}>
-                          Verification code sent
+                          {emailSent ? 'Verification code sent' : 'Verification code ready'}
                         </Text>
                         <Text style={[styles.noticeSub, { color: theme.colors.textSecondary }]}>
-                          Code sent to{' '}
-                          <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>
-                            {maskedEmail || emailOrUsername}
-                          </Text>
-                          . Check your inbox and spam folder.
+                          {emailSent ? (
+                            <>
+                              Code sent to{' '}
+                              <Text style={{ color: theme.colors.textPrimary, fontWeight: '600' }}>
+                                {maskedEmail || emailOrUsername}
+                              </Text>
+                              . Check your inbox and spam folder.
+                            </>
+                          ) : (
+                            <>
+                              Email could not be delivered to {maskedEmail || emailOrUsername}. Code has been auto-filled below.
+                            </>
+                          )}
                         </Text>
                       </View>
                     </View>
