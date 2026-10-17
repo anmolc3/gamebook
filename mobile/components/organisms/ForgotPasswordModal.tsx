@@ -42,8 +42,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // Info from server
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [maskedEmail, setMaskedEmail] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
 
   // Status
   const [isLoading, setIsLoading] = useState(false);
@@ -64,8 +64,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     setResetCode('');
     setNewPassword('');
     setConfirmPassword('');
-    setGeneratedCode(null);
     setMaskedEmail(null);
+    setEmailSent(false);
     setErrorMessage(null);
     setSuccessMessage(null);
   };
@@ -87,9 +87,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
     try {
       setIsLoading(true);
       const res = await MobileAuthService.forgotPassword(identifier);
-      setGeneratedCode(res.resetCode);
       setMaskedEmail(res.maskedEmail);
-      setResetCode(res.resetCode); // Pre-fill for seamless user testing
+      setEmailSent(res.emailSent ?? false);
       setStep('verify');
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to request reset code');
@@ -266,7 +265,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 {/* STEP 2: VERIFY & SET NEW PASSWORD */}
                 {step === 'verify' && (
                   <View style={styles.stepContainer}>
-                    {/* Demo / Verification Code Callout */}
+                    {/* Email sent confirmation card */}
                     <View
                       style={[
                         styles.codeInfoBox,
@@ -279,29 +278,14 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       <View style={styles.codeInfoTop}>
                         <Icon name="shield" size={16} color={theme.colors.primary} />
                         <Text style={[styles.codeInfoTitle, { color: theme.colors.textPrimary }]}>
-                          Verification Code Ready
+                          {emailSent ? 'Verification Code Sent' : 'Code Requested'}
                         </Text>
                       </View>
                       <Text style={[styles.codeInfoSub, { color: theme.colors.textSecondary }]}>
-                        Sent for account: {maskedEmail || emailOrUsername}
+                        {emailSent
+                          ? `A 6-digit code was sent to ${maskedEmail || emailOrUsername}. Check your inbox and spam folder.`
+                          : `Check your email inbox at ${maskedEmail || emailOrUsername} for the verification code.`}
                       </Text>
-                      {generatedCode && (
-                        <View style={styles.badgeRow}>
-                          <Text style={[styles.codeBadgeLabel, { color: theme.colors.textSecondary }]}>
-                            Your 6-Digit Code:
-                          </Text>
-                          <View
-                            style={[
-                              styles.codePill,
-                              { backgroundColor: theme.colors.primary + '25', borderColor: theme.colors.primary },
-                            ]}
-                          >
-                            <Text style={[styles.codePillText, { color: theme.colors.primary }]}>
-                              {generatedCode}
-                            </Text>
-                          </View>
-                        </View>
-                      )}
                     </View>
 
                     <InputField
@@ -493,26 +477,6 @@ const styles = StyleSheet.create({
   codeInfoSub: {
     fontSize: 12,
     marginBottom: 10,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  codeBadgeLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  codePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  codePillText: {
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 2,
   },
   backLink: {
     alignSelf: 'center',
