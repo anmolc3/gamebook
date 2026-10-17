@@ -1366,6 +1366,7 @@ export interface WordleState {
   players: [string, string];
   guesses: Record<string, WordleGuess[]>;
   isFinished: Record<string, boolean>;
+  maxGuesses?: number;
   winnerId: string | null;
   turnExpiresAt: number;
 }
@@ -1377,6 +1378,7 @@ export interface WordleResult {
   winnerId: string | null;
   targetWord: string;
   attemptsUsed: Record<string, number>;
+  guesses?: Record<string, WordleGuess[]>;
 }
 
 // 9. Hangman Duel
@@ -1936,9 +1938,3 @@ export interface TwoTruthsAndALieResult {
   winnerId: string | null;
   scores: Record<string, number>;
 }
-
-
-
-
-
-
