@@ -23,6 +23,7 @@ import Svg, {
 import { useTheme } from '../../theme';
 import { Icon, TrophyIcon, CrownIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -1090,13 +1091,16 @@ export const BoardGameScreen: React.FC<BoardGameScreenProps> = ({
           <Icon name="chevronLeft" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-            {getGameTitle()}
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
-            Round {round} • Room: {roomCode}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+          <GameLogo gameType={gameType} size={34} borderRadius={8} />
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              {getGameTitle()}
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
+              Round {round} • Room: {roomCode}
+            </Text>
+          </View>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

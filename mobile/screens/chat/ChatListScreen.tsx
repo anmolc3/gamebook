@@ -18,6 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useCall } from '../../features/call/CallContext';
 import { ChatService, ConversationItem } from '../../services/chat.service';
@@ -515,7 +516,12 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               )}
               {item.lastMessage?.type === 'GAME_INVITE' && (
                 <View style={styles.inviteIconBadge}>
-                  <Icon name="gamepad" size={13} color={theme.colors.accent} />
+                  <GameLogo
+                    gameType={(item.lastMessage as any)?.metadata?.gameType}
+                    size={16}
+                    borderRadius={4}
+                    fallbackIcon="gamepad"
+                  />
                 </View>
               )}
               <Text

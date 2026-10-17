@@ -213,6 +213,7 @@ model Profile {
   lastSeen        DateTime        @default(now())
   onlinePrivacy   PresencePrivacy @default(EVERYONE)
   lastSeenPrivacy PresencePrivacy @default(EVERYONE)
+  groupAddPrivacy PresencePrivacy @default(EVERYONE)
   readReceipts    Boolean         @default(true)
   createdAt       DateTime        @default(now())
   updatedAt       DateTime @updatedAt

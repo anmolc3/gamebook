@@ -24,7 +24,7 @@ import {
   InfoIcon,
   BotIcon,
 } from '../../icons';
-import { GameRulesModal } from '../../components';
+import { GameRulesModal, GameControllerLogo } from '../../components';
 import { apiGet } from '../../services/api';
 import { isSoloGameSupported } from '../../constants/soloGames';
 import { getGameImage } from '../../constants/gameImages';
@@ -133,9 +133,12 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
         ]}
       >
         <View style={styles.titleRow}>
-          <Text style={[styles.mainTitle, { color: theme.colors.textPrimary }]}>
-            Game Arena
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <GameControllerLogo size={28} color={theme.colors.primary} />
+            <Text style={[styles.mainTitle, { color: theme.colors.textPrimary }]}>
+              Game Arena
+            </Text>
+          </View>
           <View style={styles.headerActions}>
             <TouchableOpacity
               onPress={onPressAchievements}

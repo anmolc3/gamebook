@@ -157,6 +157,8 @@ export function getGameImage(gameType: string): ReturnType<typeof require> | nul
   if (upper.includes('CHESS')) return GAME_IMAGES.CHESS;
   if (upper.includes('LUDO')) return GAME_IMAGES.LUDO;
   if (upper.includes('TICTAC')) return GAME_IMAGES.TICTACTOE;
+  if (upper.includes('CONNECT')) return GAME_IMAGES.CONNECT_FOUR;
+  if (upper.includes('GOMOKU')) return GAME_IMAGES.GOMOKU;
   if (upper.includes('CARROM')) return GAME_IMAGES.CARROM;
   if (upper.includes('SNAKE')) return GAME_IMAGES.SNAKES_AND_LADDERS;
   if (upper.includes('POOL')) return GAME_IMAGES.POOL_8_BALL;
@@ -164,6 +166,9 @@ export function getGameImage(gameType: string): ReturnType<typeof require> | nul
   if (upper.includes('POKER')) return GAME_IMAGES.POKER;
   if (upper.includes('BLACKJACK')) return GAME_IMAGES.BLACKJACK;
   if (upper.includes('RUMMY')) return GAME_IMAGES.RUMMY;
+  if (upper.includes('HEART')) return GAME_IMAGES.HEARTS;
+  if (upper.includes('SPADE')) return GAME_IMAGES.SPADES;
+  if (upper.includes('EIGHT')) return GAME_IMAGES.CRAZY_EIGHTS;
   if (upper.includes('WORDLE')) return GAME_IMAGES.WORDLE_DUEL;
   if (upper.includes('CROSSWORD')) return GAME_IMAGES.CROSSWORD_BATTLE;
   if (upper.includes('SUDOKU')) return GAME_IMAGES.SUDOKU_BATTLE;
@@ -174,17 +179,30 @@ export function getGameImage(gameType: string): ReturnType<typeof require> | nul
   if (upper.includes('DART')) return GAME_IMAGES.DARTS;
   if (upper.includes('BOWL')) return GAME_IMAGES.BOWLING;
   if (upper.includes('HOCKEY')) return GAME_IMAGES.AIR_HOCKEY;
-  if (upper.includes('CHECKER')) return GAME_IMAGES.CHECKERS;
+  if (upper.includes('CHECKER') || upper.includes('DRAUGHT')) return GAME_IMAGES.CHECKERS;
   if (upper.includes('REVERSI') || upper.includes('OTHELLO')) return GAME_IMAGES.REVERSI;
   if (upper.includes('BATTLESHIP')) return GAME_IMAGES.BATTLESHIP;
   if (upper.includes('DOMINO')) return GAME_IMAGES.DOMINOES;
   if (upper.includes('BACKGAMMON')) return GAME_IMAGES.BACKGAMMON;
+  if (upper.includes('MANCALA')) return GAME_IMAGES.MANCALA;
+  if (upper.includes('CHINESE')) return GAME_IMAGES.CHINESE_CHECKERS;
   if (upper.includes('PUZZLE') || upper.includes('JIGSAW')) return GAME_IMAGES.PUZZLE_DUEL;
   if (upper.includes('SEQUENCE')) return GAME_IMAGES.SEQUENCE;
   if (upper.includes('2048')) return GAME_IMAGES['2048_MULTIPLAYER'];
+  if (upper.includes('MINE')) return GAME_IMAGES.MINESWEEPER_DUEL;
   if (upper.includes('TYPE') || upper.includes('TYPING')) return GAME_IMAGES.TYPING_RACE;
+  if (upper.includes('TAP')) return GAME_IMAGES.SPEED_TAP;
+  if (upper.includes('REACTION')) return GAME_IMAGES.REACTION_TEST;
+  if (upper.includes('MATH')) return GAME_IMAGES.MATH_BATTLE;
+  if (upper.includes('SCISSOR') || upper.includes('RPS')) return GAME_IMAGES.ROCK_PAPER_SCISSORS;
+  if (upper.includes('RATHER') || upper.includes('WYR')) return GAME_IMAGES.WOULD_YOU_RATHER;
+  if (upper.includes('TRUTH') || upper.includes('DARE') || upper.includes('TOD')) return GAME_IMAGES.TRUTH_OR_DARE;
+  if (upper.includes('CHARADE')) return GAME_IMAGES.CHARADES;
+  if (upper.includes('NEVER') || upper.includes('NHIE')) return GAME_IMAGES.NEVER_HAVE_I_EVER;
   if (upper.includes('MEMORY')) return GAME_IMAGES.MEMORY_MATCH;
   if (upper.includes('HANGMAN')) return GAME_IMAGES.HANGMAN;
+  if (upper.includes('SOLITAIRE')) return GAME_IMAGES.SOLITAIRE;
+  if (upper.includes('TABLE') || upper.includes('PING')) return GAME_IMAGES.TABLE_TENNIS;
 
   // Ultimate fallback to default board emblem
   return GAME_IMAGES.TICTACTOE;

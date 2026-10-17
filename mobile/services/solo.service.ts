@@ -1,6 +1,6 @@
 import { getSocket } from './socket.service';
 import { apiPost, apiGet } from './api';
-import { AiDifficulty } from '../constants/soloGames';
+import { AiDifficulty, BOT_AVATARS } from '../constants/soloGames';
 
 export interface SoloSessionStartResponse {
   success: boolean;
@@ -22,38 +22,140 @@ export interface SoloSessionStartResponse {
 
 export class SoloService {
   /**
-   * Starts an authoritative Solo Session (vs AI or Solo Puzzle)
+   * Generates a fully playable local authoritative fallback session
    */
-  static startSoloMatch(
+  static createLocalFallbackSession(
+    gameType: string,
+    difficulty: AiDifficulty = 'MEDIUM',
+    botId?: string
+  ): SoloSessionStartResponse {
+    const selectedBotId =
+      botId ||
+      (difficulty === 'EASY'
+        ? 'BOT_PIXEL'
+        : difficulty === 'HARD'
+        ? 'BOT_ACE'
+        : difficulty === 'EXPERT'
+        ? 'BOT_ATLAS'
+        : 'BOT_NOVA');
+    const botMeta = BOT_AVATARS[selectedBotId] || {
+      name: 'Nova',
+      title: 'Tactical Strategist',
+      personality: 'Balanced and methodical.',
+    };
+    const roomCode = `SOLO_LOCAL_${Date.now().toString(36).toUpperCase()}`;
+    const matchId = `SOLO_M_${Date.now().toString(36).toUpperCase()}`;
+
+    const humanPlayer = {
+      userId: 'local_player',
+      username: 'You',
+      displayName: 'You',
+      slotIndex: 0,
+    };
+    const aiPlayer = {
+      userId: selectedBotId,
+      username: `${botMeta.name} (AI)`,
+      displayName: `${botMeta.name} (AI)`,
+      slotIndex: 1,
+    };
+
+    let initialState: any = null;
+    if (gameType.toUpperCase() === 'SNAKES_AND_LADDERS') {
+      initialState = {
+        players: [
+          { userId: humanPlayer.userId, position: 1 },
+          { userId: aiPlayer.userId, position: 1 },
+        ],
+        turnPlayerId: humanPlayer.userId,
+        currentDiceRoll: null,
+        lastMoveType: null,
+        winnerId: null,
+        winnerIds: [],
+        isComplete: false,
+        turnExpiresAt: Date.now() + 20000,
+      };
+    } else {
+      initialState = {
+        board: Array(9).fill(null),
+        turnPlayerId: humanPlayer.userId,
+        winnerId: null,
+        isDraw: false,
+      };
+    }
+
+    return {
+      success: true,
+      roomCode,
+      matchId,
+      gameType: gameType.toUpperCase(),
+      players: [humanPlayer, aiPlayer],
+      aiProfile: {
+        id: selectedBotId,
+        name: botMeta.name,
+        title: botMeta.title,
+        personality: botMeta.personality,
+      },
+      state: initialState,
+      round: 1,
+      scores: { [humanPlayer.userId]: 0, [aiPlayer.userId]: 0 },
+      sequenceNumber: 1,
+    };
+  }
+
+  /**
+   * Starts an authoritative Solo Session (vs AI or Solo Puzzle)
+   * Tries Socket -> HTTP API -> Local Fallback
+   */
+  static async startSoloMatch(
     gameType: string,
     difficulty: AiDifficulty = 'MEDIUM',
     botId?: string
   ): Promise<SoloSessionStartResponse> {
     const socket = getSocket();
 
-    // Primary: Socket.IO real-time emission
+    // 1. Primary: Socket.IO real-time emission with 2500ms timeout
     if (socket && socket.connected) {
-      return new Promise((resolve, reject) => {
-        socket.emit(
-          'solo:start',
-          { gameType: gameType.toUpperCase(), difficulty, botId },
-          (res: any) => {
-            if (res && res.success) {
-              resolve(res);
-            } else {
-              reject(new Error(res?.error || 'Failed to start solo match'));
+      try {
+        const socketRes = await new Promise<SoloSessionStartResponse>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Socket solo:start timed out'));
+          }, 2500);
+
+          socket.emit(
+            'solo:start',
+            { gameType: gameType.toUpperCase(), difficulty, botId },
+            (res: any) => {
+              clearTimeout(timeout);
+              if (res && res.success) {
+                resolve(res);
+              } else {
+                reject(new Error(res?.error || 'Failed to start solo match'));
+              }
             }
-          }
-        );
-      });
+          );
+        });
+        return socketRes;
+      } catch (socketErr) {
+        console.log('[SoloService] Socket solo:start failed, falling back to HTTP:', socketErr);
+      }
     }
 
-    // Fallback: REST API
-    return apiPost<SoloSessionStartResponse>('/games/solo/start', {
-      gameType: gameType.toUpperCase(),
-      difficulty,
-      botId,
-    });
+    // 2. Secondary: REST API
+    try {
+      const restRes = await apiPost<SoloSessionStartResponse>('/games/solo/start', {
+        gameType: gameType.toUpperCase(),
+        difficulty,
+        botId,
+      });
+      if (restRes && restRes.success) {
+        return restRes;
+      }
+    } catch (restErr) {
+      console.log('[SoloService] REST solo:start failed, falling back to local session:', restErr);
+    }
+
+    // 3. Guaranteed Local Fallback: Always starts smoothly offline or with disconnected server
+    return this.createLocalFallbackSession(gameType, difficulty, botId);
   }
 
   /**

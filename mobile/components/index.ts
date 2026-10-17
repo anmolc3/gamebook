@@ -3,6 +3,8 @@ export * from './atoms/StatusIndicator';
 export * from './atoms/Avatar';
 export * from './atoms/AvatarPresets';
 export * from './atoms/Divider';
+export * from './atoms/GameLogo';
+export * from './atoms/GameControllerLogo';
 
 export * from './atoms/NotificationIcon';
 

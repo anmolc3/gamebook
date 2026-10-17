@@ -88,6 +88,12 @@ export const GAME_CAPABILITIES: Record<string, GameCapabilityConfig> = {
     supportedModes: ['SOLO', 'PRIVATE', 'MATCHMAKING'],
     hasAiOpponent: true,
   },
+  SNAKES_AND_LADDERS: {
+    id: 'SNAKES_AND_LADDERS',
+    name: 'Snakes & Ladders',
+    supportedModes: ['SOLO', 'PRIVATE', 'MATCHMAKING'],
+    hasAiOpponent: true,
+  },
 
   // =========================================================================
   // CASUAL / SPORTS (Selected Solo AI)

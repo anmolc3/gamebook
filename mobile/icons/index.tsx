@@ -1,6 +1,7 @@
 import React from 'react';
 import { Image } from 'react-native';
 import Svg, { Path, Circle, Rect, Polyline, Polygon, Line, G, Defs, ClipPath, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
+import { GameControllerLogo } from '../components/atoms/GameControllerLogo';
 
 export interface IconProps {
   size?: number;
@@ -17,11 +18,17 @@ export const HomeIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
-export const GamepadIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Games'}>
-    <Path d="M6 12H10M8 10V14M15 13H15.01M18 11H18.01M17.32 5H6.68C4.65 5 3 6.65 3 8.68V15.32C3 17.35 4.65 19 6.68 19C7.45 19 8.19 18.66 8.68 18.07L10.28 16.15C10.74 15.6 11.41 15.28 12.13 15.28H14.87C15.59 15.28 16.26 15.6 16.72 16.15L18.32 18.07C18.81 18.66 19.55 19 20.32 19C22.35 19 24 17.35 24 15.32V8.68C24 6.65 22.35 5 20.32 5H17.32Z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
+export const GamepadIcon: React.FC<IconProps> = ({ size = 24, color, style, accessibilityLabel }) => (
+  <GameControllerLogo
+    size={size}
+    color={color}
+    style={style}
+    accessibilityLabel={accessibilityLabel || 'Games'}
+  />
 );
+
+export const ControllerIcon = GamepadIcon;
+export const GameControllerIcon = GamepadIcon;
 
 export const UsersIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Friends'}>
@@ -555,6 +562,7 @@ export const CropIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
 export type IconName =
   | 'home'
   | 'gamepad'
+  | 'controller'
   | 'archive'
   | 'bot'
   | 'users'
@@ -617,7 +625,8 @@ export type IconName =
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
     case 'home': return <HomeIcon {...props} />;
-    case 'gamepad': return <GamepadIcon {...props} />;
+    case 'gamepad':
+    case 'controller': return <GamepadIcon {...props} />;
     case 'archive': return <ArchiveIcon {...props} />;
     case 'bot': return <BotIcon {...props} />;
     case 'users': return <UsersIcon {...props} />;

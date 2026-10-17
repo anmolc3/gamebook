@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, CrossMarkIcon, CircleMarkIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
@@ -268,10 +269,12 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
           <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.headerTitleContainer}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-            Tic-Tac-Toe Arena
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          <GameLogo gameType="TICTACTOE" size={34} borderRadius={8} />
+          <View style={styles.headerTitleContainer}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Tic-Tac-Toe Arena
+            </Text>
           <View style={styles.headerPillsRow}>
             <View style={[styles.headerPill, { backgroundColor: theme.colors.surfaceElevated }]}>
               <Text style={[styles.headerPillText, { color: theme.colors.textSecondary }]}>
@@ -285,6 +288,7 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
             </View>
           </View>
         </View>
+      </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity

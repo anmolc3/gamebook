@@ -17,6 +17,7 @@ export const updateProfileSchema = z.object({
   appearanceMode: z.enum(['system', 'light', 'dark']).optional(),
   onlinePrivacy: z.enum(['EVERYONE', 'MY_FRIENDS', 'NOBODY']).optional(),
   lastSeenPrivacy: z.enum(['EVERYONE', 'MY_FRIENDS', 'NOBODY']).optional(),
+  groupAddPrivacy: z.enum(['EVERYONE', 'MY_FRIENDS', 'NOBODY']).optional(),
   readReceipts: z.boolean().optional(),
 });
 

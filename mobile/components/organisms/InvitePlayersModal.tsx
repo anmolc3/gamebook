@@ -16,6 +16,7 @@ import Svg, { Path, Circle, Rect, Polyline } from 'react-native-svg';
 import { FriendsService, FriendUser } from '../../services/friends.service';
 import { MobileSocketService } from '../../services/socket.service';
 import { Avatar } from '../atoms/Avatar';
+import { GameLogo } from '../atoms/GameLogo';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MODAL_WIDTH = Math.min(SCREEN_WIDTH - 32, 420);
@@ -140,29 +141,21 @@ export const InvitePlayersModal: React.FC<InvitePlayersModalProps> = ({
         <View style={styles.modalCard}>
           {/* Header */}
           <View style={styles.headerRow}>
-            <View style={styles.headerTexts}>
-              <View style={styles.titleWithBadge}>
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Path
-                    d="M17 21V19C17 17.9 16.1 17 15 17H9C7.9 17 7 17.9 7 19V21M12 13C14.2 13 16 11.2 16 9C16 6.8 14.2 5 12 5C9.8 5 8 6.8 8 9C8 11.2 9.8 13 12 13Z"
-                    stroke="#FFB800"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <Path
-                    d="M23 21V19C22.99 18.18 22.42 17.47 21.62 17.24M16 5.13C17.7 5.67 18.88 7.21 18.88 9C18.88 10.79 17.7 12.33 16 12.87"
-                    stroke="#FFB800"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-                <Text style={styles.headerTitle}>Invite Players</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+              <GameLogo
+                gameType={gameType}
+                size={44}
+                borderRadius={10}
+                fallbackIcon="users"
+              />
+              <View style={styles.headerTexts}>
+                <View style={styles.titleWithBadge}>
+                  <Text style={styles.headerTitle}>Invite Players</Text>
+                </View>
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
+                  {gameName} • Room #{roomCode}
+                </Text>
               </View>
-              <Text style={styles.headerSubtitle} numberOfLines={1}>
-                {gameName} • Room #{roomCode}
-              </Text>
             </View>
 
             <TouchableOpacity

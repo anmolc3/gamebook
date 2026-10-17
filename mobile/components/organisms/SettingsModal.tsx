@@ -68,6 +68,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Profile & Privacy states
   const [onlinePrivacy, setOnlinePrivacy] = useState<'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'>('EVERYONE');
   const [lastSeenPrivacy, setLastSeenPrivacy] = useState<'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'>('EVERYONE');
+  const [groupAddPrivacy, setGroupAddPrivacy] = useState<'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'>('EVERYONE');
   const [profilePhotoPrivacy, setProfilePhotoPrivacy] = useState<string>('Everyone');
   const [aboutPrivacy, setAboutPrivacy] = useState<string>('Everyone');
   const [statusPrivacy, setStatusPrivacy] = useState<string>('My Contacts');
@@ -114,6 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           if (p.readReceipts !== undefined) setReadReceipts(p.readReceipts);
           if (p.onlinePrivacy) setOnlinePrivacy(p.onlinePrivacy as any);
           if (p.lastSeenPrivacy) setLastSeenPrivacy(p.lastSeenPrivacy as any);
+          if (p.groupAddPrivacy) setGroupAddPrivacy(p.groupAddPrivacy as any);
         })
         .catch(() => null);
     }
@@ -129,14 +131,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleUpdatePrivacy = async (
-    key: 'onlinePrivacy' | 'lastSeenPrivacy',
+    key: 'onlinePrivacy' | 'lastSeenPrivacy' | 'groupAddPrivacy',
     value: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY'
   ) => {
     if (key === 'onlinePrivacy') setOnlinePrivacy(value);
     if (key === 'lastSeenPrivacy') setLastSeenPrivacy(value);
+    if (key === 'groupAddPrivacy') setGroupAddPrivacy(value);
     try {
       await ProfileService.updateMyProfile({ [key]: value });
-      MobileSocketService.notifyPresencePrivacyUpdate();
+      if (key !== 'groupAddPrivacy') {
+        MobileSocketService.notifyPresencePrivacyUpdate();
+      }
     } catch (err) {
       console.warn('Failed to save privacy update:', err);
     }
@@ -599,6 +604,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Text style={styles.subRowTitle}>Disappearing Messages</Text>
                     <View style={styles.subRowRight}>
                       <Text style={styles.subRowValue}>{disappearingMessages}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* GROUP PRIVACY */}
+                  <Text style={[styles.sectionHeaderLabel, { marginTop: 26 }]}>GROUPS PRIVACY</Text>
+
+                  {/* Who Can Add Me to Groups */}
+                  <TouchableOpacity
+                    style={styles.subRow}
+                    activeOpacity={0.65}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can Add Me to Groups',
+                        formatPrivacyLabel(groupAddPrivacy),
+                        [
+                          { label: 'Everyone', value: 'EVERYONE' },
+                          { label: 'My Contacts', value: 'MY_FRIENDS' },
+                          { label: 'Nobody', value: 'NOBODY' },
+                        ],
+                        (val) => handleUpdatePrivacy('groupAddPrivacy', val as any)
+                      )
+                    }
+                  >
+                    <View style={[styles.squircleIcon, { backgroundColor: '#9C27B0' }]}>
+                      <Icon name="users" size={19} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.subRowTextCol}>
+                      <Text style={styles.subRowTitle}>Who Can Add Me to Groups</Text>
+                      <Text style={styles.subRowDesc}>Control who can add you to group chats</Text>
+                    </View>
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{formatPrivacyLabel(groupAddPrivacy)}</Text>
                       <Icon name="chevronRight" size={16} color="#556275" />
                     </View>
                   </TouchableOpacity>
@@ -1231,16 +1269,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <TouchableOpacity
                     style={styles.subRow}
                     activeOpacity={0.65}
-                    onPress={() => Alert.alert('Group Invites', 'Anyone in your friends list can invite you to a group.')}
+                    onPress={() =>
+                      openPicker(
+                        'Who Can Add Me to Groups',
+                        formatPrivacyLabel(groupAddPrivacy),
+                        [
+                          { label: 'Everyone', value: 'EVERYONE' },
+                          { label: 'My Contacts', value: 'MY_FRIENDS' },
+                          { label: 'Nobody', value: 'NOBODY' },
+                        ],
+                        (val) => handleUpdatePrivacy('groupAddPrivacy', val as any)
+                      )
+                    }
                   >
                     <View style={[styles.squircleIcon, { backgroundColor: '#9C27B0' }]}>
                       <Icon name="users" size={19} color="#FFFFFF" />
                     </View>
                     <View style={styles.subRowTextCol}>
                       <Text style={styles.subRowTitle}>Who Can Add Me to Groups</Text>
-                      <Text style={styles.subRowDesc}>My Friends Only</Text>
+                      <Text style={styles.subRowDesc}>{formatPrivacyLabel(groupAddPrivacy)}</Text>
                     </View>
-                    <Icon name="chevronRight" size={16} color="#556275" />
+                    <View style={styles.subRowRight}>
+                      <Text style={styles.subRowValue}>{formatPrivacyLabel(groupAddPrivacy)}</Text>
+                      <Icon name="chevronRight" size={16} color="#556275" />
+                    </View>
                   </TouchableOpacity>
 
                   <TouchableOpacity

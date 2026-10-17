@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Polyline, Rect, G } from 'react-native-svg';
+import { GameLogo } from '../../components/atoms/GameLogo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -81,6 +82,7 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
               />
             </Svg>
           </TouchableOpacity>
+          <GameLogo gameType="LUDO" size={30} borderRadius={8} />
           <Text style={styles.headerTitle}>Ludo</Text>
         </View>
 

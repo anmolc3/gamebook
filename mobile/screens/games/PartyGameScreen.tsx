@@ -22,6 +22,7 @@ import Svg, {
 import { useTheme } from '../../theme';
 import { TrophyIcon, CrownIcon, StarIcon, GamepadIcon, TargetIcon, InfoIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
@@ -1048,13 +1049,16 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
         <TouchableOpacity style={styles.backButton} onPress={onLeave}>
           <Text style={[styles.backText, { color: theme.colors.textPrimary }]}>Exit</Text>
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-            {getGameTitle()}
-          </Text>
-          <Text style={[styles.roomCodeText, { color: theme.colors.textSecondary }]}>
-            Room: {roomCode} • R{round}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+          <GameLogo gameType={gameType} size={34} borderRadius={8} />
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              {getGameTitle()}
+            </Text>
+            <Text style={[styles.roomCodeText, { color: theme.colors.textSecondary }]}>
+              Room: {roomCode} • R{round}
+            </Text>
+          </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity

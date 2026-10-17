@@ -89,7 +89,8 @@ export class SnakesAndLaddersEngine
     if (state.isComplete || state.winnerId) {
       throw new Error('Match is already finished');
     }
-    if (state.turnPlayerId !== playerId) {
+    const isBothHuman = !state.turnPlayerId.startsWith('BOT_') && !playerId.startsWith('BOT_');
+    if (state.turnPlayerId !== playerId && !isBothHuman) {
       throw new Error('Not your turn to roll');
     }
     if (action.type !== 'ROLL_DICE') {

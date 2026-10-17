@@ -18,6 +18,7 @@ export interface UserProfile extends UserSummary {
   appearanceMode: AppearanceMode;
   onlinePrivacy?: PresencePrivacy;
   lastSeenPrivacy?: PresencePrivacy;
+  groupAddPrivacy?: PresencePrivacy;
   readReceipts?: boolean;
   createdAt: string | Date;
   stats: {

@@ -15,6 +15,7 @@ import { BlackjackAI } from './games/blackjack.ai';
 import { UnoAI } from './games/uno.ai';
 import { WarAI } from './games/war.ai';
 import { WordleAI } from './games/wordle.ai';
+import { SnakesAndLaddersAI } from './games/snakesandladders.ai';
 
 export class AiRegistry {
   private static aiInstances = new Map<string, GameAI>();
@@ -32,6 +33,7 @@ export class AiRegistry {
     this.register('LUDO', new LudoAI());
     this.register('DOMINOES', new DominoesAI());
     this.register('BACKGAMMON', new BackgammonAI());
+    this.register('SNAKES_AND_LADDERS', new SnakesAndLaddersAI());
     this.register('ROCK_PAPER_SCISSORS', new RpsAI());
 
     // Priority 2 Card games

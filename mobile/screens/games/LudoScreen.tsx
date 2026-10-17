@@ -11,6 +11,7 @@ import {
   Dimensions,
   ScrollView,
   Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, {
@@ -351,18 +352,18 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           SoundService.play('tokenMove');
         }
 
-        // 3. Capture sound: plays at 550ms right when the moving token lands on the captured victim
+        // 3. Capture sound: plays in exact sync as the moving token lands on the captured victim
         if (hasCapture) {
           setTimeout(() => {
             SoundService.play('tokenCapture');
-          }, 550);
+          }, 210);
         }
 
-        // 4. Home finish sound: plays at 600ms right when the pawn enters the center home triangle
+        // 4. Home finish sound: plays in exact sync as the pawn enters the center home triangle
         if (hasHome) {
           setTimeout(() => {
             SoundService.play('homeGoal');
-          }, 600);
+          }, 210);
         }
       }
 
@@ -445,7 +446,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         setIsRematchModalVisible(true);
         setTimeout(() => {
           SoundService.play('gameOver');
-        }, 1100);
+        }, 350);
       }
     });
 
@@ -806,18 +807,21 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           Animated.parallel([
             Animated.timing(anim.pos, {
               toValue: { x: layout.cx, y: layout.cy },
-              duration: 650,
+              duration: 220,
+              easing: Easing.out(Easing.quad),
               useNativeDriver: false,
             }),
             Animated.sequence([
               Animated.timing(anim.scale, {
-                toValue: 1.25,
-                duration: 300,
+                toValue: 1.16,
+                duration: 100,
+                easing: Easing.out(Easing.quad),
                 useNativeDriver: false,
               }),
               Animated.timing(anim.scale, {
                 toValue: 1,
-                duration: 350,
+                duration: 120,
+                easing: Easing.in(Easing.quad),
                 useNativeDriver: false,
               }),
             ]),

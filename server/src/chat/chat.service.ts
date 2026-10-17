@@ -1,4 +1,5 @@
 import { prisma } from '../database/prisma';
+import { PresencePrivacy } from '@prisma/client';
 import {
   SendMessageInput,
   CreateGroupInput,
@@ -256,6 +257,75 @@ export class ChatService {
   }
 
   /**
+   * Validates whether an actor has permission to add target users to a group
+   * based on their individual groupAddPrivacy settings and block relationships.
+   */
+  static async validateGroupAddPermissions(
+    actorId: string,
+    targets: Array<{ id: string; username: string; profile: { displayName: string | null; groupAddPrivacy: PresencePrivacy } | null }>
+  ): Promise<void> {
+    const targetIds = targets.filter((t) => t.id !== actorId).map((t) => t.id);
+    if (targetIds.length === 0) return;
+
+    // 1. Check for blocks between actor and targets
+    const blocks = await prisma.blockedUser.findMany({
+      where: {
+        OR: [
+          { blockerId: actorId, blockedId: { in: targetIds } },
+          { blockerId: { in: targetIds }, blockedId: actorId },
+        ],
+      },
+    });
+    const blockedUserIds = new Set(
+      blocks.flatMap((b) => (b.blockerId === actorId ? [b.blockedId] : [b.blockerId]))
+    );
+
+    // 2. Fetch friendships between actor and targets (for MY_FRIENDS check)
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        OR: [
+          { userId: actorId, friendId: { in: targetIds } },
+          { userId: { in: targetIds }, friendId: actorId },
+        ],
+      },
+      select: { userId: true, friendId: true },
+    });
+    const friendIds = new Set(
+      friendships.map((f) => (f.userId === actorId ? f.friendId : f.userId))
+    );
+
+    // 3. Check each target
+    const failedUsers: string[] = [];
+
+    for (const target of targets) {
+      if (target.id === actorId) continue;
+      const name = target.profile?.displayName || target.username;
+
+      if (blockedUserIds.has(target.id)) {
+        failedUsers.push(name);
+        continue;
+      }
+
+      const privacy = target.profile?.groupAddPrivacy || PresencePrivacy.EVERYONE;
+      if (privacy === PresencePrivacy.NOBODY) {
+        failedUsers.push(name);
+      } else if (privacy === PresencePrivacy.MY_FRIENDS && !friendIds.has(target.id)) {
+        failedUsers.push(name);
+      }
+    }
+
+    if (failedUsers.length > 0) {
+      if (failedUsers.length === 1) {
+        throw new Error(`${failedUsers[0]}'s privacy settings do not allow you to add them to groups`);
+      } else {
+        throw new Error(
+          `Cannot add ${failedUsers.join(', ')}: their privacy settings do not allow you to add them to groups`
+        );
+      }
+    }
+  }
+
+  /**
    * Create a new group conversation with members and admin creator
    */
   static async createGroup(creatorId: string, input: CreateGroupInput) {
@@ -288,6 +358,9 @@ export class ChatService {
     if (existingUsers.length === 0) {
       throw new Error('No valid friends found to add to group');
     }
+
+    // Validate privacy permissions for all members being added
+    await this.validateGroupAddPermissions(creatorId, existingUsers);
 
     // Create the group conversation atomically
     const newGroup = await prisma.conversation.create({
@@ -556,6 +629,9 @@ export class ChatService {
     if (usersToAdd.length === 0) {
       throw new Error('No valid users found to add');
     }
+
+    // Validate privacy permissions for all members being added
+    await this.validateGroupAddPermissions(userId, usersToAdd);
 
     // Add them to ConversationMember
     await prisma.conversationMember.createMany({

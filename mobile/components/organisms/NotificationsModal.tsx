@@ -11,6 +11,7 @@ import {
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { NotificationIcon } from '../atoms/NotificationIcon';
+import { GameLogo } from '../atoms/GameLogo';
 
 export interface InAppNotification {
   id: string;
@@ -153,22 +154,31 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                       },
                     ]}
                   >
-                    <View
-                      style={[
-                        styles.iconWrap,
-                        {
-                          backgroundColor: notif.isRead
-                            ? theme.colors.surfaceElevated
-                            : theme.colors.cardTintMint,
-                        },
-                      ]}
-                    >
-                      <Icon
-                        name={getTypeIcon(notif.type) as any}
-                        size={18}
-                        color={notif.isRead ? theme.colors.textMuted : theme.colors.primary}
+                    {notif.type === 'GAME_INVITE' && notif.gameType ? (
+                      <GameLogo
+                        gameType={notif.gameType}
+                        size={38}
+                        borderRadius={8}
+                        fallbackIcon="gamepad"
                       />
-                    </View>
+                    ) : (
+                      <View
+                        style={[
+                          styles.iconWrap,
+                          {
+                            backgroundColor: notif.isRead
+                              ? theme.colors.surfaceElevated
+                              : theme.colors.cardTintMint,
+                          },
+                        ]}
+                      >
+                        <Icon
+                          name={getTypeIcon(notif.type) as any}
+                          size={18}
+                          color={notif.isRead ? theme.colors.textMuted : theme.colors.primary}
+                        />
+                      </View>
+                    )}
 
                     <View style={styles.contentWrap}>
                       <View style={styles.topMetaRow}>

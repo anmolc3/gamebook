@@ -9,6 +9,7 @@ export interface FriendUser {
   bio: string | null;
   isOnline: boolean;
   lastSeen: string;
+  groupAddPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
   totalMatches: number;
   totalWins: number;
   winRate: number;

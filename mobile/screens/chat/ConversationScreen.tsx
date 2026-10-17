@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useCall } from '../../features/call/CallContext';
 import { ChatService, ChatMessage, GroupMetaItem } from '../../services/chat.service';
@@ -857,18 +858,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
           >
             {/* Invite Card Header */}
             <View style={styles.inviteCardHeader}>
-              <View
-                style={[
-                  styles.inviteIconCircle,
-                  { backgroundColor: gameColor + '20' },
-                ]}
-              >
-                <Icon
-                  name={gameIcon as any}
-                  size={20}
-                  color={gameColor}
-                />
-              </View>
+              <GameLogo
+                gameType={gameType}
+                size={44}
+                borderRadius={10}
+                fallbackIcon={gameIcon as any}
+              />
               <View style={styles.inviteCardTitleCol}>
                 <Text style={[styles.inviteCardTitle, { color: theme.colors.textPrimary }]}>
                   {gameLabel} Challenge
@@ -1781,9 +1776,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                   ]}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.gameSelectIcon, { backgroundColor: game.color + '20' }]}>
-                    <Icon name={game.icon as any} size={22} color={game.color} />
-                  </View>
+                  <GameLogo
+                    gameType={game.serverType || game.type}
+                    size={42}
+                    borderRadius={10}
+                    fallbackIcon={game.icon as any}
+                  />
                   <View style={styles.gameSelectMeta}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       <Text style={[styles.gameSelectTitle, { color: theme.colors.textPrimary }]}>

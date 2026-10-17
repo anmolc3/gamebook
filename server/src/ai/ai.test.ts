@@ -12,6 +12,7 @@ import { LudoEngine } from '../games/ludo/ludo.engine';
 import { DominoesEngine } from '../games/board2/dominoes.engine';
 import { BlackjackEngine } from '../games/cards/blackjack.engine';
 import { UnoEngine } from '../games/cards/uno.engine';
+import { SnakesAndLaddersEngine } from '../games/board2/snakesandladders.engine';
 import { SoloManager } from './solo.manager';
 import { MatchManager } from '../games/match.manager';
 
@@ -151,6 +152,18 @@ async function runAiTests() {
   SoloManager.clearUserSoloSession('TEST_USER_999');
   const cleared = SoloManager.getActiveSession('TEST_USER_999');
   assert(cleared === null, 'SoloManager cleans up session cleanly');
+
+  // 13. Snakes & Ladders AI & Solo Session
+  console.log('\n--- 13. Testing Snakes & Ladders AI & Solo Session ---');
+  const snakesEngine = new SnakesAndLaddersEngine();
+  const snakesState = snakesEngine.initialize(tttPlayers);
+  const snakesAiMove = await AiRegistry.getMove('SNAKES_AND_LADDERS', snakesState, 'BOT_NOVA', 'MEDIUM');
+  assert(snakesAiMove.type === 'ROLL_DICE', 'Snakes & Ladders AI returns ROLL_DICE action');
+
+  const snakesSession = SoloManager.startSoloSession('TEST_USER_SNAKE', 'SnakeHero', 'SNAKES_AND_LADDERS' as any, 'MEDIUM');
+  assert(snakesSession.roomCode.startsWith('SOLO_'), 'Snakes & Ladders Solo session creates SOLO room');
+  assert(snakesSession.match.players.length === 2, 'Snakes & Ladders Solo session initializes with human and AI bot');
+  SoloManager.clearUserSoloSession('TEST_USER_SNAKE');
 
   console.log('\n========================================================');
   console.log(`🏁 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);

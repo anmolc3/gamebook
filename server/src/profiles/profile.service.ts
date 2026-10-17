@@ -48,6 +48,7 @@ export class ProfileService {
       appearanceMode: user.profile.appearanceMode,
       onlinePrivacy: user.profile.onlinePrivacy,
       lastSeenPrivacy: user.profile.lastSeenPrivacy,
+      groupAddPrivacy: user.profile.groupAddPrivacy ?? 'EVERYONE',
       readReceipts: user.profile.readReceipts ?? true,
       isOnline: isUserOnline(user.id) || user.profile.isOnline,
       lastSeen: user.profile.lastSeen,
@@ -97,6 +98,7 @@ export class ProfileService {
         ...(data.appearanceMode ? { appearanceMode: data.appearanceMode } : {}),
         ...(data.onlinePrivacy ? { onlinePrivacy: data.onlinePrivacy as PresencePrivacy } : {}),
         ...(data.lastSeenPrivacy ? { lastSeenPrivacy: data.lastSeenPrivacy as PresencePrivacy } : {}),
+        ...(data.groupAddPrivacy ? { groupAddPrivacy: data.groupAddPrivacy as PresencePrivacy } : {}),
         ...(data.readReceipts !== undefined ? { readReceipts: data.readReceipts } : {}),
       },
     });

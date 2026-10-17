@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { GameAlertService } from './services/alert.service';
+import { SoundService } from './services/sound.service';
 
 // Initialize global game-themed alert interceptor immediately across the whole app
 GameAlertService.init();
+// Preload game audio subsystem for instant zero-latency sound effects
+SoundService.init();
 
 import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform, PanResponder } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +21,8 @@ import { RoomLobbyScreen } from './screens/rooms/RoomLobbyScreen';
 import { TicTacToeScreen } from './screens/games/TicTacToeScreen';
 import { LudoScreen } from './screens/games/LudoScreen';
 import { LudoLobbyScreen } from './screens/games/LudoLobbyScreen';
+import { SnakesAndLaddersScreen } from './screens/games/SnakesAndLaddersScreen';
+import { SnakesAndLaddersLobbyScreen } from './screens/games/SnakesAndLaddersLobbyScreen';
 import { BoardGameScreen } from './screens/games/BoardGameScreen';
 import { BoardGame2Screen } from './screens/games/BoardGame2Screen';
 import { CasualGameScreen, CasualGameType } from './screens/games/CasualGameScreen';
@@ -29,6 +34,7 @@ import { SoloModeModal } from './components/organisms/SoloModeModal';
 import { SuggestedFriendsModal } from './components/organisms/SuggestedFriendsModal';
 import { SoloService } from './services/solo.service';
 import { MarvieBottomNav, NavTab } from './components/organisms/MarvieBottomNav';
+import { GameControllerLogo } from './components/atoms/GameControllerLogo';
 import { LoginScreen } from './screens/auth/LoginScreen';
 import { RegisterScreen } from './screens/auth/RegisterScreen';
 import { GameDiscoveryScreen } from './screens/discovery/GameDiscoveryScreen';
@@ -70,6 +76,8 @@ function MainNavigator() {
     | 'ticTacToe'
     | 'ludo'
     | 'ludoLobby'
+    | 'snakesAndLadders'
+    | 'snakesAndLaddersLobby'
     | 'boardGame'
     | 'boardGame2'
     | 'casualGame'
@@ -187,6 +195,8 @@ function MainNavigator() {
         setCurrentScreen('ticTacToe');
       } else if (room.gameType === 'LUDO') {
         setCurrentScreen('ludo');
+      } else if (room.gameType === 'SNAKES_AND_LADDERS') {
+        setCurrentScreen('snakesAndLadders');
       } else if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
         setCurrentScreen('boardGame');
       } else if (
@@ -380,7 +390,8 @@ function MainNavigator() {
           { backgroundColor: theme.colors.background },
         ]}
       >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <GameControllerLogo size={76} />
+        <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginTop: 20 }} />
       </View>
     );
   }
@@ -415,6 +426,19 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         onLeave={() => {
           setCurrentScreen('ludoLobby');
+        }}
+      />
+    );
+  }
+
+  // Active Snake & Ladder Live Match Screen
+  if (currentScreen === 'snakesAndLadders' && currentRoomCode) {
+    return (
+      <SnakesAndLaddersScreen
+        roomCode={currentRoomCode}
+        roomDetails={currentRoomDetails}
+        onLeave={() => {
+          setCurrentScreen('snakesAndLaddersLobby');
         }}
       />
     );
@@ -514,6 +538,8 @@ function MainNavigator() {
             setCurrentScreen('ticTacToe');
           } else if (room.gameType === 'LUDO') {
             setCurrentScreen('ludo');
+          } else if (room.gameType === 'SNAKES_AND_LADDERS') {
+            setCurrentScreen('snakesAndLadders');
           } else if (
             ['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)
           ) {
@@ -666,7 +692,12 @@ function MainNavigator() {
     if (currentScreen === 'friends') return 'friends';
     if (currentScreen === 'chatList') return 'chatList';
     if (currentScreen === 'profile') return 'profile';
-    if (currentScreen === 'discovery' || currentScreen === 'ludoLobby') return 'play';
+    if (
+      currentScreen === 'discovery' ||
+      currentScreen === 'ludoLobby' ||
+      currentScreen === 'snakesAndLaddersLobby'
+    )
+      return 'play';
     return 'home';
   };
 
@@ -711,6 +742,8 @@ function MainNavigator() {
             onPressPlay={(gameType) => {
               if (gameType === 'LUDO') {
                 setCurrentScreen('ludoLobby');
+              } else if (gameType === 'SNAKES_AND_LADDERS') {
+                setCurrentScreen('snakesAndLaddersLobby');
               } else if (gameType) {
                 setSoloModalGameId(gameType);
               } else {
@@ -784,11 +817,68 @@ function MainNavigator() {
           />
         )}
 
+        {currentScreen === 'snakesAndLaddersLobby' && (
+          <SnakesAndLaddersLobbyScreen
+            onBack={() => setCurrentScreen('discovery')}
+            onPlayOnline={async (playerCount) => {
+              try {
+                const res = await RoomService.matchmake('SNAKES_AND_LADDERS', playerCount);
+                handleJoinedRoom(res.room || res);
+              } catch (err: any) {
+                try {
+                  const room = await RoomService.createRoom('SNAKES_AND_LADDERS', false, playerCount);
+                  handleJoinedRoom(room);
+                } catch (fallbackErr: any) {
+                  Alert.alert('Matchmaking Failed', fallbackErr.message || 'Could not find or create match');
+                }
+              }
+            }}
+            onCreateRoom={async (playerCount) => {
+              try {
+                const room = await RoomService.createRoom('SNAKES_AND_LADDERS', true, playerCount);
+                handleJoinedRoom(room);
+              } catch (err: any) {
+                Alert.alert('Create Room Failed', err.message || 'Could not create private room');
+              }
+            }}
+            onJoinRoom={async (code) => {
+              try {
+                const room = await RoomService.joinRoom(code);
+                handleJoinedRoom(room);
+              } catch (err: any) {
+                Alert.alert('Join Room Failed', err.message || 'Could not join room with this code');
+              }
+            }}
+            onPlaySolo={async (playerCount, difficulty = 'MEDIUM', botId) => {
+              try {
+                const res = await SoloService.startSoloMatch('SNAKES_AND_LADDERS', difficulty as any, botId);
+                handleJoinedRoom({
+                  id: res.matchId,
+                  code: res.roomCode,
+                  gameType: 'SNAKES_AND_LADDERS',
+                  status: 'PLAYING',
+                  hostId: 'SOLO_HOST',
+                  isPrivate: true,
+                  maxPlayers: playerCount,
+                  createdAt: new Date().toISOString(),
+                  participants: res.players || [],
+                  players: res.players || [],
+                  state: res.state,
+                });
+              } catch (err: any) {
+                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs AI');
+              }
+            }}
+          />
+        )}
+
         {currentScreen === 'discovery' && (
           <GameDiscoveryScreen
             onSelectGame={(gameId) => {
               if (gameId === 'LUDO') {
                 setCurrentScreen('ludoLobby');
+              } else if (gameId === 'SNAKES_AND_LADDERS') {
+                setCurrentScreen('snakesAndLaddersLobby');
               } else {
                 setSoloModalGameId(gameId);
               }
@@ -897,7 +987,9 @@ function MainNavigator() {
                 hostId: 'SOLO_HOST',
                 isPrivate: true,
                 createdAt: new Date().toISOString(),
-                participants: [],
+                participants: res.players || [],
+                players: res.players || [],
+                state: res.state,
               });
             } catch (err: any) {
               Alert.alert('Solo Mode Error', err.message || 'Could not start solo match');

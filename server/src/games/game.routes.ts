@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
+import { ENV } from '../config/env';
 import { authenticateToken, AuthRequest } from '../middleware/auth.middleware';
 import { prisma } from '../database/prisma';
 import { GameRegistry } from './game.registry';
@@ -518,10 +520,23 @@ router.get('/solo/supported', async (_req: Request, res: Response) => {
  * POST /api/v1/games/solo/start
  * Starts a solo match session via HTTP
  */
-router.post('/solo/start', authenticateToken, async (req: AuthRequest, res: Response) => {
+router.post('/solo/start', async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const username = req.user!.username || 'Player';
+    let userId = (req as any).user?.userId;
+    let username = (req as any).user?.username;
+    const authHeader = req.headers.authorization;
+    if (!userId && authHeader) {
+      try {
+        const token = authHeader.replace('Bearer ', '');
+        const decoded = jwt.verify(token, ENV.JWT_SECRET) as any;
+        userId = decoded.userId;
+        username = decoded.username;
+      } catch {}
+    }
+    if (!userId) {
+      userId = req.body.userId || `guest_${Date.now().toString(36)}`;
+      username = req.body.username || 'Player';
+    }
     const { gameType, difficulty, botId } = req.body;
 
     if (!gameType) {

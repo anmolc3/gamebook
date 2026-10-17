@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
+import { GameLogo } from '../atoms/GameLogo';
 import { RoomService, RoomDetails, SupportedGameType } from '../../services/room.service';
 import { SoloService } from '../../services/solo.service';
 import { AiDifficulty, BOT_AVATARS } from '../../constants/soloGames';
@@ -79,7 +80,8 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
         })),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      };
+        state: res.state,
+      } as any;
       onClose();
       onJoinedRoom(virtualRoom);
     } catch (err: any) {
@@ -147,9 +149,12 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
         >
           {/* Header */}
           <View style={styles.dialogHeader}>
-            <View style={[styles.headerIconCircle, { backgroundColor: theme.colors.primary + '20' }]}>
-              <Icon name="gamepad" size={24} color={theme.colors.primary} />
-            </View>
+            <GameLogo
+              gameType={selectedGameType}
+              size={40}
+              borderRadius={10}
+              fallbackIcon="gamepad"
+            />
             <View style={{ flex: 1 }}>
               <Text style={[styles.dialogTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {selectedGameType ? selectedGameType.replace(/_/g, ' ') : 'Multiplayer Match'}

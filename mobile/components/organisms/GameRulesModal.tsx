@@ -22,6 +22,7 @@ import {
   TargetIcon,
 } from '../../icons';
 import { getGameRules, GameRuleGuide } from '../../constants/gameRules';
+import { GameLogo } from '../atoms/GameLogo';
 
 export interface GameRulesModalProps {
   visible: boolean;
@@ -66,14 +67,12 @@ export const GameRulesModal: React.FC<GameRulesModalProps> = ({
             {/* Modal Header */}
             <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
               <View style={styles.headerLeft}>
-                <View
-                  style={[
-                    styles.infoBadge,
-                    { backgroundColor: theme.colors.cardTintMint },
-                  ]}
-                >
-                  <InfoIcon size={20} color={theme.colors.primary} />
-                </View>
+                <GameLogo
+                  gameType={gameType}
+                  size={42}
+                  borderRadius={10}
+                  fallbackIcon="info"
+                />
                 <View style={styles.headerTitleBox}>
                   <Text
                     style={[styles.headerTitle, { color: theme.colors.textPrimary }]}

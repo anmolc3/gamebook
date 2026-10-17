@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { useAuth } from '../../features/auth/AuthContext';
-import { InputField, PrimaryButton, Typography } from '../../components';
+import { InputField, PrimaryButton, Typography, GameControllerLogo } from '../../components';
 import { Icon } from '../../icons';
 
 interface RegisterScreenProps {
@@ -66,16 +66,13 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
               style={[
                 styles.logoBadge,
                 {
-                  backgroundColor: 'transparent',
-                  borderColor: 'transparent',
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderColor: theme.colors.border,
                 },
+                theme.shadows.soft,
               ]}
             >
-              <Image
-                source={require('../../assets/icon.png')}
-                style={{ width: 84, height: 84, borderRadius: 22 }}
-                resizeMode="cover"
-              />
+              <GameControllerLogo size={48} color={theme.colors.primary} />
             </View>
             <Typography variant="headingLarge" align="center" style={styles.title}>
               Create Your Profile

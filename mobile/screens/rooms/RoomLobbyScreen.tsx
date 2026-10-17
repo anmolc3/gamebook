@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
@@ -272,13 +273,21 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
           <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.headerTitleCol}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-            Match Lobby
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+          <GameLogo
+            gameType={room?.gameType}
+            size={38}
+            borderRadius={10}
+            fallbackIcon="gamepad"
+          />
+          <View style={styles.headerTitleCol}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              Match Lobby
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.primary }]}>
               {getGameLabel(room?.gameType)}
             </Text>
+          </View>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -359,9 +368,12 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
             { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border },
           ]}
         >
-          <Text style={[styles.codeLabel, { color: theme.colors.textSecondary }]}>
-            ROOM CODE
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Text style={[styles.codeLabel, { color: theme.colors.textSecondary }]}>
+              ROOM CODE
+            </Text>
+            <GameLogo gameType={room?.gameType} size={36} borderRadius={8} />
+          </View>
           <View style={styles.codeRow}>
             <Text style={[styles.codeText, { color: theme.colors.primary }]}>
               {roomCode}

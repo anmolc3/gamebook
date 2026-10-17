@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
+import { GameLogo } from '../atoms/GameLogo';
 import {
   AiDifficulty,
   getSoloGameInfo,
@@ -106,9 +107,12 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
         >
           {/* Header */}
           <View style={styles.dialogHeader}>
-            <View style={[styles.headerIconCircle, { backgroundColor: theme.colors.primary + '20' }]}>
-              <Icon name="gamepad" size={24} color={theme.colors.primary} />
-            </View>
+            <GameLogo
+              gameType={gameId}
+              size={40}
+              borderRadius={10}
+              fallbackIcon="gamepad"
+            />
             <View style={styles.headerTitleCol}>
               <Text style={[styles.dialogTitle, { color: theme.colors.textPrimary }]} numberOfLines={1}>
                 {gameName}

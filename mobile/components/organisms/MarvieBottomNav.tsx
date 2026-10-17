@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
 import { Icon, IconName } from '../../icons';
 
+import { GameControllerLogo } from '../atoms/GameControllerLogo';
+
 export type NavTab = 'home' | 'games' | 'play' | 'chatList' | 'friends' | 'profile';
 
 interface MarvieBottomNavProps {
@@ -18,7 +20,6 @@ const NAV_IMAGES: Partial<Record<NavTab, ReturnType<typeof require>>> = {
   chatList: require('../../assets/images/chat_icon_logo.webp'),
   friends:  require('../../assets/images/social_icon_logo.webp'),
   profile:  require('../../assets/images/profile_icon_logo.webp'),
-  play:     require('../../assets/images/controller_friends_theme.webp'),
 };
 
 export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
@@ -79,12 +80,15 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                   {
                     backgroundColor: theme.colors.primary,
                     borderColor: theme.colors.surface,
+                    transform: [{ scale: isActive ? 1.05 : 1.0 }],
                   },
-                  theme.shadows.soft,
+                  isActive ? theme.shadows.elevated : theme.shadows.soft,
                 ]}
                 accessibilityLabel="Quick Play or Join Room"
               >
-                {customImg ? (
+                {tab.id === 'play' ? (
+                  <GameControllerLogo size={28} color={theme.colors.textOnPrimary} />
+                ) : customImg ? (
                   <Image
                     source={customImg}
                     style={styles.centerNavImage}
@@ -93,7 +97,7 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
                 ) : (
                   <Icon
                     name={tab.icon}
-                    size={20}
+                    size={22}
                     color={theme.colors.textOnPrimary}
                     strokeWidth={2.4}
                   />
@@ -111,7 +115,12 @@ export const MarvieBottomNav: React.FC<MarvieBottomNavProps> = ({
               accessibilityLabel={tab.label}
             >
               <View style={styles.iconWrapper}>
-                {customImg ? (
+                {tab.id === 'play' ? (
+                  <GameControllerLogo
+                    size={24}
+                    color={isActive ? theme.colors.primary : theme.colors.textPrimary}
+                  />
+                ) : customImg ? (
                   <Image
                     source={customImg}
                     style={styles.navImage}

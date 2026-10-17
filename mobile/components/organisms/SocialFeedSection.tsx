@@ -12,6 +12,7 @@ import {
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../atoms/Avatar';
+import { GameLogo } from '../atoms/GameLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ImagePickerService } from '../../services/imagePicker.service';
 import { FeedService, FeedPostItem } from '../../services/feed.service';
@@ -472,7 +473,13 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
 
               <View style={styles.headerRightActions}>
                 {post.gameTag && (
-                  <View style={[styles.gameTagPill, { backgroundColor: theme.colors.cardTintMint }]}>
+                  <View style={[styles.gameTagPill, { backgroundColor: theme.colors.cardTintMint, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                    <GameLogo
+                      gameType={post.gameTag}
+                      size={16}
+                      borderRadius={4}
+                      fallbackIcon="gamepad"
+                    />
                     <Text style={[styles.gameTagText, { color: theme.colors.primary }]}>
                       {post.gameTag}
                     </Text>

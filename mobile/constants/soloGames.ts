@@ -113,6 +113,16 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
     description: 'Open-end matching and pip shedding duel.',
     iconName: 'dice',
   },
+  SNAKES_AND_LADDERS: {
+    id: 'SNAKES_AND_LADDERS',
+    name: 'Snakes & Ladders',
+    category: 'BOARD',
+    type: 'AI_OPPONENT',
+    difficulties: ['EASY', 'MEDIUM', 'HARD', 'EXPERT'],
+    defaultDifficulty: 'MEDIUM',
+    description: '100-square boustrophedon race climbing ladders and dodging snakes.',
+    iconName: 'dice',
+  },
   BACKGAMMON: {
     id: 'BACKGAMMON',
     name: 'Backgammon',

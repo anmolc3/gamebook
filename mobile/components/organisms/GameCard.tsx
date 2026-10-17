@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme, getThemeCardGradient } from '../../theme';
 import { Icon, IconName } from '../../icons';
+import { GameLogo } from '../atoms/GameLogo';
 import { getGameImage } from '../../constants/gameImages';
 
 export interface GameCardProps {
@@ -56,13 +57,13 @@ export const GameCard: React.FC<GameCardProps> = ({
       >
         {/* Top Artwork & Badges */}
         <View style={styles.compactTopRow}>
-          <View style={styles.compactIconWrap}>
-            {gameImage ? (
-              <Image source={gameImage} style={styles.compactGameImage} resizeMode="cover" />
-            ) : (
-              <Icon name={icon} size={22} color={effectiveAccent} strokeWidth={2.2} />
-            )}
-          </View>
+          <GameLogo
+            gameType={gameType}
+            size={38}
+            borderRadius={10}
+            fallbackIcon={icon}
+            fallbackIconColor={effectiveAccent}
+          />
           <View style={styles.compactRightPills}>
             {badgeText && (
               <View style={[styles.compactBadge, { backgroundColor: theme.colors.cardTintAmber }]}>
@@ -115,21 +116,13 @@ export const GameCard: React.FC<GameCardProps> = ({
       ]}
     >
       <View style={styles.topRow}>
-        <View
-          style={[
-            styles.iconContainer,
-            {
-              backgroundColor: theme.colors.cardTintMint,
-              borderRadius: theme.radius.xl,
-            },
-          ]}
-        >
-          {gameImage ? (
-            <Image source={gameImage} style={styles.gameImage} resizeMode="cover" />
-          ) : (
-            <Icon name={icon} size={28} color={effectiveAccent} strokeWidth={2.2} />
-          )}
-        </View>
+        <GameLogo
+          gameType={gameType}
+          size={56}
+          borderRadius={14}
+          fallbackIcon={icon}
+          fallbackIconColor={effectiveAccent}
+        />
 
         <View style={styles.topBadgesRow}>
           {badgeText && (

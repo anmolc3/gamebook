@@ -35,6 +35,7 @@ export class FriendsService {
         bio: profile?.bio || null,
         isOnline: isUserOnline(friend.id) || (profile?.isOnline ?? false),
         lastSeen: profile?.lastSeen || friend.createdAt,
+        groupAddPrivacy: profile?.groupAddPrivacy || 'EVERYONE',
         totalMatches,
         totalWins,
         winRate,

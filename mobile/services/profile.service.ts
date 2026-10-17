@@ -41,6 +41,7 @@ export interface UserProfile {
   lastSeen: string;
   onlinePrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
   lastSeenPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  groupAddPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
   readReceipts?: boolean;
   createdAt: string;
   stats: ProfileStats;
@@ -59,6 +60,7 @@ export interface UpdateProfilePayload {
   appearanceMode?: 'system' | 'light' | 'dark';
   onlinePrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
   lastSeenPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
+  groupAddPrivacy?: 'EVERYONE' | 'MY_FRIENDS' | 'NOBODY';
   readReceipts?: boolean;
 }
 

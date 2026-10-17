@@ -285,7 +285,13 @@ export class MatchManager {
     }
 
     // Security Check: Verify that user is a registered participant in this match
-    const isParticipant = match.players.some((p) => p.userId === userId);
+    let effectiveUserId = userId;
+    let isParticipant = match.players.some((p) => p.userId === effectiveUserId);
+    if (!isParticipant && match.gameMode === 'SOLO') {
+      // In solo mode, the human participant is players[0]
+      effectiveUserId = match.players[0].userId;
+      isParticipant = true;
+    }
     if (!isParticipant) {
       throw new Error('Unauthorized: You are not an active participant in this match');
     }
@@ -297,7 +303,7 @@ export class MatchManager {
     }
 
     // Apply action through engine
-    const result = match.engine.applyAction(match.state, userId, action);
+    const result = match.engine.applyAction(match.state, effectiveUserId, action);
     if (!result.success || !result.state) {
       throw new Error(result.error || 'Failed to apply game action');
     }
@@ -313,7 +319,7 @@ export class MatchManager {
       state: match.state,
       round: match.round,
       scores: match.scores,
-      lastAction: { userId, action },
+      lastAction: { userId: effectiveUserId, action },
       events: result.events || [],
     });
 
@@ -395,6 +401,10 @@ export class MatchManager {
           await this.handleMatchConcluded(match, outcome);
         } else {
           this.scheduleTurnTimer(normalizedCode);
+          if (match.gameMode === 'SOLO') {
+            const { SoloManager } = require('../ai/solo.manager');
+            SoloManager.onPlayerActionCompleted(match);
+          }
         }
       }
     }

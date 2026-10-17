@@ -1,18 +1,17 @@
 import { Platform } from 'react-native';
 import { Asset } from 'expo-asset';
 
-// Safely attempt to require expo-audio without ever crashing module loading
+// Safely attempt to require expo-audio without crashing module loading
 let ExpoAudio: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   ExpoAudio = require('expo-audio');
 } catch (err) {
-  // expo-audio native module is not present in current client build
   ExpoAudio = null;
 }
 
-// User-provided & custom Ludo Audio Assets from assets/sounds/ludo
-const LUDO_AUDIO_ASSETS: Record<string, any> = {
+// User-provided & custom Ludo / Board Audio Assets
+const AUDIO_ASSETS: Record<string, any> = {
   diceRoll: require('../assets/sounds/ludo/dice_roll.mp3'),
   tokenOpen: require('../assets/sounds/ludo/token_open.mp3'),
   tokenMove: require('../assets/sounds/ludo/token_step.wav'),
@@ -21,6 +20,9 @@ const LUDO_AUDIO_ASSETS: Record<string, any> = {
   homeGoal: require('../assets/sounds/ludo/token_win.mp3'),
   gameOver: require('../assets/sounds/ludo/game_over.mp3'),
   turnPing: require('../assets/sounds/ludo/turn_ping.wav'),
+  ladderClimb: require('../assets/sounds/ludo/token_win.mp3'),
+  snakeSlide: require('../assets/sounds/ludo/token_kill_2.mp3'),
+  turnChange: require('../assets/sounds/ludo/turn_ping.wav'),
 };
 
 export type SoundEffectType =
@@ -31,13 +33,20 @@ export type SoundEffectType =
   | 'tokenCapture2'
   | 'homeGoal'
   | 'gameOver'
-  | 'turnPing';
+  | 'turnPing'
+  | 'ladderClimb'
+  | 'snakeSlide'
+  | 'turnChange';
 
 /**
  * Procedural Audio Synthesizer fallback for instant, zero-latency sound effects
- * in case audio driver or asset loading is unavailable.
+ * in case audio driver or asset loading is delayed or unavailable.
  */
-function createWavUri(sampleRate: number, numSamples: number, sampleGenerator: (t: number, i: number) => number): string {
+function createWavUri(
+  sampleRate: number,
+  numSamples: number,
+  sampleGenerator: (t: number, i: number) => number
+): string {
   const byteRate = sampleRate * 2;
   const blockAlign = 2;
   const dataSize = numSamples * 2;
@@ -108,38 +117,125 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return result;
 }
 
-function getTurnPingSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.22;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    const env = Math.exp(-t * 18);
-    const fundamental = Math.sin(2 * Math.PI * 880 * t);
-    const harmonic = 0.35 * Math.sin(2 * Math.PI * 1760 * t);
-    return env * (fundamental + harmonic) * 0.7;
-  });
-}
-
-function getTokenStepSoundUri(): string {
-  const sampleRate = 22050;
-  const duration = 0.1;
-  const numSamples = Math.floor(sampleRate * duration);
-
-  return createWavUri(sampleRate, numSamples, (t) => {
-    // Tactile wooden / plastic board tap
-    const env = Math.exp(-t * 45);
-    const fundamental = Math.sin(2 * Math.PI * 480 * t);
-    const click = Math.sin(2 * Math.PI * 1400 * t) * Math.exp(-t * 100);
-    return env * (fundamental * 0.7 + click * 0.3) * 0.85;
-  });
-}
+// Procedural sound generators for instant zero-latency fallbacks
+const PROCEDURAL_GENERATORS: Record<string, () => string> = {
+  tokenMove: () => {
+    const sampleRate = 22050;
+    const duration = 0.08;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const env = Math.exp(-t * 60);
+      const fundamental = Math.sin(2 * Math.PI * 540 * t);
+      const click = Math.sin(2 * Math.PI * 1800 * t) * Math.exp(-t * 120);
+      return env * (fundamental * 0.7 + click * 0.4) * 0.9;
+    });
+  },
+  diceRoll: () => {
+    const sampleRate = 22050;
+    const duration = 0.32;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const clickTimes = [0.02, 0.06, 0.11, 0.17, 0.23, 0.28];
+      let val = 0;
+      for (const ct of clickTimes) {
+        if (t >= ct && t < ct + 0.035) {
+          const dt = t - ct;
+          val += Math.sin(2 * Math.PI * 920 * dt) * Math.exp(-dt * 90);
+        }
+      }
+      return val * 0.8;
+    });
+  },
+  turnPing: () => {
+    const sampleRate = 22050;
+    const duration = 0.22;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const env = Math.exp(-t * 18);
+      const fundamental = Math.sin(2 * Math.PI * 880 * t);
+      const harmonic = 0.35 * Math.sin(2 * Math.PI * 1760 * t);
+      return env * (fundamental + harmonic) * 0.75;
+    });
+  },
+  ladderClimb: () => {
+    const sampleRate = 22050;
+    const duration = 0.36;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const notes = [523.25, 659.25, 783.99, 1046.5];
+      const noteIdx = Math.min(3, Math.floor(t / 0.08));
+      const noteT = t - noteIdx * 0.08;
+      const freq = notes[noteIdx];
+      const env = Math.exp(-noteT * 18);
+      return Math.sin(2 * Math.PI * freq * noteT) * env * 0.8;
+    });
+  },
+  snakeSlide: () => {
+    const sampleRate = 22050;
+    const duration = 0.38;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const freq = 750 - (750 - 180) * (t / duration);
+      const env = Math.sin((t / duration) * Math.PI) * Math.exp(-t * 2);
+      return Math.sin(2 * Math.PI * freq * t) * env * 0.85;
+    });
+  },
+  tokenCapture: () => {
+    const sampleRate = 22050;
+    const duration = 0.25;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const env = Math.exp(-t * 24);
+      const thud = Math.sin(2 * Math.PI * 140 * t);
+      const crack = Math.sin(2 * Math.PI * 900 * t) * Math.exp(-t * 80);
+      return env * (thud * 0.75 + crack * 0.35);
+    });
+  },
+  homeGoal: () => {
+    const sampleRate = 22050;
+    const duration = 0.45;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const c = Math.sin(2 * Math.PI * 523.25 * t);
+      const e = Math.sin(2 * Math.PI * 659.25 * t);
+      const g = Math.sin(2 * Math.PI * 783.99 * t);
+      const env = Math.exp(-t * 7);
+      return (c * 0.4 + e * 0.35 + g * 0.35) * env * 0.85;
+    });
+  },
+  gameOver: () => {
+    const sampleRate = 22050;
+    const duration = 0.6;
+    const numSamples = Math.floor(sampleRate * duration);
+    return createWavUri(sampleRate, numSamples, (t) => {
+      const c = Math.sin(2 * Math.PI * 523.25 * t);
+      const g = Math.sin(2 * Math.PI * 783.99 * t);
+      const c2 = Math.sin(2 * Math.PI * 1046.5 * t);
+      const env = Math.exp(-t * 4);
+      return (c * 0.35 + g * 0.35 + c2 * 0.4) * env * 0.9;
+    });
+  },
+};
 
 export class SoundService {
-  private static players = new Map<SoundEffectType, any>();
-  private static webAudioPool = new Map<SoundEffectType, any>();
+  // Pool of players per sound effect to handle rapid, overlapping events (like rapid steps)
+  private static playersPool = new Map<SoundEffectType, any[]>();
+  private static poolIndex = new Map<SoundEffectType, number>();
+  private static webAudioPool = new Map<SoundEffectType, any[]>();
   private static resolvedUris = new Map<SoundEffectType, string>();
   private static isInitialized = false;
+  private static isEnabled = true;
+
+  /**
+   * Sets whether sound effects are globally enabled (reads from user settings)
+   */
+  static setEnabled(enabled: boolean): void {
+    this.isEnabled = enabled;
+  }
+
+  static getEnabled(): boolean {
+    return this.isEnabled;
+  }
 
   /**
    * Resolves the asset URI for web or native playback
@@ -149,7 +245,7 @@ export class SoundService {
       return this.resolvedUris.get(type) || null;
     }
 
-    const assetModule = LUDO_AUDIO_ASSETS[type];
+    const assetModule = AUDIO_ASSETS[type];
     if (assetModule) {
       try {
         const asset = Asset.fromModule(assetModule);
@@ -157,32 +253,28 @@ export class SoundService {
           this.resolvedUris.set(type, asset.uri);
           return asset.uri;
         }
-      } catch {
-        // Module might not have resolved URI yet
-      }
+      } catch {}
     }
 
-    if (type === 'tokenMove') {
-      const stepUri = getTokenStepSoundUri();
-      this.resolvedUris.set(type, stepUri);
-      return stepUri;
-    }
-
-    if (type === 'turnPing') {
-      const pingUri = getTurnPingSoundUri();
-      this.resolvedUris.set(type, pingUri);
-      return pingUri;
+    // Procedural synthesis fallback
+    const generator = PROCEDURAL_GENERATORS[type] || PROCEDURAL_GENERATORS.tokenMove;
+    if (generator) {
+      const uri = generator();
+      this.resolvedUris.set(type, uri);
+      return uri;
     }
 
     return null;
   }
 
   /**
-   * Initializes audio session mode and preloads players for instant zero-latency playback
+   * Initializes audio session mode and preloads sound players for instant zero-latency playback
    */
   static async init(): Promise<void> {
     if (this.isInitialized) return;
     this.isInitialized = true;
+
+    // 1. Configure audio mode
     try {
       if (ExpoAudio && typeof ExpoAudio.setAudioModeAsync === 'function') {
         await ExpoAudio.setAudioModeAsync({
@@ -190,42 +282,45 @@ export class SoundService {
           interruptionMode: 'mixWithOthers',
         });
       }
-    } catch {
-      // Audio session mode not required for execution
-    }
+    } catch {}
 
-    // Preload native audio players for zero latency
+    // 2. Preload native audio players pool (2 players per sound effect for rapid non-blocking retriggering)
     try {
       if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
-        for (const [key, asset] of Object.entries(LUDO_AUDIO_ASSETS)) {
-          if (!this.players.has(key as SoundEffectType)) {
+        const allKeys = Object.keys(AUDIO_ASSETS) as SoundEffectType[];
+        for (const key of allKeys) {
+          if (!this.playersPool.has(key)) {
+            const asset = AUDIO_ASSETS[key];
+            const pool: any[] = [];
             try {
-              const p = ExpoAudio.createAudioPlayer(asset);
-              this.players.set(key as SoundEffectType, p);
+              pool.push(ExpoAudio.createAudioPlayer(asset));
+              // Create secondary player for rapid step sounds
+              if (key === 'tokenMove' || key === 'diceRoll' || key === 'turnPing') {
+                pool.push(ExpoAudio.createAudioPlayer(asset));
+              }
             } catch {}
+            if (pool.length > 0) {
+              this.playersPool.set(key, pool);
+              this.poolIndex.set(key, 0);
+            }
           }
         }
       }
     } catch {}
 
-    // Preload web Audio elements for instant web play
+    // 3. Preload Web Audio pool
     if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
-      const allTypes: SoundEffectType[] = [
-        'diceRoll',
-        'tokenOpen',
-        'tokenMove',
-        'tokenCapture',
-        'homeGoal',
-        'gameOver',
-        'turnPing',
-      ];
-      for (const t of allTypes) {
+      const allKeys = Object.keys(AUDIO_ASSETS) as SoundEffectType[];
+      for (const t of allKeys) {
         try {
           const uri = this.getAssetUri(t);
           if (uri && !this.webAudioPool.has(t)) {
-            const audio = new (window as any).Audio(uri);
-            audio.load();
-            this.webAudioPool.set(t, audio);
+            const a1 = new (window as any).Audio(uri);
+            const a2 = new (window as any).Audio(uri);
+            a1.load();
+            a2.load();
+            this.webAudioPool.set(t, [a1, a2]);
+            this.poolIndex.set(t, 0);
           }
         } catch {}
       }
@@ -233,88 +328,113 @@ export class SoundService {
   }
 
   /**
-   * Plays a game sound effect across all platforms safely and instantly
+   * Plays a game sound effect across all platforms safely, non-blockingly and instantly.
+   * Never throws and never blocks game logic or token animations.
    */
-  static async play(type: SoundEffectType): Promise<void> {
-    try {
-      if (!this.isInitialized) {
-        await this.init();
-      }
+  static play(type: SoundEffectType): void {
+    if (!this.isEnabled) return;
 
-      // 1. Web platform audio playback
+    // Trigger initialization asynchronously without awaiting or blocking
+    if (!this.isInitialized) {
+      this.init().catch(() => {});
+    }
+
+    try {
+      // 1. Web Platform playback
       if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio) {
-        let audio = this.webAudioPool.get(type);
-        if (!audio) {
+        let pool = this.webAudioPool.get(type);
+        if (!pool || pool.length === 0) {
           const uri = this.getAssetUri(type);
           if (uri) {
-            audio = new (window as any).Audio(uri);
-            this.webAudioPool.set(type, audio);
+            const audio = new (window as any).Audio(uri);
+            pool = [audio];
+            this.webAudioPool.set(type, pool);
           }
         }
-        if (audio) {
-          audio.currentTime = 0;
-          audio.volume = 0.95;
-          audio.play().catch(() => {});
-          return;
+
+        if (pool && pool.length > 0) {
+          const idx = (this.poolIndex.get(type) || 0) % pool.length;
+          this.poolIndex.set(type, idx + 1);
+          const audio = pool[idx];
+          if (audio) {
+            audio.currentTime = 0;
+            audio.volume = 0.95;
+            audio.play().catch(() => {});
+            return;
+          }
         }
       }
 
       // 2. Native Expo Audio playback (expo-audio)
       if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
-        let player = this.players.get(type);
-        if (!player) {
-          const assetModule = LUDO_AUDIO_ASSETS[type];
+        let pool = this.playersPool.get(type);
+        if (!pool || pool.length === 0) {
+          const assetModule = AUDIO_ASSETS[type];
           const source = assetModule ? assetModule : this.getAssetUri(type);
           if (source) {
-            player = ExpoAudio.createAudioPlayer(source);
-            this.players.set(type, player);
+            try {
+              const p = ExpoAudio.createAudioPlayer(source);
+              pool = [p];
+              this.playersPool.set(type, pool);
+              this.poolIndex.set(type, 0);
+            } catch {}
           }
         }
 
-        if (player) {
-          try {
-            if (player.playing) {
-              player.pause();
+        if (pool && pool.length > 0) {
+          const idx = (this.poolIndex.get(type) || 0) % pool.length;
+          this.poolIndex.set(type, idx + 1);
+          const player = pool[idx];
+
+          if (player) {
+            // Seek to start and play immediately without awaiting native promises
+            try {
+              if (typeof player.seekTo === 'function') {
+                player.seekTo(0).catch(() => {}).finally(() => {
+                  try { player.play(); } catch {}
+                });
+              } else if (typeof player.play === 'function') {
+                player.play();
+              }
+            } catch {
+              try { player.play(); } catch {}
             }
-            if (typeof player.seekTo === 'function') {
-              await player.seekTo(0);
-            }
-            if (typeof player.play === 'function') {
-              player.play();
-            }
-          } catch {
-            if (typeof player.play === 'function') {
-              player.play();
-            }
+            return;
           }
-          return;
         }
       }
 
-      // 3. Fallback for turn ping or web Audio if not loaded
-      if (type === 'turnPing' || type === 'tokenMove') {
-        const pingUri = this.getAssetUri(type);
-        if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio && pingUri) {
-          const audio = new (window as any).Audio(pingUri);
-          audio.play().catch(() => {});
-        }
+      // 3. Direct synthesized procedural playback fallback
+      const procUri = this.getAssetUri(type);
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && (window as any).Audio && procUri) {
+        const audio = new (window as any).Audio(procUri);
+        audio.volume = 0.9;
+        audio.play().catch(() => {});
       }
-    } catch (err) {
+    } catch {
       // Sound playback should never crash the game
     }
   }
 
   static async unloadAll(): Promise<void> {
     try {
-      for (const player of this.players.values()) {
-        if (player && typeof player.release === 'function') {
-          player.release();
-        } else if (player && typeof player.pause === 'function') {
-          player.pause();
+      for (const pool of this.playersPool.values()) {
+        for (const player of pool) {
+          try {
+            if (typeof player.release === 'function') {
+              player.release();
+            } else if (typeof player.pause === 'function') {
+              player.pause();
+            }
+          } catch {}
         }
       }
-      this.players.clear();
+      this.playersPool.clear();
+      this.webAudioPool.clear();
       this.resolvedUris.clear();
+      this.isInitialized = false;
     } catch {}
   }
 }
+
+export default SoundService;

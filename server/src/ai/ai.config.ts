@@ -72,13 +72,13 @@ export function getThinkingDelayMs(difficulty: AiDifficulty): number {
   
   switch (difficulty) {
     case 'EASY':
-      return min + Math.floor(randomJitter * 0.7); // Faster, less contemplation
+      return min + Math.floor(randomJitter * 0.3); // Quick, less contemplation
     case 'MEDIUM':
-      return min + randomJitter;
+      return min + 250 + Math.floor(randomJitter * 0.5);
     case 'HARD':
-      return min + 200 + randomJitter;
+      return min + 500 + Math.floor(randomJitter * 0.7);
     case 'EXPERT':
-      return min + 350 + randomJitter;
+      return min + 800 + randomJitter;
     default:
       return min + randomJitter;
   }

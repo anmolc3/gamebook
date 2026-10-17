@@ -66,7 +66,19 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   }, [visible]);
 
   // Toggle friend selection
-  const toggleSelectFriend = (friendId: string) => {
+  const toggleSelectFriend = (friendOrId: FriendUser | string) => {
+    const friend = typeof friendOrId === 'string'
+      ? friends.find((f) => f.id === friendOrId)
+      : friendOrId;
+    const friendId = typeof friendOrId === 'string' ? friendOrId : friendOrId.id;
+
+    if (friend?.groupAddPrivacy === 'NOBODY' && !selectedIds.has(friendId)) {
+      Alert.alert(
+        'Cannot Add Member',
+        `${friend.displayName}'s privacy settings do not allow them to be added to groups.`
+      );
+      return;
+    }
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(friendId)) {
@@ -393,15 +405,17 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                 >
                   {filteredFriends.map((friend, idx) => {
                     const isSelected = selectedIds.has(friend.id);
+                    const isRestricted = friend.groupAddPrivacy === 'NOBODY';
                     const isLast = idx === filteredFriends.length - 1;
 
                     return (
                       <TouchableOpacity
                         key={friend.id}
-                        onPress={() => toggleSelectFriend(friend.id)}
+                        onPress={() => toggleSelectFriend(friend)}
                         style={[
                           styles.friendRow,
                           !isLast && { borderBottomColor: theme.colors.border, borderBottomWidth: 1 },
+                          isRestricted && { opacity: 0.55 },
                         ]}
                         activeOpacity={0.7}
                       >
@@ -416,20 +430,26 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
                             {friend.displayName}
                           </Text>
                           <Text style={[styles.friendUsername, { color: theme.colors.textSecondary }]}>
-                            @{friend.username}
+                            {isRestricted ? 'Privacy: Cannot add to groups' : `@${friend.username}`}
                           </Text>
                         </View>
 
-                        {/* Checkbox circle */}
+                        {/* Checkbox circle or lock icon */}
                         <View
                           style={[
                             styles.checkboxCircle,
-                            isSelected
+                            isRestricted
+                              ? { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }
+                              : isSelected
                               ? { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
                               : { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
                           ]}
                         >
-                          {isSelected && <Icon name="check" size={14} color="#FFFFFF" />}
+                          {isRestricted ? (
+                            <Icon name="lock" size={13} color={theme.colors.textMuted} />
+                          ) : (
+                            isSelected && <Icon name="check" size={14} color="#FFFFFF" />
+                          )}
                         </View>
                       </TouchableOpacity>
                     );

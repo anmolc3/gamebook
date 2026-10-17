@@ -130,6 +130,12 @@ export class SoloManager {
       } else {
         extraPacing = 600; // Pause before AI rolls dice
       }
+    } else if (match.gameType === 'SNAKES_AND_LADDERS') {
+      // Natural, prompt board game turn pacing
+      if (difficulty === 'EASY') extraPacing = -400; // ~1400ms
+      else if (difficulty === 'MEDIUM') extraPacing = -300; // ~1200ms
+      else if (difficulty === 'HARD') extraPacing = -200; // ~1000ms
+      else extraPacing = -100; // ~800ms
     } else if (match.gameType === 'WORDLE_DUEL') {
       // Natural human-like deduction and keyboard typing pacing
       if (difficulty === 'EASY') extraPacing = 3200;

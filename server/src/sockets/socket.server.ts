@@ -330,15 +330,20 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     // ------------------------------------------------------------------------
 
     socket.on('solo:start', (data: { gameType: string; difficulty?: any; botId?: string }, cb?: any) => {
-      if (!userId) {
-        if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized' });
-        return;
+      let effectiveUserId = userId || socket.data.userId;
+      let effectiveUsername = username || socket.data.user?.username;
+      if (!effectiveUserId) {
+        effectiveUserId = `guest_${socket.id.slice(0, 8)}`;
+        effectiveUsername = 'Guest';
+        socket.data.userId = effectiveUserId;
+        socket.data.user = { userId: effectiveUserId, username: effectiveUsername } as any;
+        socket.join(`user:${effectiveUserId}`);
       }
       try {
         const { SoloManager } = require('../ai/solo.manager');
         const session = SoloManager.startSoloSession(
-          userId,
-          username || 'Player',
+          effectiveUserId,
+          effectiveUsername || 'Player',
           data.gameType as any,
           data.difficulty || 'MEDIUM',
           data.botId
@@ -366,13 +371,14 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     });
 
     socket.on('solo:get_state', (cb?: any) => {
-      if (!userId) {
+      const effectiveUserId = userId || socket.data.userId;
+      if (!effectiveUserId) {
         if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized' });
         return;
       }
       try {
         const { SoloManager } = require('../ai/solo.manager');
-        const match = SoloManager.getActiveSession(userId);
+        const match = SoloManager.getActiveSession(effectiveUserId);
         if (match) {
           socket.join(`room:${match.roomCode}`);
           if (typeof cb === 'function') {
@@ -397,10 +403,11 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     });
 
     socket.on('solo:forfeit', async (cb?: any) => {
-      if (!userId) return;
+      const effectiveUserId = userId || socket.data.userId;
+      if (!effectiveUserId) return;
       try {
         const { SoloManager } = require('../ai/solo.manager');
-        await SoloManager.forfeitSession(userId);
+        await SoloManager.forfeitSession(effectiveUserId);
         if (typeof cb === 'function') cb({ success: true });
       } catch (err: any) {
         if (typeof cb === 'function') cb({ success: false, error: err.message });
@@ -412,7 +419,8 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     // ------------------------------------------------------------------------
 
     socket.on('game:action', async (data: { roomCode: string; action: any }, cb?: any) => {
-      if (!userId || !data?.roomCode) {
+      const effectiveUserId = userId || socket.data.userId || 'guest_player';
+      if (!effectiveUserId || !data?.roomCode) {
         if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized or missing room code' });
         return;
       }
@@ -426,7 +434,7 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
       }
 
       try {
-        const result = await MatchManager.handleAction(data.roomCode, userId, data.action);
+        const result = await MatchManager.handleAction(data.roomCode, effectiveUserId, data.action);
         if (typeof cb === 'function') cb(result);
       } catch (err: any) {
         if (typeof cb === 'function') cb({ success: false, error: err.message });
@@ -434,12 +442,13 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     });
 
     socket.on('game:rematch_request', (data: { roomCode: string }, cb?: any) => {
-      if (!userId || !data?.roomCode) {
+      const effectiveUserId = userId || socket.data.userId || 'guest_player';
+      if (!effectiveUserId || !data?.roomCode) {
         if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized or missing room code' });
         return;
       }
       try {
-        const result = MatchManager.requestRematch(data.roomCode, userId);
+        const result = MatchManager.requestRematch(data.roomCode, effectiveUserId);
         if (typeof cb === 'function') cb({ success: true, ...result });
       } catch (err: any) {
         if (typeof cb === 'function') cb({ success: false, error: err.message });
@@ -447,12 +456,13 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     });
 
     socket.on('game:rematch_response', (data: { roomCode: string; accept: boolean }, cb?: any) => {
-      if (!userId || !data?.roomCode) {
+      const effectiveUserId = userId || socket.data.userId || 'guest_player';
+      if (!effectiveUserId || !data?.roomCode) {
         if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized or missing room code' });
         return;
       }
       try {
-        const result = MatchManager.respondRematch(data.roomCode, userId, !!data.accept);
+        const result = MatchManager.respondRematch(data.roomCode, effectiveUserId, !!data.accept);
         if (typeof cb === 'function') cb({ success: true, ...result });
       } catch (err: any) {
         if (typeof cb === 'function') cb({ success: false, error: err.message });
@@ -460,12 +470,13 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     });
 
     socket.on('game:forfeit', async (data: { roomCode: string }, cb?: any) => {
-      if (!userId || !data?.roomCode) {
+      const effectiveUserId = userId || socket.data.userId || 'guest_player';
+      if (!effectiveUserId || !data?.roomCode) {
         if (typeof cb === 'function') cb({ success: false, error: 'Unauthorized or missing room code' });
         return;
       }
       try {
-        await MatchManager.handleForfeit(data.roomCode, userId);
+        await MatchManager.handleForfeit(data.roomCode, effectiveUserId);
         if (typeof cb === 'function') cb({ success: true });
       } catch (err: any) {
         if (typeof cb === 'function') cb({ success: false, error: err.message });

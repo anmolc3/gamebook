@@ -23,6 +23,7 @@ import Svg, {
 import { useTheme } from '../../theme';
 import { TrophyIcon, CrownIcon, StarIcon, GamepadIcon, TargetIcon, InfoIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
@@ -939,12 +940,15 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
         <TouchableOpacity style={styles.leaveBtn} onPress={onLeave}>
           <Text style={styles.leaveBtnText}>Exit</Text>
         </TouchableOpacity>
-        <View style={styles.headerTitleBox}>
-          <Text style={[styles.gameTitle, { color: theme.colors.textPrimary }]}>
-            {getGameTitle()}
-          </Text>
-          <View style={styles.roomCodePill}>
-            <Text style={styles.roomCodeText}>ROOM {roomCode}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+          <GameLogo gameType={gameType} size={34} borderRadius={8} />
+          <View style={styles.headerTitleBox}>
+            <Text style={[styles.gameTitle, { color: theme.colors.textPrimary }]}>
+              {getGameTitle()}
+            </Text>
+            <View style={styles.roomCodePill}>
+              <Text style={styles.roomCodeText}>ROOM {roomCode}</Text>
+            </View>
           </View>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

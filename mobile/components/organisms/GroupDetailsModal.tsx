@@ -147,13 +147,26 @@ export const GroupDetailsModal: React.FC<GroupDetailsModalProps> = ({
     }
   };
 
-  const toggleSelectFriendToAdd = (fId: string) => {
+  const toggleSelectFriendToAdd = (friendOrId: FriendUser | string) => {
+    const friend =
+      typeof friendOrId === 'string'
+        ? availableFriends.find((f) => f.id === friendOrId)
+        : friendOrId;
+    const friendId = typeof friendOrId === 'string' ? friendOrId : friendOrId.id;
+
+    if (friend?.groupAddPrivacy === 'NOBODY' && !selectedFriendIds.has(friendId)) {
+      Alert.alert(
+        'Cannot Add Member',
+        `${friend.displayName}'s privacy settings do not allow them to be added to groups.`
+      );
+      return;
+    }
     setSelectedFriendIds((prev) => {
       const next = new Set(prev);
-      if (next.has(fId)) {
-        next.delete(fId);
+      if (next.has(friendId)) {
+        next.delete(friendId);
       } else {
-        next.add(fId);
+        next.add(friendId);
       }
       return next;
     });
@@ -572,11 +585,16 @@ export const GroupDetailsModal: React.FC<GroupDetailsModalProps> = ({
                   <ScrollView style={styles.subModalScroll}>
                     {availableFriends.map((f) => {
                       const isSelected = selectedFriendIds.has(f.id);
+                      const isRestricted = f.groupAddPrivacy === 'NOBODY';
                       return (
                         <TouchableOpacity
                           key={f.id}
-                          onPress={() => toggleSelectFriendToAdd(f.id)}
-                          style={[styles.addFriendRow, { borderBottomColor: theme.colors.border }]}
+                          onPress={() => toggleSelectFriendToAdd(f)}
+                          style={[
+                            styles.addFriendRow,
+                            { borderBottomColor: theme.colors.border },
+                            isRestricted && { opacity: 0.55 },
+                          ]}
                           activeOpacity={0.7}
                         >
                           <Avatar
@@ -590,18 +608,24 @@ export const GroupDetailsModal: React.FC<GroupDetailsModalProps> = ({
                               {f.displayName}
                             </Text>
                             <Text style={[styles.friendUsername, { color: theme.colors.textSecondary }]}>
-                              @{f.username}
+                              {isRestricted ? 'Privacy: Cannot add to groups' : `@${f.username}`}
                             </Text>
                           </View>
                           <View
                             style={[
                               styles.checkboxCircle,
-                              isSelected
+                              isRestricted
+                                ? { borderColor: theme.colors.border, backgroundColor: theme.colors.surface }
+                                : isSelected
                                 ? { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }
                                 : { borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
                             ]}
                           >
-                            {isSelected && <Icon name="check" size={14} color="#FFFFFF" />}
+                            {isRestricted ? (
+                              <Icon name="lock" size={13} color={theme.colors.textMuted} />
+                            ) : (
+                              isSelected && <Icon name="check" size={14} color="#FFFFFF" />
+                            )}
                           </View>
                         </TouchableOpacity>
                       );

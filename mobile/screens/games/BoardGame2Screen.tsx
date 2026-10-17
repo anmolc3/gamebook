@@ -23,10 +23,12 @@ import Svg, {
 import { useTheme } from '../../theme';
 import { Icon, TrophyIcon, CrownIcon, StarIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
 import { RoomPlayer, RoomDetails } from '../../services/room.service';
+import { SnakesAndLaddersScreen } from './SnakesAndLaddersScreen';
 
 export interface BoardGame2ScreenProps {
   roomCode: string;
@@ -51,6 +53,16 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
   roomDetails,
   onLeave,
 }) => {
+  if (gameType === 'SNAKES_AND_LADDERS') {
+    return (
+      <SnakesAndLaddersScreen
+        roomCode={roomCode}
+        roomDetails={roomDetails}
+        onLeave={onLeave}
+      />
+    );
+  }
+
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -231,7 +243,6 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
   const getGameTitle = () => {
     switch (gameType) {
       case 'CARROM': return 'Carrom Board Arena';
-      case 'SNAKES_AND_LADDERS': return 'Snakes & Ladders';
       case 'BATTLESHIP': return 'Battleship Command';
       case 'DOMINOES': return 'Dominoes Duel';
       case 'BACKGAMMON': return 'Backgammon Classic';
@@ -743,13 +754,16 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
           <Icon name="chevronLeft" size={24} color={theme.colors.textPrimary} />
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-            {getGameTitle()}
-          </Text>
-          <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
-            Round {round} • Room: {roomCode}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+          <GameLogo gameType={gameType} size={34} borderRadius={8} />
+          <View style={styles.headerCenter}>
+            <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
+              {getGameTitle()}
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: theme.colors.textSecondary }]}>
+              Round {round} • Room: {roomCode}
+            </Text>
+          </View>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -801,7 +815,6 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
       {/* Main Board View */}
       <ScrollView contentContainerStyle={styles.boardScrollContainer} showsVerticalScrollIndicator={false}>
         {gameType === 'CARROM' && renderCarrom()}
-        {gameType === 'SNAKES_AND_LADDERS' && renderSnakesAndLadders()}
         {gameType === 'BATTLESHIP' && renderBattleship()}
         {gameType === 'DOMINOES' && renderDominoes()}
         {gameType === 'BACKGAMMON' && renderBackgammon()}

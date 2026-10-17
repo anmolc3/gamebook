@@ -21,6 +21,7 @@ import Svg, {
 import { useTheme } from '../../theme';
 import { TrophyIcon, CrownIcon, StarIcon, InfoIcon, ClockIcon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
+import { GameLogo } from '../../components/atoms/GameLogo';
 import { GameRulesModal } from '../../components';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
@@ -900,13 +901,16 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
           <Text style={styles.leaveBtnText}>✕ Resign</Text>
         </TouchableOpacity>
 
-        <View style={styles.headerCenter}>
-          <Text style={[styles.gameTitle, { color: theme.colors.textPrimary }]}>
-            {gameType.replace(/_/g, ' ')}
-          </Text>
-          <Text style={[styles.roomCodeBadge, { color: theme.colors.textSecondary }]}>
-            Room: {roomCode} • Round {round}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'center' }}>
+          <GameLogo gameType={gameType} size={34} borderRadius={8} />
+          <View style={styles.headerCenter}>
+            <Text style={[styles.gameTitle, { color: theme.colors.textPrimary }]}>
+              {gameType.replace(/_/g, ' ')}
+            </Text>
+            <Text style={[styles.roomCodeBadge, { color: theme.colors.textSecondary }]}>
+              Room: {roomCode} • Round {round}
+            </Text>
+          </View>
         </View>
 
         {/* Right Action: (i) button and Turn Timer Badge */}
