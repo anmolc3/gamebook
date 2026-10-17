@@ -5,6 +5,7 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  googleSignInSchema,
 } from './auth.validation';
 import { AuthRequest } from '../middleware/auth.middleware';
 
@@ -154,6 +155,36 @@ export class AuthController {
         error: {
           code: 'RESET_PASSWORD_FAILED',
           message: err.message || 'Failed to reset password',
+        },
+      });
+    }
+  }
+
+  static async googleSignIn(req: Request, res: Response): Promise<void> {
+    try {
+      const validation = googleSignInSchema.safeParse(req.body);
+      if (!validation.success) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: validation.error.issues[0]?.message || 'Google token is required',
+          },
+        });
+        return;
+      }
+
+      const result = await AuthService.googleSignIn(validation.data);
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (err: any) {
+      res.status(400).json({
+        success: false,
+        error: {
+          code: 'GOOGLE_AUTH_FAILED',
+          message: err.message || 'Google authentication failed',
         },
       });
     }

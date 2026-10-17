@@ -16,6 +16,8 @@ import notificationsRoutes from './notifications/notifications.routes';
 import feedRoutes from './feeds/feed.routes';
 import uploadRoutes from './upload/upload.routes';
 
+import path from 'path';
+
 const app = express();
 const server = http.createServer(app);
 
@@ -23,6 +25,14 @@ const server = http.createServer(app);
 app.use(cors({ origin: ENV.CORS_ORIGIN }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Static Web Assets & Login Page
+app.use(express.static(path.join(process.cwd(), 'public')));
+app.use('/assets', express.static(path.join(process.cwd(), 'public/assets')));
+
+app.get(['/', '/login'], (_req: Request, res: Response) => {
+  res.sendFile(path.join(process.cwd(), 'public/index.html'));
+});
 
 // Base Healthcheck Endpoint
 app.get('/health', async (_req: Request, res: Response) => {

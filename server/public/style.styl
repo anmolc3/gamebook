@@ -1,0 +1,351 @@
+// Color Palette Variables
+$bg-gradient-start = #ff8c00
+$bg-gradient-mid = #ff5722
+$bg-gradient-end = #ffb703
+$card-bg = #161922
+$card-border = rgba(255, 255, 255, 0.08)
+$text-primary = #ffffff
+$text-secondary = #94a3b8
+$pink-primary = #ff4081
+$pink-hover = #f50057
+$pink-shadow = rgba(255, 64, 129, 0.35)
+$charcoal-google = #212634
+$charcoal-google-hover = #2a3142
+$charcoal-border = rgba(255, 255, 255, 0.12)
+$input-bg = #0d111a
+$input-border = rgba(255, 255, 255, 0.1)
+$input-focus-border = #ff8c00
+$input-focus-glow = rgba(255, 140, 0, 0.25)
+$error-bg = rgba(239, 68, 68, 0.15)
+$error-border = #ef4444
+$error-text = #fca5a5
+
+*
+  margin 0
+  padding 0
+  box-sizing border-box
+
+body
+  font-family 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif
+  background linear-gradient(135deg, $bg-gradient-start 0%, $bg-gradient-mid 50%, $bg-gradient-end 100%)
+  min-height 100vh
+  display flex
+  justify-content center
+  align-items center
+  padding 20px
+  position relative
+  overflow-x hidden
+  color $text-primary
+
+.bg-ambient-glow
+  position fixed
+  top -20%
+  left 50%
+  transform translateX(-50%)
+  width 600px
+  height 600px
+  background radial-gradient(circle, rgba(255, 200, 0, 0.25) 0%, rgba(255, 87, 34, 0) 70%)
+  filter blur(60px)
+  pointer-events none
+  z-index 0
+
+.login-container
+  width 100%
+  max-width 420px
+  position relative
+  z-index 1
+  margin 0 auto
+
+// Controller Art Styling
+.controller-art
+  display flex
+  justify-content center
+  align-items center
+  width 100%
+  height 190px
+  margin 35px auto 20px
+
+.controller-image
+  display block
+  width 100%
+  max-width 320px
+  height 190px
+  object-fit contain
+  background transparent
+  filter drop-shadow(0 0 12px rgba(255, 130, 0, 0.25))
+  transition transform 0.4s ease, filter 0.4s ease
+
+  &:hover
+    transform translateY(-4px) scale(1.02)
+    filter drop-shadow(0 0 20px rgba(255, 140, 0, 0.45))
+
+@media (max-width: 400px)
+  .controller-art
+    height 160px
+    margin 25px auto 15px
+
+  .controller-image
+    height 160px
+    max-width 280px
+
+// Card Container
+.login-card
+  background $card-bg
+  border 1px solid $card-border
+  border-radius 24px
+  padding 32px 28px
+  box-shadow 0 20px 50px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05)
+  backdrop-filter blur(16px)
+
+.card-header
+  text-align center
+  margin-bottom 24px
+
+.app-title
+  font-size 24px
+  font-weight 800
+  letter-spacing -0.5px
+  color $text-primary
+  margin-bottom 6px
+
+.app-subtitle
+  font-size 13px
+  line-height 1.5
+  color $text-secondary
+
+// Feedback / Error Banner
+.feedback-banner
+  display flex
+  align-items center
+  gap 10px
+  padding 12px 14px
+  background $error-bg
+  border 1px solid $error-border
+  border-radius 12px
+  color $error-text
+  font-size 13px
+  margin-bottom 20px
+  animation fadeIn 0.3s ease
+
+  &.hidden
+    display none
+
+  .feedback-icon
+    display flex
+    align-items center
+    flex-shrink 0
+
+  .feedback-text
+    flex 1
+
+// Form Fields
+.form-group
+  margin-bottom 18px
+
+  label
+    display block
+    font-size 13px
+    font-weight 600
+    color #cbd5e1
+    margin-bottom 8px
+
+.input-wrapper
+  position relative
+  display flex
+  align-items center
+
+  .input-icon
+    position absolute
+    left 14px
+    display flex
+    align-items center
+    color $text-secondary
+    pointer-events none
+
+  input
+    width 100%
+    height 48px
+    background $input-bg
+    border 1px solid $input-border
+    border-radius 12px
+    padding 0 44px 0 42px
+    color $text-primary
+    font-family inherit
+    font-size 14px
+    outline none
+    transition border-color 0.25s ease, box-shadow 0.25s ease
+
+    &::placeholder
+      color #64748b
+
+    &:focus
+      border-color $input-focus-border
+      box-shadow 0 0 0 3px $input-focus-glow
+
+.toggle-password-btn
+  position absolute
+  right 12px
+  background none
+  border none
+  cursor pointer
+  color $text-secondary
+  display flex
+  align-items center
+  justify-content center
+  padding 4px
+  border-radius 6px
+  transition color 0.2s ease
+
+  &:hover
+    color $text-primary
+
+  &.hidden
+    display none
+
+.hidden
+  display none !important
+
+.forgot-row
+  display flex
+  justify-content flex-end
+  margin -4px 0 20px
+
+.forgot-link
+  font-size 12px
+  font-weight 600
+  color $bg-gradient-start
+  text-decoration none
+  transition color 0.2s ease
+
+  &:hover
+    color #ffa726
+    text-decoration underline
+
+// Buttons
+.btn
+  width 100%
+  height 48px
+  border-radius 12px
+  font-family inherit
+  font-size 15px
+  font-weight 700
+  cursor pointer
+  display flex
+  align-items center
+  justify-content center
+  gap 8px
+  transition all 0.25s ease
+  outline none
+  border none
+  text-decoration none
+
+.btn-primary
+  background $pink-primary
+  color #ffffff
+  box-shadow 0 6px 20px $pink-shadow
+
+  &:hover:not(:disabled)
+    background $pink-hover
+    transform translateY(-2px)
+    box-shadow 0 10px 25px rgba(245, 0, 87, 0.45)
+
+  &:active:not(:disabled)
+    transform translateY(0)
+
+  &:disabled
+    opacity 0.65
+    cursor not-allowed
+
+  .btn-arrow
+    transition transform 0.2s ease
+
+  &:hover .btn-arrow
+    transform translateX(3px)
+
+// Divider
+.divider
+  display flex
+  align-items center
+  margin 22px 0
+  gap 12px
+
+.divider-line
+  flex 1
+  height 1px
+  background rgba(255, 255, 255, 0.1)
+
+.divider-text
+  font-size 11px
+  font-weight 700
+  letter-spacing 1px
+  color #64748b
+  text-transform uppercase
+
+// Charcoal Google Sign-In Button
+.btn-google
+  background $charcoal-google
+  color #ffffff
+  border 1px solid $charcoal-border
+  box-shadow 0 4px 14px rgba(0, 0, 0, 0.2)
+
+  &:hover:not(:disabled)
+    background $charcoal-google-hover
+    border-color rgba(255, 255, 255, 0.2)
+    transform translateY(-1px)
+    box-shadow 0 6px 18px rgba(0, 0, 0, 0.3)
+
+  &:active:not(:disabled)
+    transform translateY(0)
+
+  &:disabled
+    opacity 0.65
+    cursor not-allowed
+
+  .google-icon
+    width 18px
+    height 18px
+    display block
+    flex-shrink 0
+
+  .google-btn-text
+    font-size 14px
+    font-weight 600
+
+// Spinners
+.btn-spinner, .google-spinner
+  width 18px
+  height 18px
+  border 2px solid rgba(255, 255, 255, 0.3)
+  border-top-color #ffffff
+  border-radius 50%
+  animation spin 0.75s linear infinite
+  display inline-block
+
+// Card Footer
+.card-footer
+  text-align center
+  margin-top 22px
+  font-size 13px
+  color $text-secondary
+
+.signup-link
+  color $bg-gradient-start
+  font-weight 700
+  text-decoration none
+  transition color 0.2s ease
+
+  &:hover
+    color #ffa726
+    text-decoration underline
+
+@keyframes spin
+  to
+    transform rotate(360deg)
+
+@keyframes fadeIn
+  from
+    opacity 0
+    transform translateY(-4px)
+  to
+    opacity 1
+    transform translateY(0)

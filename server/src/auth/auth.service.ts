@@ -9,6 +9,7 @@ import {
   LoginInput,
   ForgotPasswordInput,
   ResetPasswordInput,
+  GoogleSignInInput,
 } from './auth.validation';
 
 interface PasswordResetEntry {
@@ -124,6 +125,119 @@ export class AuthService {
       await prisma.profile.update({
         where: { id: user.profile.id },
         data: { isOnline: true, lastSeen: new Date() },
+      });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, username: user.username },
+      ENV.JWT_SECRET,
+      { expiresIn: ENV.JWT_EXPIRES_IN as any }
+    );
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.profile?.displayName || user.username,
+        avatarUrl: user.profile?.avatarUrl || null,
+        bio: user.profile?.bio || null,
+        themePreference: user.profile?.themePreference || 'coralMarble',
+        appearanceMode: user.profile?.appearanceMode || 'dark',
+        isOnline: true,
+        createdAt: user.createdAt,
+      },
+      token,
+    };
+  }
+
+  static async googleSignIn(input: GoogleSignInInput): Promise<AuthResponse> {
+    const { idToken } = input;
+
+    // Validate Google ID token securely using Google's tokeninfo API
+    let payload: any;
+    try {
+      const googleRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+      );
+      payload = await googleRes.json();
+      if (!googleRes.ok || payload.error_description || !payload.email) {
+        throw new Error(payload.error_description || 'Invalid Google ID token');
+      }
+    } catch (err: any) {
+      throw new Error(`Google authentication failed: ${err.message}`);
+    }
+
+    // Verify token validity
+    if (payload.email_verified !== 'true' && payload.email_verified !== true) {
+      throw new Error('Google account email is not verified');
+    }
+
+    // If GOOGLE_CLIENT_ID is configured in environment, verify audience
+    const configuredClientId = process.env.GOOGLE_CLIENT_ID;
+    if (configuredClientId && payload.aud !== configuredClientId) {
+      throw new Error('Google token audience mismatch');
+    }
+
+    const email = payload.email.toLowerCase().trim();
+    const googleName = payload.name || payload.given_name || 'Player';
+    const avatarUrl = payload.picture || null;
+
+    // Check if user already exists
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: { profile: true },
+    });
+
+    if (user) {
+      // Safe account linking: Existing account found with this verified email
+      // Update avatar if profile does not have one, and set presence online
+      if (user.profile) {
+        await prisma.profile.update({
+          where: { id: user.profile.id },
+          data: {
+            isOnline: true,
+            lastSeen: new Date(),
+            avatarUrl: user.profile.avatarUrl || avatarUrl,
+          },
+        });
+      }
+    } else {
+      // New user registration via Google
+      // Generate clean unique username
+      let baseUsername = (payload.given_name || email.split('@')[0])
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .slice(0, 15);
+      if (baseUsername.length < 3) baseUsername = 'player';
+
+      let username = baseUsername;
+      let counter = 1;
+      while (await prisma.user.findUnique({ where: { username } })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
+
+      // Generate secure random password hash for account
+      const randomSecret = crypto.randomBytes(32).toString('hex');
+      const passwordHash = await bcrypt.hash(randomSecret, 12);
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          username,
+          passwordHash,
+          profile: {
+            create: {
+              displayName: googleName.slice(0, 30),
+              avatarUrl,
+              themePreference: 'coralMarble',
+              appearanceMode: 'dark',
+              isOnline: true,
+            },
+          },
+        },
+        include: { profile: true },
       });
     }
 
