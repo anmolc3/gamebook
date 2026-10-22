@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   ScrollView,
   Modal,
   Alert,
+  BackHandler,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +21,7 @@ import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { Avatar } from '../../components/atoms/Avatar';
 import { GameLogo } from '../../components/atoms/GameLogo';
+import { GameControllerLogo } from '../../components/atoms/GameControllerLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useCall } from '../../features/call/CallContext';
 import { ChatService, ConversationItem } from '../../services/chat.service';
@@ -71,7 +74,7 @@ function formatTimeAgo(dateString?: string): string {
   return past.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export type ChatFilterType = 'ALL' | 'UNREAD' | 'FAVORITES' | 'GROUPS' | 'ARCHIVED';
+export type ChatFilterType = 'ALL' | 'UNREAD' | 'FAVORITES' | 'GROUPS' | 'LOCKED' | 'ARCHIVED';
 
 export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   onBack,
@@ -92,12 +95,15 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<TextInput>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Archive & Favorites state
+  // Archive, Favorites & Locked state
   const [archivedIds, setArchivedIds] = useState<string[]>([]);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [lockedIds, setLockedIds] = useState<string[]>([]);
+  const [showLockedChats, setShowLockedChats] = useState<boolean>(false);
   const [selectedConversation, setSelectedConversation] = useState<ConversationItem | null>(null);
   const [isActionModalVisible, setIsActionModalVisible] = useState(false);
 
@@ -106,21 +112,25 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   const [isCreateGroupModalVisible, setIsCreateGroupModalVisible] = useState(false);
   const [callHistory, setCallHistory] = useState<CallHistoryItem[]>([]);
 
-  // Load archived & favorite IDs
-  useEffect(() => {
-    (async () => {
-      try {
-        const [savedArchived, savedFavs] = await Promise.all([
-          AsyncStorage.getItem('@gameapp:archived_convs'),
-          AsyncStorage.getItem('@gameapp:favorite_convs'),
-        ]);
-        if (savedArchived) setArchivedIds(JSON.parse(savedArchived));
-        if (savedFavs) setFavoriteIds(JSON.parse(savedFavs));
-      } catch (err) {
-        console.warn('Failed to load local chat state:', err);
-      }
-    })();
+  // Load archived, favorite & locked IDs
+  const loadLocalChatState = useCallback(async () => {
+    try {
+      const [savedArchived, savedFavs, savedLocked] = await Promise.all([
+        AsyncStorage.getItem('@gameapp:archived_convs'),
+        AsyncStorage.getItem('@gameapp:favorite_convs'),
+        AsyncStorage.getItem('@gameapp:locked_convs'),
+      ]);
+      if (savedArchived) setArchivedIds(JSON.parse(savedArchived));
+      if (savedFavs) setFavoriteIds(JSON.parse(savedFavs));
+      if (savedLocked) setLockedIds(JSON.parse(savedLocked));
+    } catch (err) {
+      console.warn('Failed to load local chat state:', err);
+    }
   }, []);
+
+  useEffect(() => {
+    loadLocalChatState();
+  }, [loadLocalChatState]);
 
   // Save archived IDs
   const toggleArchive = async (convId: string) => {
@@ -139,6 +149,66 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     setFavoriteIds(next);
     await AsyncStorage.setItem('@gameapp:favorite_convs', JSON.stringify(next)).catch(() => null);
   };
+
+  // Save locked IDs
+  const toggleLock = async (convId: string) => {
+    const next = lockedIds.includes(convId)
+      ? lockedIds.filter((id) => id !== convId)
+      : [...lockedIds, convId];
+    setLockedIds(next);
+    await AsyncStorage.setItem('@gameapp:locked_convs', JSON.stringify(next)).catch(() => null);
+  };
+
+  // Handle hardware Back button across modals, search, tabs, and screen exit
+  useEffect(() => {
+    const handleBack = () => {
+      if (isActionModalVisible) {
+        setIsActionModalVisible(false);
+        return true;
+      }
+      if (isNewCallModalVisible) {
+        setIsNewCallModalVisible(false);
+        return true;
+      }
+      if (isCreateGroupModalVisible) {
+        setIsCreateGroupModalVisible(false);
+        return true;
+      }
+      if (showLockedChats) {
+        setShowLockedChats(false);
+        return true;
+      }
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        return true;
+      }
+      if (filterChip !== 'ALL') {
+        setFilterChip('ALL');
+        return true;
+      }
+      if (activeTab === 'calls') {
+        setActiveTab('chats');
+        return true;
+      }
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [
+    isActionModalVisible,
+    isNewCallModalVisible,
+    isCreateGroupModalVisible,
+    showLockedChats,
+    searchQuery,
+    filterChip,
+    activeTab,
+    onBack,
+  ]);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -332,6 +402,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   const onRefresh = () => {
     setIsRefreshing(true);
     loadConversations();
+    loadLocalChatState();
   };
 
   // Filter conversations by search and filter chip
@@ -358,8 +429,15 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
       return result.filter((c) => archivedIds.includes(c.id));
     }
 
+    if (filterChip === 'LOCKED') {
+      return result.filter((c) => lockedIds.includes(c.id));
+    }
+
     // Default: exclude archived unless specifically on Archived chip
     result = result.filter((c) => !archivedIds.includes(c.id));
+
+    // Exclude locked conversations unless specifically on Locked chip
+    result = result.filter((c) => !lockedIds.includes(c.id));
 
     if (filterChip === 'UNREAD') {
       result = result.filter((c) => c.unreadCount > 0);
@@ -370,7 +448,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     }
 
     return result;
-  }, [conversations, searchQuery, filterChip, archivedIds, favoriteIds]);
+  }, [conversations, searchQuery, filterChip, archivedIds, favoriteIds, lockedIds, showLockedChats]);
 
   const onlineFriends = useMemo(() => {
     const map = new Map<string, { id: string; name: string; username: string; avatarUrl: string | null }>();
@@ -394,21 +472,48 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     const isOwnLastMessage = item.lastMessage?.senderId === authUser?.id;
     const isUnread = item.unreadCount > 0;
     const isFavorited = favoriteIds.includes(item.id);
+    const isLocked = lockedIds.includes(item.id);
 
     const displayName = isGroup
       ? item.group?.title || 'Group Chat'
       : item.peer?.displayName || 'Player';
 
+    const msgType = item.lastMessage?.type;
+    const msgMeta = (item.lastMessage as any)?.metadata;
     let previewContent = item.lastMessage ? item.lastMessage.content : 'No messages yet';
-    if (item.lastMessage?.type === 'GAME_INVITE') {
-      previewContent = 'Challenge: Game Invitation';
-    } else if (item.lastMessage?.type === 'GAME_RESULT') {
+    let previewIconName: string | null = null;
+    let previewIconColor: string = theme.mode === 'dark' ? '#8E8E93' : theme.colors.textSecondary;
+
+    if (msgType === 'IMAGE') {
+      if (msgMeta?.isViewOnce) {
+        previewContent = 'One-time photo';
+        previewIconName = 'viewOnce';
+        previewIconColor = theme.colors.primary;
+      } else {
+        previewContent = 'Photo';
+        previewIconName = 'camera';
+      }
+    } else if (msgType === 'VOICE' || msgType === 'AUDIO') {
+      previewContent = 'Voice message';
+      previewIconName = 'mic';
+    } else if (msgType === 'FILE') {
+      previewContent = 'File';
+      previewIconName = 'file';
+    } else if (msgType === 'GAME_INVITE') {
+      previewContent = 'Challenge: Game Invite';
+      previewIconName = 'gamepad';
+      previewIconColor = theme.colors.primary;
+    } else if (msgType === 'GAME_RESULT') {
       previewContent = 'Match Result Summary';
-    } else if (item.lastMessage?.type === 'SYSTEM') {
-      previewContent = item.lastMessage.content;
+      previewIconName = 'trophy';
+    } else if (item.lastMessage?.content?.toLowerCase().includes('disappearing')) {
+      previewIconName = 'clock';
+      previewIconColor = theme.mode === 'dark' ? '#8E8E93' : theme.colors.textMuted;
+    } else if (msgType === 'SYSTEM') {
+      previewContent = item.lastMessage?.content || '';
     } else if (isGroup && item.lastMessage) {
       const senderPrefix = isOwnLastMessage ? 'You: ' : `${item.lastMessage.senderName || 'Member'}: `;
-      previewContent = `${senderPrefix}${item.lastMessage.content}`;
+      previewContent = `${senderPrefix}${previewContent}`;
     }
 
     return (
@@ -443,153 +548,175 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
         style={[
           styles.conversationCard,
           {
-            backgroundColor: theme.colors.surfaceElevated,
-            borderColor: isUnread ? theme.colors.primary + '50' : theme.colors.border,
+            backgroundColor: theme.mode === 'dark' ? '#121212' : theme.colors.surface,
+            borderColor: theme.mode === 'dark' ? '#1C1C1C' : theme.colors.border,
           },
         ]}
         activeOpacity={0.7}
       >
         {/* Avatar */}
-        {isGroup ? (
-          item.group?.avatarUrl ? (
-            <Avatar
-              displayName={item.group.title}
-              avatarUrl={item.group.avatarUrl}
-              size="md"
-            />
+        <View style={styles.avatarWrap}>
+          {isGroup ? (
+            item.group?.avatarUrl ? (
+              <Avatar
+                displayName={item.group.title}
+                avatarUrl={item.group.avatarUrl}
+                size="md"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.groupAvatarCircle,
+                  { backgroundColor: theme.colors.primary + '20' },
+                ]}
+              >
+                <Icon name="users" size={22} color={theme.colors.primary} />
+              </View>
+            )
           ) : (
-            <View
-              style={[
-                styles.groupAvatarCircle,
-                { backgroundColor: theme.colors.primary + '20' },
-              ]}
-            >
-              <Icon name="users" size={24} color={theme.colors.primary} />
-            </View>
-          )
-        ) : (
-          <Avatar
-            displayName={item.peer!.displayName}
-            avatarUrl={item.peer!.avatarUrl}
-            size="md"
-            status={item.peer!.isOnline ? 'online' : 'offline'}
-          />
-        )}
+            <Avatar
+              displayName={item.peer!.displayName}
+              avatarUrl={item.peer!.avatarUrl}
+              size="md"
+              status={item.peer!.isOnline ? 'online' : 'offline'}
+            />
+          )}
+        </View>
 
         {/* Conversation Metadata */}
         <View style={styles.cardContent}>
-          <View style={styles.topRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-              <Text
-                style={[
-                  styles.displayNameText,
-                  { color: theme.colors.textPrimary },
-                  isUnread && styles.unreadTextBold,
-                ]}
-                numberOfLines={1}
-              >
-                {displayName}
-              </Text>
-              {isGroup && (
-                <View style={[styles.groupTagPill, { backgroundColor: theme.colors.primary + '18' }]}>
-                  <Icon name="users" size={10} color={theme.colors.primary} />
-                  <Text style={[styles.groupTagText, { color: theme.colors.primary }]}>
-                    {item.group?.memberCount || 0}
-                  </Text>
-                </View>
-              )}
-              {isFavorited && (
-                <Icon name="star" size={13} color="#F59E0B" />
-              )}
-            </View>
-            <Text style={[styles.timeAgoText, { color: theme.colors.textMuted }]}>
-              {formatTimeAgo(item.lastMessage?.createdAt || item.updatedAt)}
+          <View style={styles.cardTitleRow}>
+            <Text
+              style={[
+                styles.displayNameText,
+                { color: theme.colors.textPrimary },
+              ]}
+              numberOfLines={1}
+            >
+              {displayName}
             </Text>
+            {isGroup && (
+              <View style={[styles.groupTagPill, { backgroundColor: theme.colors.primary + '18' }]}>
+                <Icon name="users" size={10} color={theme.colors.primary} />
+                <Text style={[styles.groupTagText, { color: theme.colors.primary }]}>
+                  {item.group?.memberCount || 0}
+                </Text>
+              </View>
+            )}
+            {isLocked && (
+              <Icon name="lock" size={12} color={theme.colors.warning} />
+            )}
+            {isFavorited && (
+              <Icon name="star" size={12} color="#F59E0B" />
+            )}
           </View>
 
-          <View style={styles.bottomRow}>
-            <View style={styles.previewContainer}>
-              {isOwnLastMessage && item.lastMessage && item.lastMessage.type !== 'SYSTEM' && (
-                <View style={styles.deliveryStatusTick}>
-                  <MessageReceiptTicks status={item.lastMessage.status} size={14} />
-                </View>
-              )}
-              {item.lastMessage?.type === 'GAME_INVITE' && (
-                <View style={styles.inviteIconBadge}>
-                  <GameLogo
-                    gameType={(item.lastMessage as any)?.metadata?.gameType}
-                    size={16}
-                    borderRadius={4}
-                    fallbackIcon="gamepad"
-                  />
-                </View>
-              )}
-              <Text
-                style={[
-                  styles.previewText,
-                  {
-                    color: isUnread ? theme.colors.textPrimary : theme.colors.textSecondary,
-                    fontStyle: item.lastMessage?.type === 'SYSTEM' ? 'italic' : 'normal',
-                  },
-                  isUnread && styles.unreadTextBold,
-                ]}
-                numberOfLines={1}
-              >
-                {previewContent}
-              </Text>
-            </View>
+          <View style={styles.previewContainer}>
+            {isOwnLastMessage && item.lastMessage && item.lastMessage.type !== 'SYSTEM' && (
+              <View style={styles.deliveryStatusTick}>
+                <MessageReceiptTicks status={item.lastMessage.status} size={14} />
+              </View>
+            )}
+            {previewIconName && (
+              <View style={{ marginRight: 4, alignSelf: 'center' }}>
+                <Icon name={previewIconName as any} size={13} color={previewIconColor} />
+              </View>
+            )}
+            {item.lastMessage?.type === 'GAME_INVITE' && (
+              <View style={styles.inviteIconBadge}>
+                <GameLogo
+                  gameType={(item.lastMessage as any)?.metadata?.gameType}
+                  size={15}
+                  borderRadius={4}
+                  fallbackIcon="gamepad"
+                />
+              </View>
+            )}
+            <Text
+              style={[
+                styles.previewText,
+                {
+                  color: isUnread ? (theme.mode === 'dark' ? '#FFFFFF' : theme.colors.textPrimary) : (theme.mode === 'dark' ? '#94A3B8' : theme.colors.textSecondary),
+                  fontStyle: item.lastMessage?.type === 'SYSTEM' ? 'italic' : 'normal',
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {previewContent}
+            </Text>
+          </View>
+        </View>
 
+        {/* Right Stack: Time, Unread Badge & Call Actions */}
+        <View style={styles.cardRightCol}>
+          <Text style={[styles.timeAgoText, { color: theme.colors.textMuted }]}>
+            {formatTimeAgo(item.lastMessage?.createdAt || item.updatedAt)}
+          </Text>
+
+          <View style={styles.cardRightBottomRow}>
             {/* Unread Pill Badge */}
             {isUnread && (
-              <View style={[styles.unreadBadge, { backgroundColor: theme.colors.primary }]}>
-                <Text style={[styles.unreadBadgeText, { color: theme.colors.textOnPrimary }]}>
+              <View style={[styles.unreadBadge, { backgroundColor: theme.colors.accentCoral || theme.colors.primary }]}>
+                <Text style={styles.unreadBadgeText}>
                   {item.unreadCount > 99 ? '99+' : item.unreadCount}
                 </Text>
               </View>
             )}
+
+            {/* Quick Call Action Shortcuts (only for 1-on-1 chats) */}
+            {!isGroup && item.peer && (
+              <View style={styles.cardCallActions}>
+                <TouchableOpacity
+                  onPress={() =>
+                    startCall(
+                      item.peer!.id,
+                      item.peer!.displayName,
+                      item.peer!.username,
+                      item.peer!.avatarUrl,
+                      'audio'
+                    )
+                  }
+                  style={[
+                    styles.cardCallBtn,
+                    {
+                      backgroundColor: theme.colors.primary + '15',
+                      borderColor: theme.colors.primary + '30',
+                    },
+                  ]}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Audio Call"
+                >
+                  <Icon name="audioCall" size={15} color={theme.colors.primary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() =>
+                    startCall(
+                      item.peer!.id,
+                      item.peer!.displayName,
+                      item.peer!.username,
+                      item.peer!.avatarUrl,
+                      'video'
+                    )
+                  }
+                  style={[
+                    styles.cardCallBtn,
+                    {
+                      backgroundColor: theme.colors.primary + '15',
+                      borderColor: theme.colors.primary + '30',
+                    },
+                  ]}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Video Call"
+                >
+                  <Icon name="videoCall" size={15} color={theme.colors.primary} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
-
-        {/* Quick Call Action Shortcuts (only for 1-on-1 chats) */}
-        {!isGroup && item.peer && (
-          <View style={styles.cardCallActions}>
-            <TouchableOpacity
-              onPress={() =>
-                startCall(
-                  item.peer!.id,
-                  item.peer!.displayName,
-                  item.peer!.username,
-                  item.peer!.avatarUrl,
-                  'audio'
-                )
-              }
-              style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              activeOpacity={0.7}
-              accessibilityLabel="Audio Call"
-            >
-              <Icon name="audioCall" size={16} color={theme.colors.primary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() =>
-                startCall(
-                  item.peer!.id,
-                  item.peer!.displayName,
-                  item.peer!.username,
-                  item.peer!.avatarUrl,
-                  'video'
-                )
-              }
-              style={[styles.cardCallBtn, { backgroundColor: theme.colors.surface }]}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              activeOpacity={0.7}
-              accessibilityLabel="Video Call"
-            >
-              <Icon name="videoCall" size={16} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
       </TouchableOpacity>
     );
   };
@@ -603,8 +730,8 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
         style={[
           styles.callCard,
           {
-            backgroundColor: theme.colors.surfaceElevated,
-            borderColor: theme.colors.border,
+            backgroundColor: theme.mode === 'dark' ? '#121212' : theme.colors.surfaceElevated,
+            borderColor: theme.mode === 'dark' ? '#1E1E1E' : theme.colors.border,
           },
         ]}
       >
@@ -651,12 +778,18 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               item.callType
             )
           }
-          style={[styles.callTriggerBtn, { backgroundColor: theme.colors.surface }]}
+          style={[
+            styles.callTriggerBtn,
+            {
+              backgroundColor: theme.colors.primary + '15',
+              borderColor: theme.colors.primary + '30',
+            },
+          ]}
           activeOpacity={0.7}
         >
           <Icon
             name={item.callType === 'video' ? 'videoCall' : 'audioCall'}
-            size={18}
+            size={16}
             color={theme.colors.primary}
           />
         </TouchableOpacity>
@@ -668,64 +801,84 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
 
-      {/* Screen Header */}
-      <View style={[styles.headerBar, { borderBottomColor: theme.colors.border }]}>
-        {onBack ? (
+      {/* Compact Top Header Bar */}
+      <View style={[styles.headerBar, { borderBottomColor: theme.mode === 'dark' ? '#141414' : theme.colors.border }]}>
+        <View style={styles.headerLeftCol}>
+          {onBack && (
+            <TouchableOpacity
+              onPress={onBack}
+              style={[
+                styles.headerIconBtn,
+                { backgroundColor: theme.mode === 'dark' ? '#141414' : theme.colors.surfaceElevated },
+              ]}
+              activeOpacity={0.7}
+              accessibilityLabel="Back"
+            >
+              <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerBrandRow}>
+            <Image
+              source={require('../../assets/images/chat_icon_logo.webp')}
+              style={styles.headerBrandLogo}
+              resizeMode="contain"
+            />
+            <Text style={[styles.headerBrandText, { color: theme.colors.textPrimary }]}>Chats</Text>
+          </View>
+        </View>
+
+        <View style={styles.headerRightActions}>
           <TouchableOpacity
-            onPress={onBack}
-            style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+            onPress={() => searchInputRef.current?.focus()}
+            style={[
+              styles.headerIconBtn,
+              { backgroundColor: theme.mode === 'dark' ? '#141414' : theme.colors.surfaceElevated },
+            ]}
             activeOpacity={0.7}
-            accessibilityLabel="Back"
+            accessibilityLabel="Search conversations"
           >
-            <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
+            <Icon name="search" size={18} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-        ) : (
-          <View style={styles.headerSpacer} />
-        )}
 
-        <Text style={[styles.headerTitle, { color: theme.colors.textPrimary }]}>
-          Social & Calls
-        </Text>
-
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <TouchableOpacity
             onPress={() => setIsCreateGroupModalVisible(true)}
-            style={[styles.newGroupBtn, { backgroundColor: theme.colors.surfaceElevated, borderColor: theme.colors.border }]}
+            style={[
+              styles.newGroupBtn,
+              {
+                backgroundColor: theme.colors.primary + '15',
+                borderColor: theme.colors.primary + '30',
+              },
+            ]}
             activeOpacity={0.75}
             accessibilityLabel="Create New Group"
           >
-            <Icon name="users" size={15} color={theme.colors.primary} />
+            <Icon name="users" size={14} color={theme.colors.primary} />
             <Text style={[styles.newGroupBtnText, { color: theme.colors.primary }]}>
               New Group
             </Text>
           </TouchableOpacity>
 
-          {onNavigateToFriends ? (
+          {onNavigateToFriends && (
             <TouchableOpacity
               onPress={onNavigateToFriends}
-              style={[styles.headerIconBtn, { backgroundColor: theme.colors.surfaceElevated }]}
+              style={[
+                styles.headerIconBtn,
+                { backgroundColor: theme.mode === 'dark' ? '#141414' : theme.colors.surfaceElevated },
+              ]}
               activeOpacity={0.7}
               accessibilityLabel="Friends list"
             >
-              <Icon name="friendsAdd" size={24} />
+              <Icon name="friendsAdd" size={22} color={theme.colors.textPrimary} />
             </TouchableOpacity>
-          ) : (
-            <View style={styles.headerSpacer} />
           )}
         </View>
       </View>
 
       {/* WhatsApp-Style Top Tab Switcher: [ Chats ]  [ Calls ] */}
-      <View style={[styles.tabSwitcher, { borderBottomColor: theme.colors.divider }]}>
+      <View style={[styles.tabSwitcher, { borderBottomColor: theme.mode === 'dark' ? '#141414' : theme.colors.divider }]}>
         <TouchableOpacity
           onPress={() => setActiveTab('chats')}
-          style={[
-            styles.tabItem,
-            activeTab === 'chats' && [
-              styles.activeTabItem,
-              { borderBottomColor: theme.colors.primary },
-            ],
-          ]}
+          style={styles.tabItem}
           activeOpacity={0.8}
         >
           <Text
@@ -733,23 +886,20 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               styles.tabItemText,
               {
                 color: activeTab === 'chats' ? theme.colors.primary : theme.colors.textMuted,
-                fontWeight: activeTab === 'chats' ? '700' : '500',
+                fontWeight: activeTab === 'chats' ? '700' : '600',
               },
             ]}
           >
             Chats
           </Text>
+          {activeTab === 'chats' && (
+            <View style={[styles.tabActiveBar, { backgroundColor: theme.colors.primary }]} />
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           onPress={() => setActiveTab('calls')}
-          style={[
-            styles.tabItem,
-            activeTab === 'calls' && [
-              styles.activeTabItem,
-              { borderBottomColor: theme.colors.primary },
-            ],
-          ]}
+          style={styles.tabItem}
           activeOpacity={0.8}
         >
           <Text
@@ -757,50 +907,54 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               styles.tabItemText,
               {
                 color: activeTab === 'calls' ? theme.colors.primary : theme.colors.textMuted,
-                fontWeight: activeTab === 'calls' ? '700' : '500',
+                fontWeight: activeTab === 'calls' ? '700' : '600',
               },
             ]}
           >
             Calls
           </Text>
+          {activeTab === 'calls' && (
+            <View style={[styles.tabActiveBar, { backgroundColor: theme.colors.primary }]} />
+          )}
         </TouchableOpacity>
       </View>
 
       {/* CHATS TAB VIEW */}
       {activeTab === 'chats' && (
         <>
-          {/* Search Input Filter */}
+          {/* Rounded Pill Search Input */}
           <View style={styles.searchWrapper}>
             <View
               style={[
                 styles.searchBar,
                 {
-                  backgroundColor: theme.colors.surfaceElevated,
-                  borderColor: theme.colors.border,
+                  backgroundColor: theme.mode === 'dark' ? '#141414' : theme.colors.surfaceElevated,
+                  borderColor: theme.mode === 'dark' ? '#202020' : theme.colors.border,
                 },
               ]}
             >
-              <Icon name="search" size={18} color={theme.colors.textMuted} />
+              <Icon name="search" size={17} color={theme.mode === 'dark' ? '#8E8E93' : theme.colors.textMuted} />
               <TextInput
+                ref={searchInputRef}
                 style={[styles.searchInput, { color: theme.colors.textPrimary }]}
                 placeholder="Search conversations..."
-                placeholderTextColor={theme.colors.textMuted}
+                placeholderTextColor={theme.mode === 'dark' ? '#8E8E93' : theme.colors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
               />
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
-                  <Icon name="close" size={16} color={theme.colors.textMuted} />
+                <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Icon name="close" size={15} color={theme.colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* WhatsApp-Style Filter Chips (All, Unread, Favorites, Groups, Archived) */}
+          {/* Filter Chips (All, Unread, Favorites, Groups, Locked, Archived) without Icons */}
           <View style={styles.filterChipsRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
-              {(['ALL', 'UNREAD', 'FAVORITES', 'GROUPS', 'ARCHIVED'] as ChatFilterType[]).map((chip) => {
+              {(['ALL', 'UNREAD', 'FAVORITES', 'GROUPS', 'LOCKED', 'ARCHIVED'] as ChatFilterType[]).map((chip) => {
                 const isSelected = filterChip === chip;
                 const label =
                   chip === 'ALL'
@@ -811,7 +965,21 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                     ? 'Favorites'
                     : chip === 'GROUPS'
                     ? 'Groups'
+                    : chip === 'LOCKED'
+                    ? `Locked${lockedIds.length > 0 ? ` (${lockedIds.length})` : ''}`
                     : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ''}`;
+
+                const chipBg = isSelected
+                  ? theme.colors.primary
+                  : theme.colors.surfaceElevated;
+
+                const chipBorder = isSelected
+                  ? theme.colors.primary
+                  : theme.colors.border;
+
+                const chipTextColor = isSelected
+                  ? theme.colors.textOnPrimary
+                  : theme.colors.textSecondary;
 
                 return (
                   <TouchableOpacity
@@ -820,8 +988,8 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                     style={[
                       styles.filterChipBtn,
                       {
-                        backgroundColor: isSelected ? theme.colors.primary : theme.colors.surfaceElevated,
-                        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+                        backgroundColor: chipBg,
+                        borderColor: chipBorder,
                       },
                     ]}
                     activeOpacity={0.8}
@@ -830,7 +998,7 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                       style={[
                         styles.filterChipText,
                         {
-                          color: isSelected ? theme.colors.textOnPrimary : theme.colors.textSecondary,
+                          color: chipTextColor,
                           fontWeight: isSelected ? '700' : '500',
                         },
                       ]}
@@ -929,11 +1097,13 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                 ]}
               >
                 <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surface }]}>
-                  <Icon name="chat" size={32} color={theme.colors.primary} />
+                  <Icon name={filterChip === 'LOCKED' ? 'lock' : 'chat'} size={32} color={theme.colors.primary} />
                 </View>
                 <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
                   {searchQuery
                     ? 'No Matches Found'
+                    : filterChip === 'LOCKED'
+                    ? 'No Locked Chats'
                     : filterChip === 'ARCHIVED'
                     ? 'No Archived Chats'
                     : filterChip === 'UNREAD'
@@ -947,6 +1117,8 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
                 <Text style={[styles.emptySubtitle, { color: theme.colors.textSecondary }]}>
                   {searchQuery
                     ? `No conversations match "${searchQuery}"`
+                    : filterChip === 'LOCKED'
+                    ? 'Lock any conversation from its chat menu or long-press options to keep it private.'
                     : filterChip === 'ARCHIVED'
                     ? 'Long-press any conversation card to archive it.'
                     : filterChip === 'FAVORITES'
@@ -1116,6 +1288,25 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
               </Text>
             </TouchableOpacity>
 
+            {/* Lock / Unlock */}
+            <TouchableOpacity
+              style={[styles.actionSheetItem, { borderBottomColor: theme.colors.divider }]}
+              onPress={() => {
+                if (selectedConversation) {
+                  toggleLock(selectedConversation.id);
+                  setIsActionModalVisible(false);
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Icon name="lock" size={18} color={theme.colors.warning} />
+              <Text style={[styles.actionSheetText, { color: theme.colors.textPrimary }]}>
+                {selectedConversation && lockedIds.includes(selectedConversation.id)
+                  ? 'Unlock Chat'
+                  : 'Lock Chat'}
+              </Text>
+            </TouchableOpacity>
+
             {/* Delete Chat */}
             <TouchableOpacity
               style={styles.actionSheetItem}
@@ -1260,72 +1451,76 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
+  },
+  headerLeftCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBrandLogo: {
+    width: 28,
+    height: 28,
+  },
+  headerBrandText: {
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   headerIconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     justifyContent: 'center',
     alignItems: 'center',
   },
   headerSpacer: {
-    width: 36,
+    width: 38,
   },
   newGroupBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 14,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
   },
   newGroupBtnText: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '700',
-  },
-  groupAvatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupTagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  groupTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
   },
   tabSwitcher: {
     flexDirection: 'row',
     borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    gap: 28,
   },
   tabItem: {
-    flex: 1,
-    paddingVertical: 11,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    borderBottomWidth: 2.5,
-    borderBottomColor: 'transparent',
+    position: 'relative',
   },
-  activeTabItem: {
-    borderBottomWidth: 2.5,
+  tabActiveBar: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 3,
+    borderRadius: 1.5,
   },
   tabItemText: {
-    fontSize: 14,
+    fontSize: 15,
   },
   searchWrapper: {
     paddingHorizontal: 16,
@@ -1335,15 +1530,15 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 42,
-    borderRadius: 12,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 14,
+    gap: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 13.5,
     paddingVertical: 0,
   },
   filterChipsRow: {
@@ -1354,13 +1549,16 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterChipBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 12.5,
+    letterSpacing: 0.1,
   },
   archiveBanner: {
     flexDirection: 'row',
@@ -1396,46 +1594,69 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 16,
     paddingTop: 6,
-    paddingBottom: 120,
-    gap: 10,
+    paddingBottom: 110,
+    gap: 8,
   },
   conversationCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 18,
+    padding: 12,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 12,
+  },
+  avatarWrap: {
+    position: 'relative',
+  },
+  groupAvatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cardContent: {
     flex: 1,
     gap: 4,
   },
-  topRow: {
+  cardTitleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 6,
   },
   displayNameText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  unreadTextBold: {
+    fontSize: 15.5,
     fontWeight: '700',
   },
-  timeAgoText: {
-    fontSize: 11,
-  },
-  bottomRow: {
+  groupTagPill: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  groupTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  cardRightCol: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  timeAgoText: {
+    fontSize: 11.5,
+    fontWeight: '500',
+  },
+  cardRightBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   previewContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: 8,
     gap: 4,
   },
   deliveryStatusTick: {
@@ -1449,27 +1670,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   unreadBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
   },
   unreadBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
   cardCallActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginLeft: 4,
   },
   cardCallBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1564,8 +1786,8 @@ const styles = StyleSheet.create({
   callCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 18,
+    padding: 12,
+    borderRadius: 16,
     borderWidth: 1,
     gap: 12,
   },
@@ -1589,6 +1811,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1610,7 +1833,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.85)',
     justifyContent: 'flex-end',
   },
   actionSheetContent: {

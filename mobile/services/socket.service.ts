@@ -518,6 +518,15 @@ export class MobileSocketService {
       });
     });
   }
+
+  // Real-time In-App Notifications
+  static onNotificationReceived(callback: (notification: any) => void): () => void {
+    return registerListener('notification:new', callback);
+  }
+
+  static onUnreadNotificationCount(callback: (data: { unreadCount: number }) => void): () => void {
+    return registerListener('notifications:unread_count', callback);
+  }
 }
 
 export const getSocket = (): Socket | null => MobileSocketService.getSocket();

@@ -90,11 +90,11 @@ export class EmailService {
     const fromAddress = resendApiKey
       ? (process.env.EMAIL_FROM && !process.env.EMAIL_FROM.includes('@gmail.com')
           ? process.env.EMAIL_FROM
-          : 'Social Gaming Arena <onboarding@resend.dev>')
+          : 'Otter <onboarding@resend.dev>')
       : process.env.EMAIL_FROM ||
         (process.env.GMAIL_USER
-          ? `"Social Gaming Arena" <${process.env.GMAIL_USER}>`
-          : '"Social Gaming Arena" <onboarding@resend.dev>');
+          ? `"Otter" <${process.env.GMAIL_USER}>`
+          : '"Otter" <onboarding@resend.dev>');
 
     // Build HTML template
     const htmlContent = `
@@ -124,15 +124,15 @@ export class EmailService {
   <div class="card">
     <div class="header">
       <div class="logo-container">
-        <img src="cid:applogo" class="logo-img" alt="Social Gaming Arena" />
+        <img src="cid:applogo" class="logo-img" alt="Otter" />
       </div>
       <h1 class="title">Password Reset Request</h1>
-      <p class="subtitle">Social Gaming Arena Security</p>
+      <p class="subtitle">Otter Security</p>
     </div>
 
     <p class="instructions">
       Hey <strong>${username}</strong>,<br>
-      We received a request to reset the password for your Social Gaming Arena account. Enter the verification code below in your app to continue:
+      We received a request to reset the password for your Otter account. Enter the verification code below in your app to continue:
     </p>
 
     <div class="code-container">
@@ -151,7 +151,7 @@ export class EmailService {
     </p>
 
     <div class="footer">
-      Social Gaming Arena • Real-time Multiplayer Gaming & Social Network
+      Otter • Real-time Multiplayer Gaming & Social Network
     </div>
   </div>
 </body>
@@ -170,7 +170,7 @@ export class EmailService {
           body: JSON.stringify({
             from: fromAddress,
             to: [toEmail],
-            subject: `Your Verification Code: ${code} - Social Gaming Arena`,
+            subject: `Your Verification Code: ${code} - Otter`,
             html: htmlContent,
           }),
         });
@@ -228,7 +228,7 @@ export class EmailService {
       const sendPromise = transporter.sendMail({
         from: fromAddress,
         to: toEmail,
-        subject: `Your Verification Code: ${code} - Social Gaming Arena`,
+        subject: `Your Verification Code: ${code} - Otter`,
         text: `Hey ${username},\n\nYour password reset code is: ${code}\n\nThis code expires in ${expiresInMinutes} minutes.\n\nIf you did not request a password reset, please ignore this email.`,
         html: htmlContent,
         attachments,

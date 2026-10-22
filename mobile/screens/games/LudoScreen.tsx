@@ -32,7 +32,7 @@ import { GameRulesModal } from '../../components';
 import { InvitePlayersModal } from '../../components/organisms/InvitePlayersModal';
 import { useAuth } from '../../features/auth/AuthContext';
 import { MobileSocketService } from '../../services/socket.service';
-import { RoomDetails } from '../../services/room.service';
+import { RoomService, RoomDetails } from '../../services/room.service';
 import { ProfileService, UserProfile } from '../../services/profile.service';
 import { SoundService } from '../../services/sound.service';
 import {
@@ -209,6 +209,14 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const [turnExpiresAt, setTurnExpiresAt] = useState<number>(0);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(20);
   const [isMatchOver, setIsMatchOver] = useState<boolean>(false);
+  const [matchOverDetails, setMatchOverDetails] = useState<{
+    winnerId?: string | null;
+    winnerName?: string | null;
+    winnerAvatarUrl?: string | null;
+    reason?: string;
+    abandonedByUserId?: string;
+    abandonedByUsername?: string;
+  } | null>(null);
 
   // UI & Animation State
   const [isRulesModalVisible, setIsRulesModalVisible] = useState<boolean>(false);
@@ -441,6 +449,14 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     const unsubOver = MobileSocketService.onGameOver((payload) => {
       if (payload.roomCode === roomCode) {
         setIsMatchOver(true);
+        setMatchOverDetails({
+          winnerId: payload.winnerId || null,
+          winnerName: payload.winnerName || null,
+          winnerAvatarUrl: payload.winnerAvatarUrl || null,
+          reason: payload.reason || 'WIN',
+          abandonedByUserId: payload.abandonedByUserId,
+          abandonedByUsername: payload.abandonedByUsername,
+        });
         if (payload.scores) setScores(payload.scores);
         if (payload.rankings) setRankings(payload.rankings);
         setIsRematchModalVisible(true);
@@ -463,6 +479,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     const unsubRematchStarted = MobileSocketService.onRematchStarted((payload) => {
       if (payload.roomCode === roomCode) {
         setIsMatchOver(false);
+        setMatchOverDetails(null);
         setIsRematchModalVisible(false);
         setRematchRequestedByMe(false);
         setRematchOfferedByPeer(false);
@@ -607,12 +624,17 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         setPlayerProfileStats(profile);
       } else {
         // AI Bot fallback stats
+        const botDiff =
+          p.userId === 'BOT_PIXEL' ? ' (Easy)' :
+          p.userId === 'BOT_ACE' ? ' (Hard)' :
+          p.userId === 'BOT_ATLAS' ? ' (Expert)' : ' (Medium)';
+        const botName = `Otter${botDiff}`;
         setPlayerProfileStats({
           id: p.userId,
-          username: p.username,
-          displayName: p.username,
-          bio: 'Autonomous Game AI Tactician with real-time heuristic move planning.',
-          avatarUrl: null,
+          username: botName,
+          displayName: botName,
+          bio: 'Official in-game opponent with real-time heuristic move planning.',
+          avatarUrl: 'otter_mascot',
           isOnline: true,
           lastSeen: new Date().toISOString(),
           createdAt: new Date().toISOString(),
@@ -841,11 +863,74 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const bluePlayer = getPlayerForCorner('BLUE');
   const yellowPlayer = getPlayerForCorner('YELLOW');
 
+  const [syncedRoom, setSyncedRoom] = useState<RoomDetails | null>(roomDetails || null);
+
+  useEffect(() => {
+    if (!syncedRoom) {
+      RoomService.getRoom(roomCode)
+        .then((r: RoomDetails) => setSyncedRoom(r))
+        .catch(() => {});
+    }
+    const unsubRoom = MobileSocketService.onRoomState((updated: RoomDetails) => {
+      setSyncedRoom(updated);
+    });
+    return () => {
+      unsubRoom();
+    };
+  }, [roomCode]);
+
   const getPlayerUserInfo = (userId: string) => {
-    const rp = roomDetails?.players?.find((p) => p.userId === userId);
+    const isBot = userId?.startsWith('BOT_') || userId?.includes('BOT');
+    const getBotDiff = (uid?: string) => {
+      if (uid === 'BOT_PIXEL') return ' (Easy)';
+      if (uid === 'BOT_ACE') return ' (Hard)';
+      if (uid === 'BOT_ATLAS') return ' (Expert)';
+      return ' (Medium)';
+    };
+
+    const ludoP = players.find((p) => p.userId === userId);
+    const roomP = (syncedRoom || roomDetails)?.players?.find((p) => p.userId === userId);
+    const isMe = userId === user?.id;
+
+    if (isBot) {
+      const explicitName = ludoP?.displayName || roomP?.user?.displayName;
+      const finalName = explicitName && explicitName.startsWith('Otter') ? explicitName : `Otter${getBotDiff(userId)}`;
+      return {
+        displayName: finalName,
+        avatarUrl: 'otter_mascot',
+      };
+    }
+
+    let displayName =
+      ludoP?.displayName ||
+      roomP?.user?.displayName ||
+      (isMe ? user?.displayName || user?.username : '') ||
+      ludoP?.username ||
+      roomP?.user?.username ||
+      'Player';
+
+    if (
+      displayName.toLowerCase().includes('(ai)') ||
+      displayName.toLowerCase().includes('bot') ||
+      displayName.toLowerCase().includes('computer')
+    ) {
+      displayName = `Otter${getBotDiff(userId)}`;
+    }
+
+    const avatarUrl =
+      displayName.startsWith('Otter')
+        ? 'otter_mascot'
+        : ludoP?.avatarUrl !== undefined && ludoP?.avatarUrl !== null
+        ? ludoP.avatarUrl
+        : roomP?.user?.avatarUrl !== undefined && roomP?.user?.avatarUrl !== null
+        ? roomP.user.avatarUrl
+        : isMe
+        ? user?.avatarUrl || null
+        : null;
+
     return {
-      displayName: rp?.user?.displayName || rp?.user?.username || '',
-      avatarUrl: rp?.user?.avatarUrl || null,
+      displayName,
+      avatarUrl,
     };
   };
 
@@ -959,14 +1044,18 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     isRight = false
   ) => {
     const colorMeta = COLOR_MAP[cornerColor];
+    const isDark = theme.mode === 'dark';
+
     if (!player) {
       return (
         <View style={[styles.playerQuadrantCard, isRight && styles.playerQuadrantRight, { opacity: 0.28 }]}>
           <View style={[styles.avatarWrap, { width: 36, height: 36 }]}>
-            <View style={[styles.emptyAvatarRing, { borderColor: '#1F2937' }]} />
+            <View style={[styles.emptyAvatarRing, { borderColor: isDark ? '#1F2937' : theme.colors.border }]} />
           </View>
           <View style={[styles.playerMetaColumn, isRight && styles.playerMetaColumnRight]}>
-            <Text style={styles.waitingSlotText}>Inactive</Text>
+            <Text style={[styles.waitingSlotText, { color: isDark ? '#9CA3AF' : theme.colors.textMuted }]}>
+              Inactive
+            </Text>
           </View>
         </View>
       );
@@ -976,13 +1065,37 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
     const userInfo = getPlayerUserInfo(player.userId);
     const isMe = player.userId === user?.id;
 
+    const cardBg = isDark
+      ? isTurn
+        ? '#131A24'
+        : 'rgba(19, 26, 36, 0.7)'
+      : isTurn
+      ? theme.colors.cardTintMint || '#E6F4EA'
+      : theme.colors.surfaceElevated;
+
+    const cardBorder = isTurn
+      ? colorMeta.primary
+      : isDark
+      ? 'rgba(255,255,255,0.08)'
+      : theme.colors.border;
+
+    const textColor = isTurn
+      ? colorMeta.primary
+      : isDark
+      ? '#FFFFFF'
+      : theme.colors.textPrimary;
+
     return (
       <TouchableOpacity
         key={player.userId}
         style={[
           styles.playerQuadrantCard,
           isRight && styles.playerQuadrantRight,
-          isTurn && { borderColor: colorMeta.primary, borderWidth: 1.5, backgroundColor: '#131A24' },
+          {
+            backgroundColor: cardBg,
+            borderColor: cardBorder,
+            borderWidth: isTurn ? 1.8 : 1,
+          },
         ]}
         onPress={() => handleOpenPlayerStats(player)}
         activeOpacity={0.7}
@@ -1002,6 +1115,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             displayName={userInfo.displayName || player.username}
             avatarUrl={userInfo.avatarUrl}
             size="sm"
+            fallbackToOtter={true}
           />
           {isMe && (
             <View style={styles.youBadgeTag}>
@@ -1015,7 +1129,8 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
           <Text
             style={[
               styles.playerNameText,
-              isTurn && { color: colorMeta.primary, fontWeight: '800' },
+              { color: textColor },
+              isTurn && { fontWeight: '800' },
             ]}
             numberOfLines={1}
           >
@@ -1073,18 +1188,25 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
   const isUserWinner = winnerIds.length > 0 && winnerIds[0] === user?.id;
 
+  const isDark = theme.mode === 'dark';
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#080E13' }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#080E13" />
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#080E13' : theme.colors.background }]}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={isDark ? '#080E13' : theme.colors.background}
+      />
 
       {/* Top Header: < Classic - 4 Players [⚙️] */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : theme.colors.border }]}>
         <TouchableOpacity style={styles.headerIconButton} onPress={onLeave} activeOpacity={0.7} accessibilityLabel="Back">
-          <Icon name="chevronLeft" size={24} color="#FFFFFF" />
+          <Icon name="chevronLeft" size={24} color={isDark ? '#FFFFFF' : theme.colors.textPrimary} />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitleText}>Classic - {players.length || 4} Players</Text>
+          <Text style={[styles.headerTitleText, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
+            Classic - {players.length || 4} Players
+          </Text>
         </View>
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1103,7 +1225,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
             activeOpacity={0.7}
             accessibilityLabel="Rules & Settings"
           >
-            <Icon name="settings" size={20} color="#FFFFFF" />
+            <Icon name="settings" size={20} color={isDark ? '#FFFFFF' : theme.colors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1511,13 +1633,16 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                     displayName={selectedPlayerForStats.username}
                     avatarUrl={getPlayerUserInfo(selectedPlayerForStats.userId).avatarUrl}
                     size="lg"
+                    fallbackToOtter={true}
                   />
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={styles.statsHeroName}>
-                      {getPlayerUserInfo(selectedPlayerForStats.userId).displayName || selectedPlayerForStats.username}
+                      {selectedPlayerForStats.userId?.startsWith('BOT_')
+                        ? 'Otter'
+                        : getPlayerUserInfo(selectedPlayerForStats.userId).displayName || selectedPlayerForStats.username}
                     </Text>
                     <Text style={styles.statsHeroHandle}>
-                      @{selectedPlayerForStats.username}
+                      @{selectedPlayerForStats.userId?.startsWith('BOT_') ? 'Otter' : selectedPlayerForStats.username}
                     </Text>
                     <View
                       style={[
@@ -1686,8 +1811,25 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
             {/* Victory Headline */}
             <Text style={styles.victoryTitleText}>
-              {isUserWinner ? 'YOU WIN!' : 'MATCH OVER'}
+              {matchOverDetails?.reason === 'ABANDONED'
+                ? 'MATCH ABANDONED'
+                : isUserWinner
+                ? 'YOU WIN!'
+                : matchOverDetails?.winnerId?.startsWith('BOT_') ||
+                  matchOverDetails?.winnerName?.toLowerCase().includes('ai') ||
+                  matchOverDetails?.winnerName?.toLowerCase().includes('bot')
+                ? 'OTTER WINS!'
+                : matchOverDetails?.winnerName
+                ? `${matchOverDetails.winnerName.toUpperCase()} WINS!`
+                : 'MATCH OVER'}
             </Text>
+            {matchOverDetails?.reason === 'ABANDONED' && (
+              <Text style={{ color: '#F59E0B', fontSize: 13, marginTop: 4, textAlign: 'center' }}>
+                {matchOverDetails.abandonedByUsername
+                  ? `@${matchOverDetails.abandonedByUsername} abandoned the match.`
+                  : 'A player abandoned the match.'}
+              </Text>
+            )}
 
             {/* Ranked Player Cards */}
             <View style={styles.rankingsCardList}>
@@ -1740,6 +1882,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                         displayName={userInfo.displayName || p.username}
                         avatarUrl={userInfo.avatarUrl}
                         size="sm"
+                        fallbackToOtter={true}
                       />
                     </View>
 

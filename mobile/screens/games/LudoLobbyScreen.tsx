@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,10 +11,20 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  BackHandler,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Polyline, Rect, G } from 'react-native-svg';
 import { GameLogo } from '../../components/atoms/GameLogo';
+import { useTheme } from '../../theme';
+import { Icon } from '../../icons';
+import {
+  AiDifficulty,
+  AiDifficultySelector,
+  loadSavedAiDifficulty,
+  saveAiDifficultyPreference,
+} from '../../components/molecules/AiDifficultySelector';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,7 +36,7 @@ export interface LudoLobbyScreenProps {
   onPlayWithFriends?: (playerCount: LudoPlayerCount) => void;
   onCreateRoom: (playerCount: LudoPlayerCount) => void;
   onJoinRoom: (roomCode: string) => Promise<void> | void;
-  onPlaySolo?: (playerCount: LudoPlayerCount) => void;
+  onPlaySolo?: (playerCount: LudoPlayerCount, difficulty?: AiDifficulty) => void;
 }
 
 export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
@@ -36,10 +46,33 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
   onJoinRoom,
   onPlaySolo,
 }) => {
+  const { theme, effectiveMode } = useTheme();
+  const isDark = effectiveMode === 'dark';
+
   const [selectedPlayers, setSelectedPlayers] = useState<LudoPlayerCount>(4);
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [isAiSetupVisible, setIsAiSetupVisible] = useState(false);
+  const [aiDifficulty, setAiDifficulty] = useState<AiDifficulty>('MEDIUM');
+
+  useEffect(() => {
+    loadSavedAiDifficulty().then((diff) => {
+      setAiDifficulty(diff);
+    });
+  }, []);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isAiSetupVisible) {
+        setIsAiSetupVisible(false);
+        return true;
+      }
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack, isAiSetupVisible]);
 
   const handleJoin = async () => {
     const code = roomCodeInput.trim().toUpperCase();
@@ -365,27 +398,29 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
             ) : null}
           </View>
 
-          {/* 4. Play vs Computer (Solo Practice AI) */}
+          {/* 4. Play vs Otter (Solo Practice) */}
           {onPlaySolo ? (
             <TouchableOpacity
               style={[styles.actionCard, styles.darkActionCard]}
-              onPress={() => onPlaySolo(selectedPlayers)}
+              onPress={() => setIsAiSetupVisible(true)}
               activeOpacity={0.88}
             >
               <View style={styles.actionLeft}>
                 <View style={styles.darkIconWrapper}>
-                  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-                    <Rect x="4" y="4" width="16" height="16" rx="4" stroke="#FFFFFF" strokeWidth="2" />
-                    <Circle cx="9" cy="10" r="1.5" fill="#FFFFFF" />
-                    <Circle cx="15" cy="10" r="1.5" fill="#FFFFFF" />
-                    <Path d="M9 15H15" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-                    <Path d="M12 2V4" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
-                  </Svg>
+                  <Image
+                    source={require('../../assets/icon.png')}
+                    style={{ width: 24, height: 24, borderRadius: 12 }}
+                    resizeMode="cover"
+                  />
                 </View>
                 <View style={styles.actionTexts}>
-                  <Text style={styles.darkTitle}>Play vs Computer</Text>
+                  <Text style={styles.darkTitle}>Play vs AI Bots</Text>
                   <Text style={styles.darkSubtitle}>
-                    Practice solo against {selectedPlayers - 1} AI bot{selectedPlayers > 2 ? 's' : ''}
+                    {selectedPlayers === 2
+                      ? 'Practice solo vs Otter'
+                      : selectedPlayers === 3
+                      ? 'Practice vs Otter & Ollie'
+                      : 'Practice vs Otter, Ollie & Otto'}
                   </Text>
                 </View>
               </View>
@@ -402,6 +437,102 @@ export const LudoLobbyScreen: React.FC<LudoLobbyScreenProps> = ({
           ) : null}
         </View>
       </ScrollView>
+
+      {/* AI DIFFICULTY SELECTION MODAL */}
+      <Modal
+        visible={isAiSetupVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsAiSetupVisible(false)}
+      >
+        <View style={styles.aiModalBackdrop}>
+          <View
+            style={[
+              styles.aiModalCard,
+              {
+                backgroundColor: isDark ? theme.colors.surfaceElevated : '#FFFFFF',
+                borderColor: theme.colors.border,
+              },
+            ]}
+          >
+            {/* Modal Header */}
+            <View style={styles.aiModalHeader}>
+              <View style={styles.aiModalHeaderTitleCol}>
+                <Text
+                  style={[
+                    styles.aiModalTitle,
+                    { color: isDark ? theme.colors.textPrimary : '#0F172A' },
+                  ]}
+                >
+                  🦦 Play vs AI Bots
+                </Text>
+                <Text
+                  style={[
+                    styles.aiModalSubtitle,
+                    { color: isDark ? theme.colors.textSecondary : '#64748B' },
+                  ]}
+                >
+                  {selectedPlayers === 2
+                    ? '2-Player Match (You vs Otter)'
+                    : selectedPlayers === 3
+                    ? '3-Player Match (You vs Otter & Ollie)'
+                    : '4-Player Match (You vs Otter, Ollie & Otto)'}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setIsAiSetupVisible(false)}
+                style={[
+                  styles.aiModalCloseBtn,
+                  { backgroundColor: isDark ? theme.colors.surface : '#F1F5F9' },
+                ]}
+                activeOpacity={0.7}
+              >
+                <Icon
+                  name="close"
+                  size={18}
+                  color={isDark ? theme.colors.textSecondary : '#64748B'}
+                />
+              </TouchableOpacity>
+            </View>
+
+            {/* AI Difficulty Selector Component */}
+            <AiDifficultySelector
+              value={aiDifficulty}
+              onChange={(diff) => {
+                setAiDifficulty(diff);
+                saveAiDifficultyPreference(diff);
+              }}
+              variant="cards"
+              showDescription={true}
+              title="Select AI Difficulty"
+            />
+
+            {/* Start AI Match Button */}
+            <TouchableOpacity
+              style={[
+                styles.aiModalStartBtn,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              onPress={() => {
+                setIsAiSetupVisible(false);
+                onPlaySolo?.(selectedPlayers, aiDifficulty);
+              }}
+              activeOpacity={0.88}
+            >
+              <Icon name="play" size={18} color={theme.colors.textOnPrimary} />
+              <Text
+                style={[
+                  styles.aiModalStartBtnText,
+                  { color: theme.colors.textOnPrimary },
+                ]}
+              >
+                Start Match ({aiDifficulty.charAt(0) + aiDifficulty.slice(1).toLowerCase()})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -746,5 +877,65 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     fontWeight: '600',
     marginTop: -4,
+  },
+
+  /* AI Setup Modal Styles */
+  aiModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  aiModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  aiModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+  },
+  aiModalHeaderTitleCol: {
+    flex: 1,
+    gap: 2,
+  },
+  aiModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  aiModalSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  aiModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiModalStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 50,
+    borderRadius: 14,
+    gap: 8,
+    marginTop: 4,
+  },
+  aiModalStartBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

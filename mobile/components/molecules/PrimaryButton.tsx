@@ -8,6 +8,7 @@ import {
   TextStyle,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../theme';
 import { Icon, IconName } from '../../icons';
 
@@ -18,7 +19,8 @@ interface PrimaryButtonProps {
   rightIcon?: IconName;
   loading?: boolean;
   disabled?: boolean;
-  variant?: 'filled' | 'tinted' | 'outline' | 'danger';
+  variant?: 'filled' | 'tinted' | 'outline' | 'danger' | 'gradient';
+  gradientColors?: readonly [string, string, ...string[]];
   style?: ViewStyle;
   textStyle?: TextStyle;
 }
@@ -31,6 +33,7 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   loading = false,
   disabled = false,
   variant = 'filled',
+  gradientColors = ['#FF2A6D', '#FF5E3A', '#FF9500'],
   style,
   textStyle,
 }) => {
@@ -60,6 +63,52 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
     backgroundColor = theme.colors.surfacePressed;
     textColor = theme.colors.textDisabled;
     borderColor = 'transparent';
+  }
+
+  if (variant === 'gradient') {
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        disabled={disabled || loading}
+        activeOpacity={0.85}
+        style={[{ borderRadius: 14, overflow: 'hidden' }, style]}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        <LinearGradient
+          colors={disabled ? ['#2D323E', '#222630'] : (gradientColors as [string, string, ...string[]])}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={[styles.button, { borderRadius: 14 }]}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <View style={styles.content}>
+              {icon && (
+                <View style={styles.iconWrapper}>
+                  <Icon name={icon} size={18} color="#FFFFFF" strokeWidth={2.2} />
+                </View>
+              )}
+              <Text
+                style={[
+                  theme.typography.button,
+                  { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+                  textStyle,
+                ]}
+              >
+                {label}
+              </Text>
+              {rightIcon && (
+                <View style={styles.rightIconWrapper}>
+                  <Icon name={rightIcon} size={18} color="#FFFFFF" strokeWidth={2.4} />
+                </View>
+              )}
+            </View>
+          )}
+        </LinearGradient>
+      </TouchableOpacity>
+    );
   }
 
   return (

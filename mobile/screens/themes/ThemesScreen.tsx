@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   ScrollView,
   View,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   StatusBar,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -73,6 +74,14 @@ export const ThemesScreen: React.FC<ThemesScreenProps> = ({ onBack }) => {
   const { theme, themeId, appearanceMode, effectiveMode, setThemeId, setAppearanceMode } =
     useTheme();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);

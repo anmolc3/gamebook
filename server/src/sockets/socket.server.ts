@@ -88,6 +88,66 @@ export function emitToAll(event: string, payload: any): void {
   }
 }
 
+/**
+ * Cleanly handles real-time socket disconnection, call termination, presence removal,
+ * and room updates when an account is deleted.
+ */
+export function disconnectUserSockets(userId: string, reason = 'account_deleted'): void {
+  // 1. Terminate any active audio/video calls
+  const activeCallId = userActiveCall.get(userId);
+  if (activeCallId) {
+    const call = activeCalls.get(activeCallId);
+    if (call) {
+      if (call.timeoutTimer) clearTimeout(call.timeoutTimer);
+      activeCalls.delete(activeCallId);
+      userActiveCall.delete(call.callerId);
+      userActiveCall.delete(call.recipientId);
+      const otherUserId = call.callerId === userId ? call.recipientId : call.callerId;
+      emitToUser(otherUserId, 'call:ended', { callId: activeCallId, reason: 'peer_account_deleted' });
+    }
+  }
+
+  // 2. Clear any active room association
+  const activeRoomCode = userActiveRoom.get(userId);
+  if (activeRoomCode) {
+    const timerKey = `${userId}:${activeRoomCode}`;
+    const timer = disconnectGraceTimers.get(timerKey);
+    if (timer) {
+      clearTimeout(timer);
+      disconnectGraceTimers.delete(timerKey);
+    }
+    userActiveRoom.delete(userId);
+    try {
+      MatchManager.handlePlayerDisconnect(activeRoomCode, userId);
+    } catch {}
+  }
+
+  // 3. Clear presence tracking and broadcast offline status
+  PresenceService.removeUser(userId);
+  PresenceService.notifyAuthorizedRecipients(userId, false, new Date(), emitToUser).catch(() => null);
+
+  // 4. Notify user's connected sockets with 'account:deleted' and forcefully close them
+  const userSockets = activeUserSockets.get(userId);
+  if (userSockets) {
+    for (const socketId of userSockets) {
+      const socket = io?.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.emit('account:deleted', {
+          message: 'Your account has been permanently deleted.',
+          reason,
+        });
+        setTimeout(() => {
+          try {
+            socket.disconnect(true);
+          } catch {}
+        }, 100);
+      }
+      clearSocketRateLimit(socketId);
+    }
+    activeUserSockets.delete(userId);
+  }
+}
+
 export function initializeSockets(server: HttpServer): SocketIOServer {
   io = new SocketIOServer(server, {
     cors: {
@@ -329,7 +389,18 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
     // Real-Time Solo / AI Opponent Mode Events
     // ------------------------------------------------------------------------
 
-    socket.on('solo:start', (data: { gameType: string; difficulty?: any; botId?: string }, cb?: any) => {
+    socket.on(
+      'solo:start',
+      (
+        data: {
+          gameType: string;
+          difficulty?: any;
+          botId?: string;
+          botCount?: number;
+          playerCount?: number;
+        },
+        cb?: any
+      ) => {
       let effectiveUserId = userId || socket.data.userId;
       let effectiveUsername = username || socket.data.user?.username;
       if (!effectiveUserId) {
@@ -346,7 +417,8 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
           effectiveUsername || 'Player',
           data.gameType as any,
           data.difficulty || 'MEDIUM',
-          data.botId
+          data.botId,
+          data.botCount || (data.playerCount ? data.playerCount - 1 : 1)
         );
         socket.join(`room:${session.roomCode}`);
 
@@ -519,6 +591,20 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
         return;
       }
 
+      // Check if recipient is blocked or caller is blocked by recipient
+      const block = await prisma.blockedUser.findFirst({
+        where: {
+          OR: [
+            { blockerId: userId, blockedId: data.recipientId },
+            { blockerId: data.recipientId, blockedId: userId },
+          ],
+        },
+      });
+      if (block) {
+        if (typeof cb === 'function') cb({ success: false, error: 'Cannot call a blocked user' });
+        return;
+      }
+
       // Check if recipient is already in a call
       if (userActiveCall.has(data.recipientId)) {
         if (typeof cb === 'function') cb({ success: false, error: 'User is currently on another call', isBusy: true });
@@ -546,6 +632,12 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
           userActiveCall.delete(call.recipientId);
           emitToUser(call.callerId, 'call:rejected', { callId: data.callId, reason: 'no_answer' });
           emitToUser(call.recipientId, 'call:ended', { callId: data.callId, reason: 'missed' });
+          try {
+            prisma.user.findUnique({ where: { id: call.callerId }, include: { profile: true } }).then(callerUser => {
+              const callerName = callerUser?.profile?.displayName || callerUser?.username || 'Player';
+              PushNotificationService.notifyMissedCall(call.recipientId, callerName, call.callType, call.callId, { callerId: call.callerId, conversationId: call.conversationId }).catch(() => null);
+            });
+          } catch (e) {}
         }
       }, 45000);
 
@@ -631,12 +723,23 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
         userActiveCall.delete(call.callerId);
         userActiveCall.delete(call.recipientId);
 
+        const wasRinging = call.status === 'ringing';
+        const isCallerCancelling = call.callerId === userId;
         const otherUserId = call.callerId === userId ? call.recipientId : call.callerId;
         emitToUser(otherUserId, 'call:ended', {
           callId: data.callId,
           durationSeconds: data.durationSeconds || 0,
           endedBy: userId,
+          reason: wasRinging && isCallerCancelling ? 'missed' : 'ended',
         });
+        if (wasRinging && isCallerCancelling) {
+          try {
+            prisma.user.findUnique({ where: { id: call.callerId }, include: { profile: true } }).then(callerUser => {
+              const callerName = callerUser?.profile?.displayName || callerUser?.username || 'Player';
+              PushNotificationService.notifyMissedCall(call.recipientId, callerName, call.callType, call.callId, { callerId: call.callerId, conversationId: call.conversationId }).catch(() => null);
+            });
+          } catch (e) {}
+        }
       }
       if (typeof cb === 'function') cb({ success: true });
     });
@@ -683,6 +786,14 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
             userActiveCall.delete(call.recipientId);
             const otherUserId = call.callerId === userId ? call.recipientId : call.callerId;
             emitToUser(otherUserId, 'call:ended', { callId: activeCallId, reason: 'peer_disconnected' });
+            if (call.status === 'ringing' && call.callerId === userId) {
+              try {
+                prisma.user.findUnique({ where: { id: call.callerId }, include: { profile: true } }).then(callerUser => {
+                  const callerName = callerUser?.profile?.displayName || callerUser?.username || 'Player';
+                  PushNotificationService.notifyMissedCall(call.recipientId, callerName, call.callType, call.callId, { callerId: call.callerId, conversationId: call.conversationId }).catch(() => null);
+                });
+              } catch (e) {}
+            }
           }
         }
         // Handle Multiplayer Room Disconnect Grace Window (30 seconds)
@@ -709,7 +820,22 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
                 roomCode: activeRoomCode,
                 timestamp: new Date().toISOString(),
               });
-              await MatchManager.handleForfeit(activeRoomCode, userId);
+
+              try {
+                const currentRoom = await prisma.gameRoom.findUnique({
+                  where: { code: activeRoomCode },
+                  select: { status: true },
+                });
+
+                if (currentRoom?.status === 'WAITING') {
+                  const { RoomService } = require('../rooms/room.service');
+                  await RoomService.leaveRoom(userId, activeRoomCode);
+                } else {
+                  await MatchManager.handleForfeit(activeRoomCode, userId);
+                }
+              } catch (err) {
+                console.error('[Sockets] Error handling player abandonment:', err);
+              }
             }, 30000);
 
             disconnectGraceTimers.set(timerKey, graceTimer);

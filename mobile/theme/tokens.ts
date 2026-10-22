@@ -39,6 +39,7 @@ export interface ColorTokens {
   accent: string;
 
   // Marvie Color Palette Accents
+  accentPink: string;
   accentMint: string;
   accentAmber: string;
   accentOrange: string;

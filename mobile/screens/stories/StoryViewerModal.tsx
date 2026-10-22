@@ -68,7 +68,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalBackdrop}
       >
         <View style={[styles.storyCard, { backgroundColor: '#1E2D34' }]}>
@@ -125,7 +125,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             {/* Celebratory Graphic Card */}
             <View style={styles.celebrationCard}>
               <View style={styles.trophyGlow}>
-                <TrophyIcon size={56} color="#3ED598" />
+                <TrophyIcon size={56} />
               </View>
               <Text style={styles.matchVictoryTitle}>MATCH HIGHLIGHT</Text>
               <Text style={styles.matchSubtitle}>24h Ephemeral Platform Reel</Text>

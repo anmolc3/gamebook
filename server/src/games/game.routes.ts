@@ -537,7 +537,7 @@ router.post('/solo/start', async (req: Request, res: Response) => {
       userId = req.body.userId || `guest_${Date.now().toString(36)}`;
       username = req.body.username || 'Player';
     }
-    const { gameType, difficulty, botId } = req.body;
+    const { gameType, difficulty, botId, botCount, playerCount } = req.body;
 
     if (!gameType) {
       return res.status(400).json({ error: 'gameType is required' });
@@ -549,7 +549,8 @@ router.post('/solo/start', async (req: Request, res: Response) => {
       username,
       gameType.toUpperCase() as any,
       difficulty || 'MEDIUM',
-      botId
+      botId,
+      botCount || (playerCount ? playerCount - 1 : 1)
     );
 
     res.status(200).json({

@@ -78,6 +78,7 @@ export class RoomService {
         })),
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
+      lastMatchResult: MatchManager.getLastMatchResult(room.code),
     };
   }
 
@@ -355,8 +356,9 @@ export class RoomService {
     try {
       const playerMetas = formatted.players.map((p: any) => ({
         userId: p.userId,
-        username: p.username,
-        displayName: p.displayName,
+        username: p.user?.username || p.username || 'player',
+        displayName: p.user?.displayName || p.displayName || p.user?.username || p.username || 'Player',
+        avatarUrl: p.user?.avatarUrl || null,
         slotIndex: p.slotIndex,
       }));
       MatchManager.startMatch(normalizedCode, room.gameType as any, playerMetas);
@@ -400,6 +402,14 @@ export class RoomService {
       return { left: true, message: 'Player was not in this room' };
     }
 
+    // Retrieve leaving user profile info before deletion
+    const leavingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+    const leavingName = leavingUser?.profile?.displayName || leavingUser?.username || 'A player';
+    const wasHost = room.hostId === userId;
+
     // Remove player
     await prisma.gamePlayer.delete({
       where: { id: player.id },
@@ -414,6 +424,19 @@ export class RoomService {
         data: { status: 'FINISHED' },
       });
 
+      emitToRoom(normalizedCode, 'room:player_left', {
+        roomCode: normalizedCode,
+        userId,
+        username: leavingUser?.username || 'player',
+        displayName: leavingName,
+        avatarUrl: leavingUser?.profile?.avatarUrl || null,
+        isHost: wasHost,
+        remainingPlayerCount: 0,
+        maxPlayers: room.maxPlayers,
+        isLobbyClosing: true,
+        timestamp: new Date().toISOString(),
+      });
+
       emitToRoom(normalizedCode, 'room:disbanded', {
         roomCode: normalizedCode,
         reason: 'All players left the room',
@@ -423,7 +446,8 @@ export class RoomService {
     }
 
     let newHostId = room.hostId;
-    if (room.hostId === userId) {
+    let newHostName: string | null = null;
+    if (wasHost) {
       // Transfer host to lowest slotIndex player
       const nextHost = remainingPlayers.sort((a: any, b: any) => a.slotIndex - b.slotIndex)[0];
       newHostId = nextHost.userId;
@@ -436,6 +460,12 @@ export class RoomService {
         where: { id: nextHost.id },
         data: { isReady: true },
       });
+
+      const nextHostUser = await prisma.user.findUnique({
+        where: { id: newHostId },
+        include: { profile: true },
+      });
+      newHostName = nextHostUser?.profile?.displayName || nextHostUser?.username || 'A player';
     }
 
     const updatedRoom = await prisma.gameRoom.findUnique({
@@ -455,7 +485,17 @@ export class RoomService {
     emitToRoom(normalizedCode, 'room:player_left', {
       roomCode: normalizedCode,
       userId,
-      newHostId,
+      username: leavingUser?.username || 'player',
+      displayName: leavingName,
+      avatarUrl: leavingUser?.profile?.avatarUrl || null,
+      isHost: wasHost,
+      newHostId: wasHost ? newHostId : undefined,
+      newHostName: wasHost ? newHostName : undefined,
+      remainingPlayerCount: remainingPlayers.length,
+      maxPlayers: room.maxPlayers,
+      isLobbyClosing: false,
+      room: formatted,
+      timestamp: new Date().toISOString(),
     });
     emitToRoom(normalizedCode, 'room:state', formatted);
 

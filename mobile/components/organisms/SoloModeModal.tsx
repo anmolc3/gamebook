@@ -10,12 +10,18 @@ import {
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { GameLogo } from '../atoms/GameLogo';
+import { Avatar } from '../atoms/Avatar';
 import {
   AiDifficulty,
   getSoloGameInfo,
   BOT_AVATARS,
 } from '../../constants/soloGames';
 import { supportsSoloMode } from '../../constants/gameCapabilities';
+import {
+  AiDifficultySelector,
+  loadSavedAiDifficulty,
+  saveAiDifficultyPreference,
+} from '../molecules/AiDifficultySelector';
 
 export type GameModeSelection = 'SOLO' | 'FRIENDS' | 'ONLINE';
 
@@ -52,16 +58,17 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
   const [selectedMode, setSelectedMode] = useState<GameModeSelection>(
     isSoloSupported ? 'SOLO' : 'FRIENDS'
   );
-  const [selectedDifficulty, setSelectedDifficulty] = useState<AiDifficulty>(
-    gameInfo?.defaultDifficulty || 'MEDIUM'
-  );
+  const [selectedDifficulty, setSelectedDifficulty] = useState<AiDifficulty>('MEDIUM');
   const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     if (visible) {
       if (isSoloSupported) {
-        setSelectedDifficulty(gameInfo?.defaultDifficulty || 'MEDIUM');
         setSelectedMode('SOLO');
+        // Load saved difficulty preference with fallback to 'MEDIUM'
+        loadSavedAiDifficulty().then((saved) => {
+          setSelectedDifficulty(saved);
+        });
       } else {
         setSelectedMode('FRIENDS');
       }
@@ -69,11 +76,16 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
     }
   }, [visible, gameId, isSoloSupported]);
 
+  const handleDifficultyChange = (diff: 'EASY' | 'MEDIUM' | 'HARD') => {
+    setSelectedDifficulty(diff);
+    saveAiDifficultyPreference(diff);
+  };
+
   const botId = DIFFICULTY_BOT_MAP[selectedDifficulty] || 'BOT_NOVA';
   const botInfo = BOT_AVATARS[botId] || {
-    name: 'Nova',
+    name: 'Otter',
     title: 'Tactical Strategist',
-    personality: 'Balanced and methodical AI opponent.',
+    personality: 'Balanced and methodical opponent.',
   };
 
   const handleStartGame = () => {
@@ -207,48 +219,13 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
           {/* Tab Body */}
           {selectedMode === 'SOLO' && (
             <View style={styles.tabContent}>
-              {/* Difficulty Selection (Requirement 9: [ Easy ] [ Medium ] [ Hard ] [ Expert ]) */}
-              <View>
-                <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>
-                  Difficulty
-                </Text>
-                <View style={styles.difficultyRow}>
-                  {availableDifficulties.map((diff) => {
-                    const isSelected = selectedDifficulty === diff;
-                    return (
-                      <TouchableOpacity
-                        key={diff}
-                        style={[
-                          styles.difficultyPill,
-                          {
-                            backgroundColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.surface,
-                            borderColor: isSelected
-                              ? theme.colors.primary
-                              : theme.colors.border,
-                          },
-                        ]}
-                        onPress={() => setSelectedDifficulty(diff)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.difficultyPillText,
-                            {
-                              color: isSelected
-                                ? theme.colors.textOnPrimary
-                                : theme.colors.textSecondary,
-                            },
-                          ]}
-                        >
-                          {diff.charAt(0) + diff.slice(1).toLowerCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+              {/* Clean Difficulty Selector with 3 options: Easy, Medium, Hard */}
+              <AiDifficultySelector
+                value={(selectedDifficulty === 'EXPERT' ? 'HARD' : selectedDifficulty) as 'EASY' | 'MEDIUM' | 'HARD'}
+                onChange={handleDifficultyChange}
+                variant="cards"
+                showDescription={true}
+              />
 
               {/* AI Opponent Card (Requirement 10: AI Profile) */}
               {gameInfo?.type !== 'SOLO_PUZZLE' ? (
@@ -262,14 +239,7 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
                   ]}
                 >
                   <View style={styles.aiAvatarWrapper}>
-                    <View
-                      style={[
-                        styles.aiAvatarCircle,
-                        { backgroundColor: theme.colors.primary + '20' },
-                      ]}
-                    >
-                      <Icon name="bot" size={24} color={theme.colors.primary} />
-                    </View>
+                    <Avatar displayName="Otter" avatarUrl="otter_mascot" size="md" />
                   </View>
                   <View style={styles.aiInfoCol}>
                     <View style={styles.aiNameRow}>
@@ -283,7 +253,7 @@ export const SoloModeModal: React.FC<SoloModeModalProps> = ({
                         ]}
                       >
                         <Text style={[styles.aiBadgeText, { color: theme.colors.primary }]}>
-                          AI Opponent
+                          {selectedDifficulty.charAt(0) + selectedDifficulty.slice(1).toLowerCase()}
                         </Text>
                       </View>
                     </View>

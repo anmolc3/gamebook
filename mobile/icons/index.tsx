@@ -3,6 +3,9 @@ import { Image } from 'react-native';
 import Svg, { Path, Circle, Rect, Polyline, Polygon, Line, G, Defs, ClipPath, LinearGradient as SvgLinearGradient, RadialGradient, Stop } from 'react-native-svg';
 import { GameControllerLogo } from '../components/atoms/GameControllerLogo';
 
+const TROPHY_IMAGE = require('../assets/images/trophy.webp');
+const STREAK_IMAGE = require('../assets/images/streak.webp');
+
 export interface IconProps {
   size?: number;
   color?: string;
@@ -57,13 +60,17 @@ export const SearchIcon: React.FC<IconProps> = ({ size = 24, color = 'currentCol
   </Svg>
 );
 
-export const SettingsIcon: React.FC<IconProps> = ({ size = 24, accessibilityLabel }) => (
-  <Image
-    source={require('../assets/images/settings_icon_logo.webp')}
-    style={{ width: size, height: size }}
-    resizeMode="contain"
-    accessibilityLabel={accessibilityLabel || 'Settings'}
-  />
+export const SettingsIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Settings'}>
+    <Path
+      d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
 );
 
 export const VideoCallIcon: React.FC<IconProps> = ({ size = 24, color, accessibilityLabel }) => (
@@ -92,6 +99,20 @@ export const BellIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
+export const AtSignIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Mentions'}>
+    <Circle cx="12" cy="12" r="4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    <Path d="M16 8V12C16 13.6569 17.3431 15 19 15C20.6569 15 22 13.6569 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22C14.8142 22 17.3524 20.8384 19.1672 18.9634" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const MissedCallIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Missed Call'}>
+    <Rect x="2" y="6" width="13" height="12" rx="3.5" fill={color} />
+    <Path d="M16.5 10.2L20.8 7.4C21.4 7 22.2 7.4 22.2 8.1V15.9C22.2 16.6 21.4 17 20.8 16.6L16.5 13.8V10.2Z" fill={color} />
+  </Svg>
+);
+
 export const PlusIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Add'}>
     <Line x1="12" y1="5" x2="12" y2="19" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
@@ -108,6 +129,18 @@ export const ChevronLeftIcon: React.FC<IconProps> = ({ size = 24, color = 'curre
 export const ChevronRightIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Forward'}>
     <Polyline points="9 18 15 12 9 6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ChevronDownIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Down'}>
+    <Polyline points="6 9 12 15 18 9" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
+export const ChevronUpIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Up'}>
+    <Polyline points="18 15 12 9 6 15" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
@@ -157,6 +190,13 @@ export const LockIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
+export const MailIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Email'}>
+    <Rect x="3" y="5" width="18" height="14" rx="2" stroke={color} strokeWidth={strokeWidth} />
+    <Polyline points="3 7 12 13 21 7" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 // 3. Gaming Icons
 export const DiceIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Dice'}>
@@ -169,10 +209,13 @@ export const DiceIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
-export const TrophyIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Trophy'}>
-    <Path d="M6 9H3C2.45 9 2 8.55 2 8V5C2 4.45 2.45 4 3 4H6M18 9H21C21.55 9 22 8.55 22 8V5C22 4.45 21.55 4 21 4H18M6 4H18V10C18 13.31 15.31 16 12 16C8.69 16 6 13.31 6 10V4ZM12 16V20M8 20H16" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
+export const TrophyIcon: React.FC<IconProps> = ({ size = 24, style, accessibilityLabel }) => (
+  <Image
+    source={TROPHY_IMAGE}
+    style={[{ width: size, height: size }, style]}
+    resizeMode="contain"
+    accessibilityLabel={accessibilityLabel || 'Trophy'}
+  />
 );
 
 export const CrownIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
@@ -225,11 +268,16 @@ export const EditIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
-export const FlameIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Streak'}>
-    <Path d="M8.5 14.5A2.5 2.5 0 0 0 11 12C11 10.5 9.5 9 9.5 9C9.5 9 14.5 7.5 14.5 4C14.5 4 19 8.5 19 14C19 17.866 15.866 21 12 21C8.134 21 5 17.866 5 14C5 12.5 5.5 10.5 6.5 9.5C6.5 9.5 6.5 12 8.5 14.5Z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
+export const FlameIcon: React.FC<IconProps> = ({ size = 24, style, accessibilityLabel }) => (
+  <Image
+    source={STREAK_IMAGE}
+    style={[{ width: size, height: size }, style]}
+    resizeMode="contain"
+    accessibilityLabel={accessibilityLabel || 'Streak'}
+  />
 );
+
+export const StreakIcon = FlameIcon;
 
 export const ShieldIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Shield'}>
@@ -368,7 +416,7 @@ export const InfoIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
 );
 
 export const BotIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'AI Opponent'}>
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Otter'}>
     <Rect x="4" y="8" width="16" height="12" rx="2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M2 14H4M20 14H22" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
     <Path d="M12 2V8" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
@@ -559,6 +607,78 @@ export const CropIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor
   </Svg>
 );
 
+export const MoreVerticalIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'More options'}>
+    <Circle cx="12" cy="5" r="1.75" fill={color} />
+    <Circle cx="12" cy="12" r="1.75" fill={color} />
+    <Circle cx="12" cy="19" r="1.75" fill={color} />
+  </Svg>
+);
+
+export const SmileIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" accessibilityLabel={accessibilityLabel || 'Emoji'}>
+    <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={strokeWidth} />
+    <Path d="M8 14s1.5 2 4 2 4-2 4-2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    <Circle cx="9" cy="9" r="1.25" fill={color} />
+    <Circle cx="15" cy="9" r="1.25" fill={color} />
+  </Svg>
+);
+
+export const FileTextIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Document'}>
+    <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <Polyline points="14 2 14 8 20 8" />
+    <Line x1="16" y1="13" x2="8" y2="13" />
+    <Line x1="16" y1="17" x2="8" y2="17" />
+    <Polyline points="10 9 9 9 8 9" />
+  </Svg>
+);
+
+export const MapPinIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Location'}>
+    <Path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+    <Circle cx="12" cy="10" r="3" />
+  </Svg>
+);
+
+export const PollIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Poll'}>
+    <Line x1="18" y1="20" x2="18" y2="10" />
+    <Line x1="12" y1="20" x2="12" y2="4" />
+    <Line x1="6" y1="20" x2="6" y2="14" />
+  </Svg>
+);
+
+export const ContactIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Contact'}>
+    <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <Circle cx="12" cy="7" r="4" />
+  </Svg>
+);
+
+export const FlagIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Flag'}>
+    <Path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+    <Line x1="4" y1="22" x2="4" y2="15" />
+  </Svg>
+);
+
+export const TrashIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Delete'}>
+    <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <Line x1="10" y1="11" x2="10" y2="17" />
+    <Line x1="14" y1="11" x2="14" y2="17" />
+  </Svg>
+);
+
+export const AlertTriangleIcon: React.FC<IconProps> = ({ size = 24, color = 'currentColor', strokeWidth = 2, accessibilityLabel }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" accessibilityLabel={accessibilityLabel || 'Warning'}>
+    <Path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    <Line x1="12" y1="9" x2="12" y2="13" />
+    <Line x1="12" y1="17" x2="12.01" y2="17" />
+  </Svg>
+);
+
 export type IconName =
   | 'home'
   | 'gamepad'
@@ -574,6 +694,8 @@ export type IconName =
   | 'plus'
   | 'chevronLeft'
   | 'chevronRight'
+  | 'chevronDown'
+  | 'chevronUp'
   | 'close'
   | 'send'
   | 'check'
@@ -590,6 +712,7 @@ export type IconName =
   | 'palette'
   | 'edit'
   | 'flame'
+  | 'streak'
   | 'shield'
   | 'award'
   | 'calendar'
@@ -620,10 +743,35 @@ export type IconName =
   | 'phoneOff'
   | 'reply'
   | 'crop'
-  | 'share';
+  | 'share'
+  | 'mail'
+  | 'moreVertical'
+  | 'smile'
+  | 'file'
+  | 'location'
+  | 'poll'
+  | 'contact'
+  | 'flag'
+  | 'google'
+  | 'atSign'
+  | 'mention'
+  | 'missedCall'
+  | 'trash'
+  | 'alertTriangle';
+
+export const GoogleIcon: React.FC<{ size?: number; style?: any }> = ({ size = 20, style }) => (
+  <Svg width={size} height={size} viewBox="0 0 48 48" style={style}>
+    <Path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+    <Path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+    <Path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+    <Path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+  </Svg>
+);
 
 export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props }) => {
   switch (name) {
+    case 'google': return <GoogleIcon size={props.size} style={props.style} />;
+    case 'mail': return <MailIcon {...props} />;
     case 'home': return <HomeIcon {...props} />;
     case 'gamepad':
     case 'controller': return <GamepadIcon {...props} />;
@@ -638,6 +786,8 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'plus': return <PlusIcon {...props} />;
     case 'chevronLeft': return <ChevronLeftIcon {...props} />;
     case 'chevronRight': return <ChevronRightIcon {...props} />;
+    case 'chevronDown': return <ChevronDownIcon {...props} />;
+    case 'chevronUp': return <ChevronUpIcon {...props} />;
     case 'close': return <CloseIcon {...props} />;
     case 'send': return <SendIcon {...props} />;
     case 'check': return <CheckIcon {...props} />;
@@ -654,6 +804,7 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'palette': return <PaletteIcon {...props} />;
     case 'edit': return <EditIcon {...props} />;
     case 'flame': return <FlameIcon {...props} />;
+    case 'streak': return <StreakIcon {...props} />;
     case 'shield': return <ShieldIcon {...props} />;
     case 'award': return <AwardIcon {...props} />;
     case 'calendar': return <CalendarIcon {...props} />;
@@ -685,6 +836,18 @@ export const Icon: React.FC<{ name: IconName } & IconProps> = ({ name, ...props 
     case 'reply': return <ReplyIcon {...props} />;
     case 'crop': return <CropIcon {...props} />;
     case 'share': return <ShareIcon {...props} />;
+    case 'moreVertical': return <MoreVerticalIcon {...props} />;
+    case 'smile': return <SmileIcon {...props} />;
+    case 'file': return <FileTextIcon {...props} />;
+    case 'location': return <MapPinIcon {...props} />;
+    case 'poll': return <PollIcon {...props} />;
+    case 'contact': return <ContactIcon {...props} />;
+    case 'flag': return <FlagIcon {...props} />;
+    case 'atSign':
+    case 'mention': return <AtSignIcon {...props} />;
+    case 'missedCall': return <MissedCallIcon {...props} />;
+    case 'trash': return <TrashIcon {...props} />;
+    case 'alertTriangle': return <AlertTriangleIcon {...props} />;
     default: return <GamepadIcon {...props} />;
   }
 };

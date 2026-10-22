@@ -10,6 +10,7 @@ import {
   Image,
   RefreshControl,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
@@ -45,6 +46,7 @@ interface GameDiscoveryScreenProps {
   onSelectGame: (gameId: string) => void;
   onPressLeaderboards: () => void;
   onPressAchievements: () => void;
+  onBack?: () => void;
 }
 
 const CATEGORIES = [
@@ -61,6 +63,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   onSelectGame,
   onPressLeaderboards,
   onPressAchievements,
+  onBack,
 }) => {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
@@ -71,6 +74,32 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   const [loading, setLoading] = useState(true);
   const [selectedRulesGame, setSelectedRulesGame] = useState<CatalogGame | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Handle hardware Back button across rules modal, search, categories, and previous screen
+  useEffect(() => {
+    const handleBack = () => {
+      if (selectedRulesGame) {
+        setSelectedRulesGame(null);
+        return true;
+      }
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        return true;
+      }
+      if (selectedCategory !== 'ALL') {
+        setSelectedCategory('ALL');
+        return true;
+      }
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [selectedRulesGame, searchQuery, selectedCategory, onBack]);
 
   useEffect(() => {
     loadCatalog();
@@ -136,7 +165,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <GameControllerLogo size={28} color={theme.colors.primary} />
             <Text style={[styles.mainTitle, { color: theme.colors.textPrimary }]}>
-              Game Arena
+              Otter Games
             </Text>
           </View>
           <View style={styles.headerActions}>
@@ -146,7 +175,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
               activeOpacity={0.7}
               accessibilityLabel="Achievements"
             >
-              <TrophyIcon size={18} color="#FFD700" />
+              <TrophyIcon size={20} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -155,7 +184,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
               activeOpacity={0.7}
               accessibilityLabel="Leaderboards"
             >
-              <FlameIcon size={18} color="#FF8A00" />
+              <FlameIcon size={20} />
             </TouchableOpacity>
           </View>
         </View>
@@ -248,7 +277,7 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
             <View style={styles.shelfSection}>
               <View style={styles.shelfHeader}>
                 <View style={styles.shelfTitleRow}>
-                  <FlameIcon size={18} color="#FF8A00" />
+                  <FlameIcon size={20} />
                   <Text style={[styles.shelfTitle, { color: theme.colors.textPrimary }]}>
                     Trending Right Now
                   </Text>

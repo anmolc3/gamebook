@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
@@ -56,6 +57,29 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Handle hardware Back button across search, tabs, and origin navigation
+  useEffect(() => {
+    const handleBack = () => {
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        setSearchResults([]);
+        return true;
+      }
+      if (activeTab !== 'feeds') {
+        setActiveTab('feeds');
+        return true;
+      }
+      if (onBack) {
+        onBack();
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleBack);
+    return () => sub.remove();
+  }, [searchQuery, activeTab, onBack]);
 
   // Load all social data
   const loadData = useCallback(async () => {

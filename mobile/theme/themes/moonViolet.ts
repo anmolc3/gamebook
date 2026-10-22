@@ -24,6 +24,7 @@ const lightColors: ColorTokens = {
   secondary: '#3ED598',
   accent: '#FFC542',
 
+  accentPink: '#FF2D78',
   accentMint: '#3ED598',
   accentAmber: '#FFC542',
   accentOrange: '#FF974A',
@@ -52,11 +53,11 @@ const lightColors: ColorTokens = {
 };
 
 const darkColors: ColorTokens = {
-  background: '#0B0D12',
-  backgroundSecondary: '#130E1C',
-  surface: '#171A22',
-  surfaceElevated: '#1F232E',
-  surfacePressed: '#272B38',
+  background: '#000000',
+  backgroundSecondary: '#080808',
+  surface: '#121212',
+  surfaceElevated: '#181818',
+  surfacePressed: '#222222',
 
   textPrimary: '#FFFFFF',
   textSecondary: '#94A3B8',
@@ -64,9 +65,9 @@ const darkColors: ColorTokens = {
   textDisabled: '#475569',
   textOnPrimary: '#FFFFFF',
 
-  border: '#222632',
+  border: '#1E1E1E',
   borderFocus: '#755FE2',
-  divider: '#1A1D27',
+  divider: '#141414',
 
   primary: '#755FE2',
   primaryLight: '#9584EB',
@@ -75,6 +76,7 @@ const darkColors: ColorTokens = {
   secondary: '#3ED598',
   accent: '#FFC542',
 
+  accentPink: '#FF2D78',
   accentMint: '#3ED598',
   accentAmber: '#FFC542',
   accentOrange: '#FF974A',
@@ -94,12 +96,12 @@ const darkColors: ColorTokens = {
   error: '#FF575F',
   info: '#0062FF',
 
-  online: '#3ED598',
+  online: '#22C55E',
   inGame: '#755FE2',
   away: '#FFC542',
   offline: '#64748B',
 
-  backdrop: 'rgba(0, 0, 0, 0.78)',
+  backdrop: 'rgba(0, 0, 0, 0.85)',
 };
 
 const lightShadows: ShadowTokens = {

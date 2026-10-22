@@ -26,6 +26,12 @@ export class MancalaAI implements GameAI<MancalaState, MancalaAction> {
       return { type: 'SOW_PIT', pitIndex: rand };
     }
 
+    // Medium: 20% chance to overlook optimal move and pick random pit
+    if (difficulty === 'MEDIUM' && Math.random() < 0.2) {
+      const rand = legalPits[Math.floor(Math.random() * legalPits.length)];
+      return { type: 'SOW_PIT', pitIndex: rand };
+    }
+
     // Priority 1: Free turn move (last stone lands exactly in own store)
     for (const pit of legalPits) {
       const count = state.board[pit];

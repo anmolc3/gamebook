@@ -207,6 +207,8 @@ export interface LudoLastMove {
 export interface LudoPlayerState {
   userId: string;
   username: string;
+  displayName?: string;
+  avatarUrl?: string | null;
   color: LudoColor;
   tokens: LudoToken[];
   rank?: number; // 1, 2, 3, 4
@@ -228,8 +230,11 @@ export interface LudoState {
 export interface LudoResult {
   winnerId: string | null;
   winnerIds: string[];
-  rankings: { userId: string; color: LudoColor; rank: number }[];
+  winnerName?: string | null;
+  winnerAvatarUrl?: string | null;
+  rankings: { userId: string; username?: string; displayName?: string; avatarUrl?: string | null; color: LudoColor; rank: number }[];
   isComplete: boolean;
+  reason?: 'WIN' | 'ABANDONED' | 'CANCELLED' | 'DRAW' | 'FORFEIT';
 }
 
 // ----------------------------------------------------------------------------

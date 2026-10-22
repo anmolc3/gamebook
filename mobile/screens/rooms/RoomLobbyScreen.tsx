@@ -9,6 +9,7 @@ import {
   StatusBar,
   Alert,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../theme';
@@ -53,6 +54,26 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // In-lobby alerts for player leaving and match completion
+  const [leaveAlert, setLeaveAlert] = useState<{
+    id: string;
+    message: string;
+    isHostChange?: boolean;
+    isLobbyClosing?: boolean;
+  } | null>(null);
+
+  const [matchResultAlert, setMatchResultAlert] = useState<{
+    id: string;
+    title: string;
+    message: string;
+    winnerName?: string | null;
+    winnerAvatarUrl?: string | null;
+    reason?: string;
+  } | null>(null);
+
+  const seenLeaveEventsRef = useRef<Set<string>>(new Set());
+  const seenMatchResultsRef = useRef<Set<string>>(new Set());
   const hasLoadedRef = useRef(!!initialRoom);
 
   const showToast = (msg: string) => {
@@ -60,12 +81,48 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     setTimeout(() => setToastMessage(null), 2500);
   };
 
+  const processMatchResult = useCallback((res: any) => {
+    if (!res) return;
+    const resultKey = `${res.finishedAt || Date.now()}_${res.winnerId || res.reason || 'CONCLUDED'}`;
+    if (seenMatchResultsRef.current.has(resultKey)) return;
+    seenMatchResultsRef.current.add(resultKey);
+
+    if (res.reason === 'ABANDONED') {
+      const leaverName = res.abandonedByUsername ? `@${res.abandonedByUsername}` : 'A player';
+      setMatchResultAlert({
+        id: resultKey,
+        title: 'Match Ended',
+        message: `${leaverName} abandoned the match.`,
+        reason: 'ABANDONED',
+      });
+    } else if (res.winnerName) {
+      setMatchResultAlert({
+        id: resultKey,
+        title: 'Match Finished!',
+        message: `${res.winnerName} won the match!`,
+        winnerName: res.winnerName,
+        winnerAvatarUrl: res.winnerAvatarUrl || null,
+        reason: 'WIN',
+      });
+    } else {
+      setMatchResultAlert({
+        id: resultKey,
+        title: 'Match Finished',
+        message: 'The match has ended.',
+        reason: res.reason || 'CONCLUDED',
+      });
+    }
+  }, []);
+
   const loadRoom = useCallback(async (silent = false) => {
     try {
       if (!silent && !hasLoadedRef.current) setIsLoading(true);
       const data = await RoomService.getRoom(roomCode);
       setRoom(data);
       hasLoadedRef.current = true;
+      if (data?.lastMatchResult) {
+        processMatchResult(data.lastMatchResult);
+      }
     } catch (err: any) {
       Alert.alert('Room Error', err.message || 'Could not load room');
       onBack();
@@ -73,7 +130,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [roomCode, onBack]);
+  }, [roomCode, onBack, processMatchResult]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -86,9 +143,12 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     MobileSocketService.connect();
     MobileSocketService.joinRoom(roomCode);
 
-    // Synchronize full room state (do NOT show loading spinner on socket updates)
+    // Synchronize full room state
     const unsubState = MobileSocketService.onRoomState((updatedRoom: RoomDetails) => {
       setRoom(updatedRoom);
+      if (updatedRoom?.lastMatchResult) {
+        processMatchResult(updatedRoom.lastMatchResult);
+      }
     });
 
     // Player joined event
@@ -97,10 +157,49 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       if (data.room) setRoom(data.room);
     });
 
-    // Player left event
+    // Player left event with authoritative presence & deduplication
     const unsubLeft = MobileSocketService.onPlayerLeft((data) => {
-      showToast('A player left the room.');
-      if (data.room) setRoom(data.room);
+      if (!data) return;
+      const leaveKey = `${data.userId || 'unknown'}_${data.timestamp || Date.now()}`;
+      if (seenLeaveEventsRef.current.has(leaveKey)) return;
+      seenLeaveEventsRef.current.add(leaveKey);
+
+      if (data.room) {
+        setRoom(data.room);
+      }
+
+      const leavingName = data.displayName || (data.username ? `@${data.username}` : 'A player');
+
+      if (data.isLobbyClosing) {
+        setLeaveAlert({
+          id: leaveKey,
+          message: 'The lobby is closing because no other players remain.',
+          isLobbyClosing: true,
+        });
+      } else if (data.isHost && data.newHostName) {
+        setLeaveAlert({
+          id: leaveKey,
+          message: `${leavingName} (Host) left the lobby. ${data.newHostName} is now the host.`,
+          isHostChange: true,
+        });
+      } else {
+        setLeaveAlert({
+          id: leaveKey,
+          message: `${leavingName} left the lobby.`,
+        });
+      }
+
+      // Auto dismiss after 6 seconds
+      setTimeout(() => {
+        setLeaveAlert((current) => (current?.id === leaveKey ? null : current));
+      }, 6000);
+    });
+
+    // Match finished / Game Over event
+    const unsubGameOver = MobileSocketService.onGameOver((data) => {
+      if (data && data.roomCode === roomCode) {
+        processMatchResult(data);
+      }
     });
 
     // Game launch event
@@ -140,13 +239,14 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       unsubState();
       unsubJoined();
       unsubLeft();
+      unsubGameOver();
       unsubStart();
       unsubDisconnect();
       unsubReconnect();
       unsubAbandoned();
       unsubDisband();
     };
-  }, [roomCode, loadRoom, onBack, onGameStart, room]);
+  }, [roomCode, loadRoom, onBack, onGameStart, room, processMatchResult]);
 
   const handleToggleReady = async () => {
     if (!room || isTogglingReady) return;
@@ -196,6 +296,22 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
       },
     ]);
   };
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isRulesModalVisible) {
+        setIsRulesModalVisible(false);
+        return true;
+      }
+      if (isInviteModalVisible) {
+        setIsInviteModalVisible(false);
+        return true;
+      }
+      handleLeaveRoom();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isRulesModalVisible, isInviteModalVisible, roomCode, onBack]);
 
   const getGameLabel = (gameType?: string) => {
     switch (gameType) {
@@ -361,6 +477,195 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
           </View>
         )}
 
+        {/* In-Lobby Match Result Alert Banner */}
+        {matchResultAlert && (
+          <View
+            style={[
+              styles.alertBanner,
+              {
+                backgroundColor:
+                  matchResultAlert.reason === 'ABANDONED'
+                    ? theme.colors.warning + '18'
+                    : theme.colors.cardTintMint || theme.colors.surfaceElevated,
+                borderColor:
+                  matchResultAlert.reason === 'ABANDONED'
+                    ? theme.colors.warning
+                    : theme.colors.primary,
+              },
+            ]}
+          >
+            <View style={styles.alertBannerLeft}>
+              {matchResultAlert.winnerAvatarUrl || matchResultAlert.winnerName ? (
+                <Avatar
+                  displayName={matchResultAlert.winnerName || 'Winner'}
+                  avatarUrl={matchResultAlert.winnerAvatarUrl}
+                  size="sm"
+                  fallbackToOtter={true}
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.alertIconCircle,
+                    {
+                      backgroundColor:
+                        matchResultAlert.reason === 'ABANDONED'
+                          ? theme.colors.warning + '25'
+                          : theme.colors.primary + '25',
+                    },
+                  ]}
+                >
+                  <Icon
+                    name={matchResultAlert.reason === 'ABANDONED' ? 'bell' : 'trophy'}
+                    size={16}
+                    color={
+                      matchResultAlert.reason === 'ABANDONED'
+                        ? theme.colors.warning
+                        : theme.colors.primary
+                    }
+                  />
+                </View>
+              )}
+              <View style={styles.alertBannerTextCol}>
+                <Text
+                  style={[
+                    styles.alertBannerTitle,
+                    {
+                      color:
+                        matchResultAlert.reason === 'ABANDONED'
+                          ? theme.colors.warning
+                          : theme.colors.primary,
+                    },
+                  ]}
+                >
+                  {matchResultAlert.title}
+                </Text>
+                <Text
+                  style={[styles.alertBannerSubtitle, { color: theme.colors.textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {matchResultAlert.message}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setMatchResultAlert(null)}
+              style={styles.alertDismissBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Dismiss match result alert"
+            >
+              <Icon name="close" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* In-Lobby Player Leave Alert Banner */}
+        {leaveAlert && (
+          <View
+            style={[
+              styles.alertBanner,
+              {
+                backgroundColor: theme.colors.surfaceElevated,
+                borderColor: leaveAlert.isHostChange
+                  ? '#F59E0B'
+                  : leaveAlert.isLobbyClosing
+                  ? theme.colors.error
+                  : theme.colors.border,
+              },
+            ]}
+          >
+            <View style={styles.alertBannerLeft}>
+              <View
+                style={[
+                  styles.alertIconCircle,
+                  {
+                    backgroundColor: leaveAlert.isHostChange
+                      ? '#F59E0B20'
+                      : leaveAlert.isLobbyClosing
+                      ? theme.colors.error + '20'
+                      : theme.colors.surface,
+                  },
+                ]}
+              >
+                <Icon
+                  name={leaveAlert.isHostChange ? 'crown' : 'userPlus'}
+                  size={16}
+                  color={
+                    leaveAlert.isHostChange
+                      ? '#F59E0B'
+                      : leaveAlert.isLobbyClosing
+                      ? theme.colors.error
+                      : theme.colors.textMuted
+                  }
+                />
+              </View>
+              <View style={styles.alertBannerTextCol}>
+                <Text
+                  style={[
+                    styles.alertBannerTitle,
+                    {
+                      color: leaveAlert.isHostChange
+                        ? '#F59E0B'
+                        : leaveAlert.isLobbyClosing
+                        ? theme.colors.error
+                        : theme.colors.textSecondary,
+                    },
+                  ]}
+                >
+                  {leaveAlert.isHostChange
+                    ? 'Host Transferred'
+                    : leaveAlert.isLobbyClosing
+                    ? 'Lobby Closing'
+                    : 'Player Left'}
+                </Text>
+                <Text
+                  style={[styles.alertBannerSubtitle, { color: theme.colors.textPrimary }]}
+                  numberOfLines={2}
+                >
+                  {leaveAlert.message}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setLeaveAlert(null)}
+              style={styles.alertDismissBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Dismiss leave alert"
+            >
+              <Icon name="close" size={16} color={theme.colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Single Player Waiting Banner */}
+        {room && room.status === 'WAITING' && room.players.length === 1 && (
+          <View
+            style={[
+              styles.waitingNoticeCard,
+              {
+                backgroundColor: theme.colors.cardTintMint || theme.colors.surfaceElevated,
+                borderColor: theme.colors.primary + '35',
+              },
+            ]}
+          >
+            <View style={styles.waitingNoticeLeft}>
+              <Icon name="users" size={18} color={theme.colors.primary} />
+              <View style={styles.waitingNoticeCol}>
+                <Text style={[styles.waitingNoticeTitle, { color: theme.colors.textPrimary }]}>
+                  Waiting for more players…
+                </Text>
+                <Text style={[styles.waitingNoticeSub, { color: theme.colors.textSecondary }]}>
+                  Need at least 2 players to start. Invite a friend or share room code #{roomCode}.
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.seatCountBadge, { backgroundColor: theme.colors.primary + '20' }]}>
+              <Text style={[styles.seatCountText, { color: theme.colors.primary }]}>
+                1/{room.maxPlayers}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* 6-Character Room Code Card */}
         <View
           style={[
@@ -434,6 +739,7 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
                         avatarUrl={player.user.avatarUrl}
                         size="md"
                         status={player.user.isOnline ? 'online' : 'offline'}
+                        fallbackToOtter={true}
                       />
                       <View style={styles.slotMeta}>
                         <View style={styles.nameRow}>
@@ -911,4 +1217,85 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  alertBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  alertBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  alertIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertBannerTextCol: {
+    flex: 1,
+  },
+  alertBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  alertBannerSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  alertDismissBtn: {
+    padding: 6,
+    marginLeft: 8,
+  },
+  waitingNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    gap: 10,
+  },
+  waitingNoticeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  waitingNoticeCol: {
+    flex: 1,
+  },
+  waitingNoticeTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  waitingNoticeSub: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  seatCountBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  seatCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
 });
+

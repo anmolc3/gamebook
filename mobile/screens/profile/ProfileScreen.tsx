@@ -13,6 +13,7 @@ import {
   TextInput,
   Alert,
   Share,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,8 +50,19 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 }) => {
   const { theme } = useTheme();
   const { user: authUser, logout, updateUser } = useAuth();
-
   const isOwnProfile = !userId || userId === authUser?.id;
+
+  const isDark = theme.mode === 'dark';
+  const sheetBg = isDark ? '#10141D' : '#FFFFFF';
+  const sheetBorder = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)';
+  const sheetGrabBar = isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.16)';
+  const sheetTitleColor = isDark ? '#FFFFFF' : theme.colors.textPrimary;
+  const sheetCloseColor = isDark ? '#7E8B9B' : '#64748B';
+  const sheetItemBorder = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+  const sheetItemTitle = isDark ? '#FFFFFF' : theme.colors.textPrimary;
+  const sheetItemDesc = isDark ? '#7E8B9B' : theme.colors.textSecondary;
+  const sheetChevronColor = isDark ? '#4B5565' : '#94A3B8';
+  const sheetIconColor = isDark ? '#94A3B8' : '#64748B';
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -153,6 +165,50 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       unsubDeleted();
     };
   }, [loadProfile, loadUserPosts, userId, authUser?.id]);
+
+  // Handle Android hardware Back button
+  useEffect(() => {
+    if (!onBack) return;
+    const backAction = () => {
+      if (fullSizeImage) {
+        setFullSizeImage(null);
+        return true;
+      }
+      if (isCropperVisible) {
+        setIsCropperVisible(false);
+        return true;
+      }
+      if (isSettingsModalVisible) {
+        setIsSettingsModalVisible(false);
+        return true;
+      }
+      if (isMenuModalVisible) {
+        setIsMenuModalVisible(false);
+        return true;
+      }
+      if (isPeerMenuModalVisible) {
+        setIsPeerMenuModalVisible(false);
+        return true;
+      }
+      if (isEditModalVisible) {
+        setIsEditModalVisible(false);
+        return true;
+      }
+      onBack();
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [
+    onBack,
+    fullSizeImage,
+    isCropperVisible,
+    isSettingsModalVisible,
+    isMenuModalVisible,
+    isPeerMenuModalVisible,
+    isEditModalVisible,
+  ]);
 
   const onRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -310,6 +366,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
         <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
+        <View style={[styles.navBar, { borderBottomColor: theme.colors.border }]}>
+          {onBack ? (
+            <TouchableOpacity
+              onPress={onBack}
+              style={[styles.navIconButton, { backgroundColor: theme.colors.surfaceElevated }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Back"
+            >
+              <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.navIconButtonPlaceholder} />
+          )}
+          <Text style={[styles.navTitle, { color: theme.colors.textPrimary }]}>
+            Loading Profile...
+          </Text>
+          <View style={styles.navIconButtonPlaceholder} />
+        </View>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
@@ -324,6 +398,24 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]}>
         <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
+        <View style={[styles.navBar, { borderBottomColor: theme.colors.border }]}>
+          {onBack ? (
+            <TouchableOpacity
+              onPress={onBack}
+              style={[styles.navIconButton, { backgroundColor: theme.colors.surfaceElevated }]}
+              activeOpacity={0.7}
+              accessibilityLabel="Back"
+            >
+              <Icon name="chevronLeft" size={20} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.navIconButtonPlaceholder} />
+          )}
+          <Text style={[styles.navTitle, { color: theme.colors.textPrimary }]}>
+            Profile
+          </Text>
+          <View style={styles.navIconButtonPlaceholder} />
+        </View>
         <View style={styles.centerContainer}>
           <Icon name="close" size={48} color={theme.colors.error} />
           <Text style={[styles.errorTitle, { color: theme.colors.textPrimary }]}>
@@ -869,7 +961,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               <View style={styles.statColumn}>
                 <View style={[styles.statIconBadge, { backgroundColor: '#F59E0B18' }]}>
-                  <Icon name="trophy" size={18} color="#F59E0B" />
+                  <Icon name="trophy" size={22} />
                 </View>
                 <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
                   {profile?.stats?.totalWins ?? 0}
@@ -881,7 +973,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
               <View style={styles.statColumn}>
                 <View style={[styles.statIconBadge, { backgroundColor: '#EF444418' }]}>
-                  <Icon name="flame" size={18} color="#EF4444" />
+                  <Icon name="streak" size={22} />
                 </View>
                 <Text style={[styles.statValue, { color: theme.colors.textPrimary }]}>
                   {profile?.stats?.highestStreak ?? 0}
@@ -931,7 +1023,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
               ) : (
                 <View style={[styles.emptyAchievementsCard, { borderBottomColor: theme.colors.divider }]}>
                   <View style={[styles.emptyIconCircle, { backgroundColor: theme.colors.surfaceElevated }]}>
-                    <Icon name="trophy" size={26} color={theme.colors.textMuted} />
+                    <Icon name="trophy" size={32} />
                   </View>
                   <Text style={[styles.emptyTitle, { color: theme.colors.textPrimary }]}>
                     Trophy Cabinet
@@ -959,15 +1051,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           onPress={() => setIsMenuModalVisible(false)}
         >
           <View
-            style={styles.menuContent}
+            style={[styles.menuContent, { backgroundColor: sheetBg, borderColor: sheetBorder }]}
             onStartShouldSetResponder={() => true}
           >
             {/* Grab Handle */}
-            <View style={styles.menuGrabBar} />
+            <View style={[styles.menuGrabBar, { backgroundColor: sheetGrabBar }]} />
 
             {/* Header with Title & Close button */}
             <View style={styles.menuHeaderRow}>
-              <Text style={styles.menuHeaderTitle}>
+              <Text style={[styles.menuHeaderTitle, { color: sheetTitleColor }]}>
                 Profile Options
               </Text>
               <TouchableOpacity
@@ -975,7 +1067,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 style={styles.menuCloseBtn}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Icon name="close" size={20} color="#7E8B9B" />
+                <Icon name="close" size={20} color={sheetCloseColor} />
               </TouchableOpacity>
             </View>
 
@@ -983,26 +1075,26 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <View style={{ paddingTop: 4 }}>
               {/* 1. Edit Profile */}
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, { borderBottomColor: sheetItemBorder }]}
                 activeOpacity={0.65}
                 onPress={() => {
                   setIsMenuModalVisible(false);
                   setIsEditModalVisible(true);
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#00BCD4' }]}>
-                  <Icon name="edit" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="edit" size={24} color={sheetIconColor} strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
-                  <Text style={styles.menuItemTitle}>Edit Profile</Text>
-                  <Text style={styles.menuItemDesc}>Avatar, display name, and bio</Text>
+                  <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Edit Profile</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Avatar, display name, and bio</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
 
               {/* 2. Share Profile */}
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, { borderBottomColor: sheetItemBorder }]}
                 activeOpacity={0.65}
                 onPress={() => {
                   setIsMenuModalVisible(false);
@@ -1015,14 +1107,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   });
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#9C27B0' }]}>
-                  <Icon name="share" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="share" size={24} color={sheetIconColor} strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
-                  <Text style={styles.menuItemTitle}>Share Profile</Text>
-                  <Text style={styles.menuItemDesc}>Share player invite link</Text>
+                  <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Share Profile</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Share player invite link</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
 
               {/* 3. Settings & Preferences */}
@@ -1035,14 +1127,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                   setIsSettingsModalVisible(true);
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#FF8A00' }]}>
-                  <Icon name="settings" size={19} color="#FFFFFF" strokeWidth={2.2} />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="settings" size={24} color={sheetIconColor} strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
-                  <Text style={styles.menuItemTitle}>Settings & Preferences</Text>
-                  <Text style={styles.menuItemDesc}>Themes, sound, privacy, and gaming controls</Text>
+                  <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Settings & Preferences</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Themes, sound, privacy, and gaming controls</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
             </View>
           </View>
@@ -1064,6 +1156,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
         visible={isSettingsModalVisible}
         onClose={() => setIsSettingsModalVisible(false)}
         initialPage={settingsInitialPage}
+        onNavigateToChat={onNavigateToChat}
       />
 
       {/* Peer Profile Actions Modal (Unfriend, Report, Challenge, Message) */}
@@ -1079,32 +1172,35 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           onPress={() => setIsPeerMenuModalVisible(false)}
         >
           <View
-            style={styles.menuContent}
+            style={[styles.menuContent, { backgroundColor: sheetBg, borderColor: sheetBorder }]}
             onStartShouldSetResponder={() => true}
           >
-            <View style={styles.menuGrabBar} />
+            <View style={[styles.menuGrabBar, { backgroundColor: sheetGrabBar }]} />
 
             <View style={styles.menuHeaderRow}>
-              <Text style={styles.menuHeaderTitle}>
+              <Text style={[styles.menuHeaderTitle, { color: sheetTitleColor }]}>
                 Player Options
               </Text>
               <TouchableOpacity
                 onPress={() => setIsPeerMenuModalVisible(false)}
                 style={styles.menuCloseBtn}
               >
-                <Icon name="close" size={20} color="#7E8B9B" />
+                <Icon name="close" size={20} color={sheetCloseColor} />
               </TouchableOpacity>
             </View>
 
             {/* Peer Card */}
-            <View style={styles.menuProfileCard}>
+            <View style={[styles.menuProfileCard, {
+              backgroundColor: isDark ? 'rgba(235, 115, 34, 0.12)' : 'rgba(235, 115, 34, 0.08)',
+              borderColor: isDark ? 'rgba(235, 115, 34, 0.32)' : 'rgba(235, 115, 34, 0.22)'
+            }]}>
               <Avatar
                 displayName={profile?.displayName || 'Player'}
                 avatarUrl={profile?.avatarUrl}
                 size="md"
               />
               <View style={[styles.menuProfileMeta, { marginLeft: 12 }]}>
-                <Text style={styles.menuProfileDisplayName} numberOfLines={1}>
+                <Text style={[styles.menuProfileDisplayName, { color: sheetTitleColor }]} numberOfLines={1}>
                   {profile?.displayName || 'Player'}
                 </Text>
                 <Text style={styles.menuProfileUsername} numberOfLines={1}>
@@ -1115,63 +1211,63 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
             {onChallenge && (
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, { borderBottomColor: sheetItemBorder }]}
                 activeOpacity={0.65}
                 onPress={() => {
                   setIsPeerMenuModalVisible(false);
                   onChallenge(userId!, profile?.username || 'Player');
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#FFA000' }]}>
-                  <Icon name="gamepad" size={18} color="#FFFFFF" />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="gamepad" size={24} color={sheetIconColor} strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
-                  <Text style={styles.menuItemTitle}>Challenge to Game</Text>
-                  <Text style={styles.menuItemDesc}>Invite to 1-on-1 multiplayer battle</Text>
+                  <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Challenge to Game</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Invite to 1-on-1 multiplayer battle</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
             )}
 
             {onNavigateToChat && (
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, { borderBottomColor: sheetItemBorder }]}
                 activeOpacity={0.65}
                 onPress={() => {
                   setIsPeerMenuModalVisible(false);
                   onNavigateToChat(userId!, profile?.username || 'Player');
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#25D366' }]}>
-                  <Icon name="chat" size={18} color="#FFFFFF" />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="chat" size={24} color={sheetIconColor} strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
-                  <Text style={styles.menuItemTitle}>Send Message</Text>
-                  <Text style={styles.menuItemDesc}>Open chat conversation</Text>
+                  <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Send Message</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Open chat conversation</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
             )}
 
             {relationship === 'FRIENDS' && (
               <TouchableOpacity
-                style={styles.menuItem}
+                style={[styles.menuItem, { borderBottomColor: sheetItemBorder }]}
                 activeOpacity={0.65}
                 onPress={() => {
                   setIsPeerMenuModalVisible(false);
                   handleRemoveFriend();
                 }}
               >
-                <View style={[styles.menuSquircleIcon, { backgroundColor: '#EF4444' }]}>
-                  <Icon name="userX" size={18} color="#FFFFFF" />
+                <View style={styles.menuSquircleIcon}>
+                  <Icon name="userX" size={24} color="#EF4444" strokeWidth={2.2} />
                 </View>
                 <View style={styles.menuItemTextWrap}>
                   <Text style={[styles.menuItemTitle, { color: '#EF4444' }]}>
                     Unfriend @{profile?.username}
                   </Text>
-                  <Text style={styles.menuItemDesc}>Remove from friends list</Text>
+                  <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Remove from friends list</Text>
                 </View>
-                <Icon name="chevronRight" size={16} color="#4B5565" />
+                <Icon name="chevronRight" size={16} color={sheetChevronColor} />
               </TouchableOpacity>
             )}
 
@@ -1183,14 +1279,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
                 Alert.alert('Report Player', 'Thank you for reporting. Our moderation team will review this user.');
               }}
             >
-              <View style={[styles.menuSquircleIcon, { backgroundColor: '#E53935' }]}>
-                <Icon name="shield" size={18} color="#FFFFFF" />
+              <View style={styles.menuSquircleIcon}>
+                <Icon name="shield" size={24} color="#EF4444" strokeWidth={2.2} />
               </View>
               <View style={styles.menuItemTextWrap}>
-                <Text style={styles.menuItemTitle}>Report Player</Text>
-                <Text style={styles.menuItemDesc}>Flag inappropriate behavior</Text>
+                <Text style={[styles.menuItemTitle, { color: sheetItemTitle }]}>Report Player</Text>
+                <Text style={[styles.menuItemDesc, { color: sheetItemDesc }]}>Flag inappropriate behavior</Text>
               </View>
-              <Icon name="chevronRight" size={16} color="#4B5565" />
+              <Icon name="chevronRight" size={16} color={sheetChevronColor} />
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -1855,12 +1951,12 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   menuSquircleIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+    backgroundColor: 'transparent',
   },
   menuItemTextWrap: {
     flex: 1,

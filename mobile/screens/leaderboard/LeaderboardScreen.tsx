@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../../components/atoms/Avatar';
@@ -61,6 +62,14 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
   const [history, setHistory] = useState<MatchHistoryItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack]);
 
   useEffect(() => {
     fetchData();
@@ -362,7 +371,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
                 </View>
                 <View style={styles.playerStatsRight}>
                   <View style={styles.streakBadge}>
-                    <FlameIcon size={12} color="#FF8A00" />
+                    <FlameIcon size={14} />
                     <Text style={styles.streakText}>{player.highestStreak}</Text>
                   </View>
                   <Text style={[styles.wonCount, { color: theme.colors.primary }]}>

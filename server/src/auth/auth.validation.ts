@@ -35,9 +35,23 @@ export const googleSignInSchema = z.object({
   idToken: z.string().min(1, 'Google ID token or credential is required'),
 });
 
+export const deleteAccountSchema = z.object({
+  password: z.string().optional(),
+  googleToken: z.string().optional(),
+  confirm: z
+    .boolean({
+      message: 'Explicit confirmation is required to delete your account',
+    })
+    .refine((v) => v === true, {
+      message: 'Explicit confirmation is required to delete your account',
+    }),
+  reason: z.string().max(500, 'Reason must not exceed 500 characters').optional(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type GoogleSignInInput = z.infer<typeof googleSignInSchema>;
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
 

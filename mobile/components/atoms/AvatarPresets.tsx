@@ -11,8 +11,9 @@ export interface PresetAvatarOption {
   imageSource?: any;
 }
 
-// 20 WebP Avatars from user-provided avatars folder
+// 20 WebP Avatars from user-provided avatars folder + Otter mascot
 export const AVATAR_IMAGE_MAP: Record<string, any> = {
+  otter_mascot: require('../../assets/icon.png'),
   cosmic_golden_emblem_hero: require('../../assets/images/avatars/cosmic_golden_emblem_hero.webp'),
   einstein_inspired_cosmic_portrait: require('../../assets/images/avatars/einstein_inspired_cosmic_portrait.webp'),
   fiery_rabbit_streetwear_mascot: require('../../assets/images/avatars/fiery_rabbit_streetwear_mascot.webp'),

@@ -109,14 +109,20 @@ export interface ActiveMatch {
   aiDifficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
   aiPlayerId?: string;
   aiPlayerName?: string;
+  aiPlayerIds?: string[];
 }
 
 export class MatchManager {
   private static activeMatches = new Map<string, ActiveMatch>(); // roomCode -> ActiveMatch
   private static engines = new Map<string, () => GameEngine<any, any, any>>();
+  private static lastRoomResults = new Map<string, any>(); // roomCode -> MatchResultData
 
   static getActiveMatches(): ActiveMatch[] {
     return Array.from(this.activeMatches.values());
+  }
+
+  static getLastMatchResult(roomCode: string): any {
+    return this.lastRoomResults.get(roomCode.trim().toUpperCase()) || null;
   }
 
   static {
@@ -202,6 +208,7 @@ export class MatchManager {
       aiDifficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
       aiPlayerId?: string;
       aiPlayerName?: string;
+      aiPlayerIds?: string[];
     }
   ): ActiveMatch {
     const normalizedCode = roomCode.trim().toUpperCase();
@@ -241,6 +248,7 @@ export class MatchManager {
       aiDifficulty: options?.aiDifficulty,
       aiPlayerId: options?.aiPlayerId,
       aiPlayerName: options?.aiPlayerName,
+      aiPlayerIds: options?.aiPlayerIds,
     };
 
     this.activeMatches.set(normalizedCode, match);
@@ -431,18 +439,35 @@ export class MatchManager {
       Math.round((Date.now() - match.startedAt.getTime()) / 1000)
     );
 
-    // Emit game:over to all clients in room
-    emitRoom(match.roomCode, 'game:over', {
+    const winnerPlayer = match.players.find((p) => p.userId === winnerId);
+    const winnerName = outcome.winnerName || winnerPlayer?.displayName || winnerPlayer?.username || null;
+    const winnerAvatarUrl = outcome.winnerAvatarUrl || winnerPlayer?.avatarUrl || null;
+    const reason = outcome.reason || (isDraw ? 'DRAW' : winnerId ? 'WIN' : 'CANCELLED');
+
+    const matchResultPayload = {
       roomCode: match.roomCode,
+      gameType: match.gameType,
       winnerId: winnerId || null,
       winnerIds: outcome.winnerIds || (winnerId ? [winnerId] : []),
+      winnerName,
+      winnerAvatarUrl,
+      reason,
+      abandonedByUserId: outcome.abandonedByUserId || null,
+      abandonedByUsername: outcome.abandonedByUsername || null,
       rankings: outcome.rankings || null,
       isDraw: !!isDraw,
       winningLine: winningLine || null,
       scores: match.scores,
       round: match.round,
       durationSeconds,
-    });
+      finishedAt: new Date().toISOString(),
+    };
+
+    // Cache latest authoritative match result for players returning to lobby
+    MatchManager.lastRoomResults.set(match.roomCode.toUpperCase(), matchResultPayload);
+
+    // Emit game:over to all clients in room
+    emitRoom(match.roomCode, 'game:over', matchResultPayload);
 
     // Asynchronously record match persistence to database
     try {
@@ -659,12 +684,19 @@ export class MatchManager {
     if (!match || match.isConcluded) return;
 
     const remainingPlayer = match.players.find((p) => p.userId !== forfeitingUserId);
+    const forfeitingPlayer = match.players.find((p) => p.userId === forfeitingUserId);
     const winnerId = remainingPlayer?.userId || null;
 
     await this.handleMatchConcluded(match, {
       winnerId,
+      winnerIds: winnerId ? [winnerId] : [],
+      winnerName: remainingPlayer?.displayName || remainingPlayer?.username || null,
+      winnerAvatarUrl: remainingPlayer?.avatarUrl || null,
       isDraw: false,
       winningLine: null,
+      reason: 'ABANDONED',
+      abandonedByUserId: forfeitingUserId,
+      abandonedByUsername: forfeitingPlayer?.displayName || forfeitingPlayer?.username || 'A player',
     });
   }
 

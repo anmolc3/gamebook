@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -113,7 +114,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       ) {
         setIdentifierError(msg);
       } else {
-        setGeneralError(msg);
+        Alert.alert('Reset Code Error', msg);
       }
     } finally {
       setIsLoading(false);
@@ -220,7 +221,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       } else if (lower.includes('password')) {
         setPasswordError(msg);
       } else {
-        setGeneralError(msg);
+        Alert.alert('Reset Failed', msg);
       }
     } finally {
       setIsLoading(false);
@@ -232,7 +233,17 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
       visible={visible}
       animationType="slide"
       transparent={true}
-      onRequestClose={handleClose}
+      onRequestClose={() => {
+        if (step === 'verify') {
+          setCodeError(null);
+          setPasswordError(null);
+          setConfirmError(null);
+          setGeneralError(null);
+          setStep('request');
+        } else {
+          handleClose();
+        }
+      }}
     >
       <View style={[styles.backdrop, { backgroundColor: theme.colors.backdrop }]}>
         <KeyboardAvoidingView
@@ -316,24 +327,6 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 contentContainerStyle={styles.scrollContent}
                 bounces={false}
               >
-                {/* General / Server Error Banner (Only for non-field server errors) */}
-                {generalError && (
-                  <View
-                    style={[
-                      styles.generalErrorBanner,
-                      {
-                        backgroundColor: 'rgba(239, 68, 68, 0.12)',
-                        borderColor: theme.colors.error,
-                      },
-                    ]}
-                  >
-                    <Icon name="close" size={14} color={theme.colors.error} />
-                    <Text style={[styles.generalErrorText, { color: theme.colors.error }]}>
-                      {generalError}
-                    </Text>
-                  </View>
-                )}
-
                 {/* STEP 1: REQUEST CODE */}
                 {step === 'request' && (
                   <View style={styles.stepContainer}>

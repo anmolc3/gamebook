@@ -240,6 +240,23 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
   const player1 = playerList[0] || null;
   const player2 = playerList[1] || null;
 
+  const isPlayer2Bot =
+    player2?.userId?.startsWith('BOT_') ||
+    player2?.user?.displayName?.toLowerCase().includes('(ai)') ||
+    player2?.user?.displayName?.toLowerCase().includes('bot') ||
+    player2?.user?.displayName?.toLowerCase().includes('computer');
+  const getBotDiffLabel = (uid?: string, dName?: string) => {
+    if (dName && dName.startsWith('Otter (')) return '';
+    if (uid === 'BOT_PIXEL') return ' (Easy)';
+    if (uid === 'BOT_ACE') return ' (Hard)';
+    if (uid === 'BOT_ATLAS') return ' (Expert)';
+    return ' (Medium)';
+  };
+  const player2DisplayName = isPlayer2Bot
+    ? (player2?.user?.displayName?.startsWith('Otter') ? player2.user.displayName : `Otter${getBotDiffLabel(player2?.userId, player2?.user?.displayName)}`)
+    : (player2?.user?.displayName || 'Opponent');
+  const player2AvatarUrl = isPlayer2Bot ? 'otter_mascot' : (player2?.user?.avatarUrl || null);
+
   const getGameTitle = () => {
     switch (gameType) {
       case 'CARROM': return 'Carrom Board Arena';
@@ -799,15 +816,15 @@ export const BoardGame2Screen: React.FC<BoardGame2ScreenProps> = ({
             </Text>
           </View>
           <Text style={[styles.turnStatusText, { color: isMyTurn ? theme.colors.primary : theme.colors.textSecondary }]}>
-            {isMyTurn ? 'Your Turn' : 'Waiting...'}
+            {isMyTurn ? 'Your Turn' : `${player2DisplayName}'s Turn`}
           </Text>
         </View>
 
         <View style={styles.playerColumn}>
           <View style={[styles.avatarWrap, !isMyTurn && !isMatchOver && styles.activeAvatarWrap]}>
-            <Avatar avatarUrl={player2?.user?.avatarUrl || null} displayName={player2?.user?.displayName || 'Opponent'} size="md" />
+            <Avatar avatarUrl={player2AvatarUrl} displayName={player2DisplayName} size="md" />
           </View>
-          <Text style={styles.playerName} numberOfLines={1}>{player2?.user?.displayName || 'Opponent'}</Text>
+          <Text style={styles.playerName} numberOfLines={1}>{player2DisplayName}</Text>
           <Text style={styles.playerScore}>Wins: {scores[player2?.userId || ''] || 0}</Text>
         </View>
       </View>

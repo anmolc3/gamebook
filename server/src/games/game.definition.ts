@@ -11,6 +11,7 @@ export interface GamePlayerMeta {
   username: string;
   displayName: string;
   slotIndex: number;
+  avatarUrl?: string | null;
 }
 
 /**

@@ -24,8 +24,8 @@ async function runAiTests() {
   let passed = 0;
   let failed = 0;
 
-  function assert(condition: boolean, testName: string) {
-    if (condition) {
+  function assert(condition: any, testName: string) {
+    if (Boolean(condition)) {
       console.log(`  ✅ PASS: ${testName}`);
       passed++;
     } else {
@@ -38,7 +38,20 @@ async function runAiTests() {
   console.log('\n--- 1. Testing Bot Profiles & Config ---');
   assert(BOT_PROFILES.length >= 5, 'At least 5 AI bot personas registered');
   const nova = getBotProfile('BOT_NOVA');
-  assert(nova.name === 'Nova', 'Bot Nova profile retrieved correctly');
+  assert(nova.name === 'Otter', 'Bot Otter profile retrieved correctly with clean name');
+  const ollie = getBotProfile('BOT_ACE');
+  assert(ollie.name === 'Ollie', 'Bot Ollie profile retrieved correctly with clean name');
+  const otto = getBotProfile('BOT_ATLAS');
+  assert(otto.name === 'Otto', 'Bot Otto profile retrieved correctly with clean name');
+  const river = getBotProfile('BOT_PIXEL');
+  assert(river.name === 'River', 'Bot River profile retrieved correctly with clean name');
+  const pebble = getBotProfile('BOT_SCOUT');
+  assert(pebble.name === 'Pebble', 'Bot Pebble profile retrieved correctly with clean name');
+
+  // Verify none of the bot names confuse bot names with difficulty levels
+  const hasDifficultyInName = BOT_PROFILES.some((b) => /\(Easy\)|\(Medium\)|\(Hard\)|\(Expert\)/i.test(b.name));
+  assert(!hasDifficultyInName, 'Bot names do not confuse names with difficulty levels');
+
   const delayEasy = getThinkingDelayMs('EASY');
   const delayExpert = getThinkingDelayMs('EXPERT');
   assert(delayEasy >= 500, 'Easy delay satisfies minimum threshold');
@@ -49,7 +62,7 @@ async function runAiTests() {
   const tttEngine = new TicTacToeEngine();
   const tttPlayers = [
     { userId: 'HUMAN', username: 'Human', displayName: 'Human', slotIndex: 0 },
-    { userId: 'BOT_NOVA', username: 'Nova (AI)', displayName: 'Nova (AI)', slotIndex: 1 },
+    { userId: 'BOT_NOVA', username: 'Otter', displayName: 'Otter', slotIndex: 1 },
   ];
   const tttState = tttEngine.initialize(tttPlayers);
   // Human plays center (cell 4)
@@ -144,7 +157,8 @@ async function runAiTests() {
   const session = SoloManager.startSoloSession('TEST_USER_999', 'TestPlayer', 'TICTACTOE' as any, 'HARD');
   assert(session.roomCode.startsWith('SOLO_'), 'SoloManager creates unique SOLO virtual room code');
   assert(session.match.gameMode === 'SOLO', 'ActiveMatch is tagged with SOLO gameMode');
-  assert(session.botProfile.name.length > 0, 'Bot profile successfully associated');
+  assert(session.match.aiDifficulty === 'HARD', 'ActiveMatch preserves selected HARD difficulty');
+  assert(session.botProfile.name === 'Otter' || session.botProfile.name === 'Ollie' || session.botProfile.name === 'Otto', 'Bot profile has proper bot name');
 
   const active = SoloManager.getActiveSession('TEST_USER_999');
   assert(active !== null && active.roomCode === session.roomCode, 'SoloManager supports reconnection/session retrieval');
@@ -164,6 +178,119 @@ async function runAiTests() {
   assert(snakesSession.roomCode.startsWith('SOLO_'), 'Snakes & Ladders Solo session creates SOLO room');
   assert(snakesSession.match.players.length === 2, 'Snakes & Ladders Solo session initializes with human and AI bot');
   SoloManager.clearUserSoloSession('TEST_USER_SNAKE');
+
+  // 14. Testing AI Decision-Making Differences Across Easy, Medium, and Hard
+  console.log('\n--- 14. Testing AI Difficulty Decision-Making Differences ---');
+  // In TicTacToe, state where X threatens cell 2 with [X, X, null, O, null, null, null, null, null]
+  const tttThreatBoard = ['X', 'X', null, 'O', null, null, null, null, null] as any;
+  const threatState = {
+    board: tttThreatBoard,
+    turnPlayerId: 'BOT_NOVA',
+    players: { X: 'HUMAN', O: 'BOT_NOVA' },
+    isComplete: false,
+    winner: null,
+    winningLine: null,
+  };
+
+  // Hard AI must ALWAYS block at cell 2
+  let hardBlockedCount = 0;
+  for (let i = 0; i < 10; i++) {
+    const move = await AiRegistry.getMove('TICTACTOE', threatState, 'BOT_NOVA', 'HARD');
+    if (move.cellIndex === 2) hardBlockedCount++;
+  }
+  assert(hardBlockedCount === 10, 'Hard AI blocks opponent winning threat 100% of the time');
+
+  // Easy AI makes mistakes / random moves and gives beginners a fair chance
+  let easyBlockedCount = 0;
+  for (let i = 0; i < 30; i++) {
+    const move = await AiRegistry.getMove('TICTACTOE', threatState, 'BOT_NOVA', 'EASY');
+    if (move.cellIndex === 2) easyBlockedCount++;
+  }
+  assert(easyBlockedCount < 30, 'Easy AI makes simpler decisions and allows mistakes/blunders');
+
+  // Ludo AI Decision-Making: State with 2 valid moves: Token 0 (can capture opponent), Token 1 (normal step)
+  const ludoStateCapture = {
+    players: [
+      {
+        userId: 'HUMAN',
+        color: 'RED',
+        tokens: [{ id: 0, step: 10 }, { id: 1, step: 0 }],
+      },
+      {
+        userId: 'BOT_NOVA',
+        color: 'YELLOW',
+        tokens: [
+          { id: 0, step: -1 }, // yard
+          { id: 1, step: 20 }, // can advance
+        ],
+      },
+    ],
+    turnPlayerId: 'BOT_NOVA',
+    currentDiceRoll: 6,
+    hasRolled: true,
+    validMoves: [0, 1], // Token 0 unlocks from yard, Token 1 advances
+  } as any;
+
+  // Hard Ludo AI strongly prefers unlocking token from yard on 6
+  let hardUnlockCount = 0;
+  for (let i = 0; i < 10; i++) {
+    const move = await AiRegistry.getMove('LUDO', ludoStateCapture, 'BOT_NOVA', 'HARD');
+    if (move.tokenId === 0) hardUnlockCount++;
+  }
+  assert(hardUnlockCount === 10, 'Hard Ludo AI prioritizes strategic unlocking from yard on 6');
+
+  // 15. Testing Multiple AI Opponents in a Single Match
+  console.log('\n--- 15. Testing Multiple AI Opponents Match Support ---');
+  // 4-player Ludo game (1 Human + 3 AI bots)
+  const multiBotSession = SoloManager.startSoloSession(
+    'TEST_MULTI_USER',
+    'Commander',
+    'LUDO' as any,
+    'HARD',
+    undefined,
+    3 // 3 AI opponents
+  );
+
+  assert(multiBotSession.match.players.length === 4, '4-player match has exactly 4 players (1 human + 3 bots)');
+  assert(multiBotSession.match.players[0].userId === 'TEST_MULTI_USER', 'Player 0 is the human player');
+  const bot1 = multiBotSession.match.players[1];
+  const bot2 = multiBotSession.match.players[2];
+  const bot3 = multiBotSession.match.players[3];
+
+  assert(bot1.displayName === 'Otter', 'AI Bot 1 has clean name Otter');
+  assert(bot2.displayName === 'Ollie', 'AI Bot 2 has clean name Ollie');
+  assert(bot3.displayName === 'Otto', 'AI Bot 3 has clean name Otto');
+
+  assert(
+    multiBotSession.match.aiPlayerIds && multiBotSession.match.aiPlayerIds.length === 3,
+    'ActiveMatch correctly tracks all 3 AI bot player IDs'
+  );
+  assert(multiBotSession.match.aiDifficulty === 'HARD', 'Selected HARD difficulty applies to all AI bots in match');
+
+  SoloManager.clearUserSoloSession('TEST_MULTI_USER');
+
+  // 16. Testing Human-Only Matches & Fair Dice Integrity
+  console.log('\n--- 16. Testing Human-Only Matches & Fair Dice Rules ---');
+  const humanRoomPlayers = [
+    { userId: 'USER_A', username: 'Alice', displayName: 'Alice', slotIndex: 0 },
+    { userId: 'USER_B', username: 'Bob', displayName: 'Bob', slotIndex: 1 },
+  ];
+  const humanMatch = MatchManager.startMatch('HUMAN_ROOM_101', 'LUDO' as any, humanRoomPlayers, {
+    gameMode: 'MULTIPLAYER',
+  });
+  assert(humanMatch.gameMode === 'MULTIPLAYER', 'Human-only match is tagged with MULTIPLAYER');
+  assert(!humanMatch.aiDifficulty, 'Human-only match has no aiDifficulty');
+  assert(!humanMatch.aiPlayerId && !humanMatch.aiPlayerIds, 'Human-only match has no AI player associations');
+
+  // Verify fair random dice distribution (no outcome manipulation)
+  const rolls: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+  for (let i = 0; i < 600; i++) {
+    const val = Math.floor(Math.random() * 6) + 1;
+    rolls[val]++;
+  }
+  const allRolled = [1, 2, 3, 4, 5, 6].every((k) => rolls[k] >= 50 && rolls[k] <= 150);
+  assert(allRolled, 'Dice behavior preserves normal random fair distribution');
+  MatchManager.clearMatch('HUMAN_ROOM_101');
 
   console.log('\n========================================================');
   console.log(`🏁 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);

@@ -262,6 +262,30 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
   const turnTimerRef = useRef<any>(null);
   const isMyTurn = gameState?.turnPlayerId === user?.id;
 
+  const getBotDiffLabel = (uid?: string, dName?: string) => {
+    if (dName && dName.startsWith('Otter (')) return '';
+    if (uid === 'BOT_PIXEL') return ' (Easy)';
+    if (uid === 'BOT_ACE') return ' (Hard)';
+    if (uid === 'BOT_ATLAS') return ' (Expert)';
+    return ' (Medium)';
+  };
+
+  const resolvePlayerDisplayName = (uid: string | undefined) => {
+    if (!uid) return 'Player';
+    const found = playerList.find((p) => p.userId === uid);
+    const name = found?.user?.displayName || found?.user?.username || 'Player';
+    if (name.startsWith('Otter (')) return name;
+    if (
+      uid.startsWith('BOT_') ||
+      name.toLowerCase().includes('(ai)') ||
+      name.toLowerCase().includes('bot') ||
+      name.toLowerCase().includes('computer')
+    ) {
+      return `Otter${getBotDiffLabel(uid, name)}`;
+    }
+    return name;
+  };
+
   // Sync turn countdown
   useEffect(() => {
     if (gameState?.turnExpiresAt) {
@@ -425,7 +449,7 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
                         <VectorCard card={card} width={52} height={76} />
                         {item.playerId && (
                           <Text style={styles.trickPlayerTag} numberOfLines={1}>
-                            {playerList.find((p) => p.userId === item.playerId)?.user?.displayName || 'P'}
+                            {resolvePlayerDisplayName(item.playerId)}
                           </Text>
                         )}
                       </View>
@@ -448,7 +472,7 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
                     return (
                       <View key={uid} style={styles.warCardCol}>
                         <Text style={styles.warPlayerName}>
-                          {playerList.find((p) => p.userId === uid)?.user?.displayName || 'Player'}
+                          {resolvePlayerDisplayName(uid)}
                         </Text>
                         {card ? (
                           <VectorCard card={card} width={64} height={92} />
@@ -955,7 +979,7 @@ export const CardGameScreen: React.FC<CardGameScreenProps> = ({
           .map((p) => {
             const isTurn = gameState?.turnPlayerId === p.userId;
             const oppHand = gameState?.hands?.[p.userId] || [];
-            const pName = p.user?.displayName || p.user?.username || 'Player';
+            const pName = resolvePlayerDisplayName(p.userId);
             return (
               <View
                 key={p.userId}

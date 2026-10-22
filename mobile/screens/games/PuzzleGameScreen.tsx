@@ -439,10 +439,24 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
     const opponentGuesses = opponentId ? gameState?.guesses?.[opponentId] || [] : [];
     const isFinishedMe = gameState?.isFinished?.[user?.id || ''];
     const isMatchEnded = !!gameState?.winnerId;
-    const opponentName =
-      opponentPlayer?.user?.displayName ||
-      opponentPlayer?.user?.username ||
-      (opponentId ? 'AI Opponent' : 'Opponent');
+    const isAiOpponent =
+      opponentId?.startsWith('BOT_') ||
+      opponentPlayer?.user?.displayName?.toLowerCase().includes('(ai)') ||
+      opponentPlayer?.user?.displayName?.toLowerCase().includes('bot');
+    const getBotDiffLabel = (uid?: string, dName?: string) => {
+      if (dName && dName.startsWith('Otter (')) return '';
+      if (uid === 'BOT_PIXEL') return ' (Easy)';
+      if (uid === 'BOT_ACE') return ' (Hard)';
+      if (uid === 'BOT_ATLAS') return ' (Expert)';
+      return ' (Medium)';
+    };
+    const opponentName = isAiOpponent
+      ? (opponentPlayer?.user?.displayName?.startsWith('Otter')
+          ? opponentPlayer.user.displayName
+          : `Otter${getBotDiffLabel(opponentId, opponentPlayer?.user?.displayName)}`)
+      : opponentPlayer?.user?.displayName ||
+        opponentPlayer?.user?.username ||
+        'Opponent';
 
     return (
       <View style={styles.puzzleBox}>
@@ -452,7 +466,7 @@ export const PuzzleGameScreen: React.FC<PuzzleGameScreenProps> = ({
             <View style={styles.wordleOpponentHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={styles.wordleOpponentTitle}>
-                  🤖 {opponentName}
+                  {isAiOpponent ? '🦦' : '👤'} {opponentName}
                 </Text>
                 {opponentGuesses.length > 0 &&
                   opponentGuesses[opponentGuesses.length - 1]?.feedback?.every(

@@ -82,6 +82,8 @@ export class LudoEngine
       return {
         userId: p.userId,
         username: p.username,
+        displayName: p.displayName || p.username,
+        avatarUrl: p.avatarUrl || null,
         color,
         tokens,
       };
@@ -454,12 +456,24 @@ export class LudoEngine
     });
 
     const firstPlace = rankings.length > 0 ? rankings[0].userId : null;
+    const winnerPlayer = state.players.find((p) => p.userId === firstPlace);
 
     return {
       winnerId: firstPlace,
       winnerIds: state.winnerIds,
-      rankings,
+      winnerName: winnerPlayer?.displayName || winnerPlayer?.username || null,
+      winnerAvatarUrl: winnerPlayer?.avatarUrl || null,
+      rankings: rankings.map((r) => {
+        const pl = state.players.find((p) => p.userId === r.userId);
+        return {
+          ...r,
+          username: pl?.username,
+          displayName: pl?.displayName || pl?.username,
+          avatarUrl: pl?.avatarUrl || null,
+        };
+      }),
       isComplete: true,
+      reason: 'WIN',
     };
   }
 

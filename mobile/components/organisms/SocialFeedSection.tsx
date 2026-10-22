@@ -17,12 +17,48 @@ import { useAuth } from '../../features/auth/AuthContext';
 import { ImagePickerService } from '../../services/imagePicker.service';
 import { FeedService, FeedPostItem } from '../../services/feed.service';
 import { ImageCropperModal } from './ImageCropperModal';
+import { GameSelectorModal } from './GameSelectorModal';
+import { GAME_CAPABILITIES } from '../../constants/gameCapabilities';
 
 export type SocialFeedPost = FeedPostItem;
 
-// Component to dynamically display photos in any natural aspect ratio edge-to-edge
+/**
+ * Filter out legacy 'Social Arena Update' placeholder tag or empty tags.
+ * Only explicit game tags are displayed.
+ */
+export function shouldShowGameBadge(tag?: string | null): boolean {
+  if (!tag) return false;
+  const trimmed = tag.trim();
+  if (!trimmed) return false;
+  const lower = trimmed.toLowerCase();
+  if (lower.includes('social arena update')) return false;
+  if (lower === 'none') return false;
+  return true;
+}
+
+/**
+ * Resolves canonical game name from game ID or clean legacy title.
+ */
+export function getGameDisplayName(tag: string): string {
+  if (!tag) return '';
+  const trimmed = tag.trim();
+  if (GAME_CAPABILITIES[trimmed]?.name) {
+    return GAME_CAPABILITIES[trimmed].name;
+  }
+  const norm = trimmed.toUpperCase().replace(/[\s\-]+/g, '_');
+  if (GAME_CAPABILITIES[norm]?.name) {
+    return GAME_CAPABILITIES[norm].name;
+  }
+  const cleaned = trimmed
+    .replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\s]+/u, '')
+    .split('•')[0]
+    .trim();
+  return cleaned || trimmed;
+}
+
+// Component to dynamically display photos in any natural aspect ratio without unexpected cropping
 export const FeedPostImage: React.FC<{ uri: string }> = ({ uri }) => {
-  const [aspectRatio, setAspectRatio] = useState<number>(1.77);
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
     if (!uri) return;
@@ -30,14 +66,11 @@ export const FeedPostImage: React.FC<{ uri: string }> = ({ uri }) => {
       uri,
       (width, height) => {
         if (width > 0 && height > 0) {
-          // Clamp ratio between 0.6 (tall portrait) and 2.2 (wide panorama) for ideal mobile UX
-          const naturalRatio = width / height;
-          const clamped = Math.max(0.6, Math.min(2.2, naturalRatio));
-          setAspectRatio(clamped);
+          setAspectRatio(width / height);
         }
       },
       () => {
-        setAspectRatio(1.77);
+        // Fallback for data URIs / unmeasured
       }
     );
   }, [uri]);
@@ -46,8 +79,17 @@ export const FeedPostImage: React.FC<{ uri: string }> = ({ uri }) => {
     <View style={styles.fullBleedImageContainer}>
       <Image
         source={{ uri }}
-        style={[styles.fullBleedImage, { aspectRatio }]}
-        resizeMode="cover"
+        onLoad={(e) => {
+          const { width, height } = e.nativeEvent.source;
+          if (width > 0 && height > 0) {
+            setAspectRatio(width / height);
+          }
+        }}
+        style={[
+          styles.fullBleedImage,
+          aspectRatio ? { aspectRatio } : { height: 260 },
+        ]}
+        resizeMode="contain"
       />
     </View>
   );
@@ -75,6 +117,8 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [newPostText, setNewPostText] = useState('');
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
+  const [isGameSelectorVisible, setIsGameSelectorVisible] = useState(false);
   const [cropperImageUri, setCropperImageUri] = useState<string | null>(null);
   const [isCropperVisible, setIsCropperVisible] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
@@ -175,7 +219,7 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
       const createdPost = await FeedService.createPost({
         content: newPostText.trim(),
         imageUrl: newPostImage || undefined,
-        gameTag: '🎮 Social Arena Update',
+        gameTag: selectedGameId ? selectedGameId : undefined,
       });
 
       // Optimistically add or ensure in state
@@ -186,6 +230,7 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
 
       setNewPostText('');
       setNewPostImage(null);
+      setSelectedGameId(null);
     } catch (err: any) {
       Alert.alert('Failed to Publish', err.message || 'Could not connect to feed server.');
     } finally {
@@ -341,10 +386,10 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
               }}
               style={styles.attachedImageTouchable}
             >
-              <Image source={{ uri: newPostImage }} style={styles.attachedImagePreview} resizeMode="cover" />
+              <Image source={{ uri: newPostImage }} style={styles.attachedImagePreview} resizeMode="contain" />
               <View style={[styles.cropHintBadge, { backgroundColor: 'rgba(0,0,0,0.65)' }]}>
                 <Icon name="crop" size={12} color="#FFFFFF" />
-                <Text style={styles.cropHintText}>Tap to crop</Text>
+                <Text style={styles.cropHintText}>Tap to crop / adjust</Text>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
@@ -358,16 +403,89 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
           </View>
         )}
 
+        {/* Selected Game Tag Chip (if chosen) */}
+        {selectedGameId && (
+          <View style={styles.composerGameRow}>
+            <View
+              style={[
+                styles.selectedGameBadge,
+                {
+                  backgroundColor: theme.colors.cardTintMint || 'rgba(62, 213, 152, 0.12)',
+                  borderColor: theme.colors.primary,
+                },
+              ]}
+            >
+              <GameLogo gameType={selectedGameId} size={18} borderRadius={4} />
+              <Text
+                style={[styles.selectedGameText, { color: theme.colors.primary }]}
+                numberOfLines={1}
+              >
+                {getGameDisplayName(selectedGameId)}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsGameSelectorVisible(true)}
+                style={styles.changeGameBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.changeGameBtnText, { color: theme.colors.textMuted }]}>
+                  Change
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setSelectedGameId(null)}
+                style={styles.removeGameBtn}
+                activeOpacity={0.7}
+                accessibilityLabel="Remove game tag"
+              >
+                <Icon name="close" size={12} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Action toolbar */}
         <View style={[styles.composerToolbar, { borderTopColor: theme.colors.divider }]}>
-          <TouchableOpacity
-            onPress={handlePickLocalImage}
-            style={styles.attachPhotoBtn}
-            activeOpacity={0.8}
-            accessibilityLabel="Attach Photo"
-          >
-            <Icon name="camera" size={26} color={theme.colors.primary} />
-          </TouchableOpacity>
+          <View style={styles.toolbarLeftActions}>
+            <TouchableOpacity
+              onPress={handlePickLocalImage}
+              style={styles.attachPhotoBtn}
+              activeOpacity={0.8}
+              accessibilityLabel="Attach Photo"
+            >
+              <Icon name="camera" size={24} color={theme.colors.primary} />
+            </TouchableOpacity>
+
+            {/* Optional Related Game Trigger Button */}
+            <TouchableOpacity
+              onPress={() => setIsGameSelectorVisible(true)}
+              style={[
+                styles.tagGameActionBtn,
+                {
+                  borderColor: selectedGameId ? theme.colors.primary : theme.colors.border,
+                  backgroundColor: selectedGameId
+                    ? theme.colors.cardTintMint || 'rgba(62, 213, 152, 0.12)'
+                    : theme.colors.surfaceElevated,
+                },
+              ]}
+              activeOpacity={0.75}
+              accessibilityLabel="Select Related Game"
+            >
+              <Icon
+                name="gamepad"
+                size={16}
+                color={selectedGameId ? theme.colors.primary : theme.colors.textSecondary}
+              />
+              <Text
+                style={[
+                  styles.tagGameActionText,
+                  { color: selectedGameId ? theme.colors.primary : theme.colors.textSecondary },
+                ]}
+                numberOfLines={1}
+              >
+                {selectedGameId ? getGameDisplayName(selectedGameId) : 'Related Game'}
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             onPress={handleCreatePost}
@@ -472,7 +590,7 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
               </TouchableOpacity>
 
               <View style={styles.headerRightActions}>
-                {post.gameTag && (
+                {shouldShowGameBadge(post.gameTag) && (
                   <View style={[styles.gameTagPill, { backgroundColor: theme.colors.cardTintMint, flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
                     <GameLogo
                       gameType={post.gameTag}
@@ -480,8 +598,8 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
                       borderRadius={4}
                       fallbackIcon="gamepad"
                     />
-                    <Text style={[styles.gameTagText, { color: theme.colors.primary }]}>
-                      {post.gameTag}
+                    <Text style={[styles.gameTagText, { color: theme.colors.primary }]} numberOfLines={1}>
+                      {getGameDisplayName(post.gameTag!)}
                     </Text>
                   </View>
                 )}
@@ -626,7 +744,7 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
           </View>
         );
       })}
-      {/* Photo Cropper Modal with all aspect ratios (Original, 1:1, 4:5, 16:9, 9:16, 4:3, 3:2) and Done button */}
+      {/* Photo Cropper Modal with all aspect ratios (Original, 1:1, 4:5, 3:4, 16:9, Free) and Done button */}
       <ImageCropperModal
         visible={isCropperVisible}
         imageUri={cropperImageUri}
@@ -635,6 +753,14 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
           setNewPostImage(resultUri);
           setIsCropperVisible(false);
         }}
+      />
+
+      {/* Optional Related Game Selector Modal */}
+      <GameSelectorModal
+        visible={isGameSelectorVisible}
+        selectedGameId={selectedGameId}
+        onSelectGame={(gameId) => setSelectedGameId(gameId)}
+        onClose={() => setIsGameSelectorVisible(false)}
       />
     </View>
   );
@@ -712,6 +838,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  composerGameRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectedGameBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  selectedGameText: {
+    fontSize: 12,
+    fontWeight: '700',
+    maxWidth: 160,
+  },
+  changeGameBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  changeGameBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  removeGameBtn: {
+    padding: 3,
+  },
   composerToolbar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -720,10 +879,29 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
   },
+  toolbarLeftActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   attachPhotoBtn: {
     padding: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tagGameActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  tagGameActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    maxWidth: 140,
   },
   postSubmitBtn: {
     paddingHorizontal: 18,

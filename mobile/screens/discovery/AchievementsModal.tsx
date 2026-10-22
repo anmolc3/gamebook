@@ -79,9 +79,10 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({
 
   const renderBadgeIcon = (iconName: string, isUnlocked: boolean) => {
     const color = isUnlocked ? '#FFD700' : 'rgba(255,255,255,0.3)';
+    const style = isUnlocked ? undefined : { opacity: 0.4 };
     switch (iconName) {
       case 'FlameIcon':
-        return <FlameIcon size={24} color={isUnlocked ? '#FF8A00' : color} />;
+        return <FlameIcon size={28} style={style} />;
       case 'CrownIcon':
         return <CrownIcon size={24} color={color} />;
       case 'TargetIcon':
@@ -89,7 +90,7 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({
       case 'ClockIcon':
         return <ClockIcon size={24} color={color} />;
       default:
-        return <TrophyIcon size={24} color={color} />;
+        return <TrophyIcon size={28} style={style} />;
     }
   };
 

@@ -19,6 +19,7 @@ interface InputFieldProps extends TextInputProps {
   onPressRightIcon?: () => void;
   isPassword?: boolean;
   containerStyle?: ViewStyle;
+  minimal?: boolean;
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
@@ -29,6 +30,7 @@ export const InputField: React.FC<InputFieldProps> = ({
   onPressRightIcon,
   isPassword,
   containerStyle,
+  minimal = false,
   style,
   onFocus,
   onBlur,
@@ -41,6 +43,8 @@ export const InputField: React.FC<InputFieldProps> = ({
 
   const isPasswordField = isPassword || secureTextEntry;
 
+  const isDark = theme.mode === 'dark';
+
   return (
     <View style={[styles.container, containerStyle]}>
       {label && (
@@ -51,42 +55,75 @@ export const InputField: React.FC<InputFieldProps> = ({
       <View
         style={[
           styles.inputWrapper,
-          {
-            backgroundColor: theme.colors.surface,
-            borderRadius: theme.radius.lg,
-            borderColor: error
-              ? theme.colors.error
-              : isFocused
-              ? theme.colors.borderFocus
-              : theme.colors.border,
-            borderWidth: isFocused || error ? 1.5 : 1,
-          },
+          minimal
+            ? {
+                backgroundColor: isDark ? '#121212' : theme.colors.surface,
+                borderRadius: 14,
+                borderColor: error
+                  ? '#FF4D6D'
+                  : isFocused
+                  ? '#FF5E3A'
+                  : isDark
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : theme.colors.border,
+                borderWidth: 1,
+                height: 52,
+                paddingHorizontal: 14,
+              }
+            : {
+                backgroundColor: theme.colors.surface,
+                borderRadius: theme.radius.lg,
+                borderColor: error
+                  ? theme.colors.error
+                  : isFocused
+                  ? theme.colors.borderFocus
+                  : theme.colors.border,
+                borderWidth: isFocused || error ? 1.5 : 1,
+              },
         ]}
       >
         {leftIcon && (
           <View
             style={[
               styles.leftIconContainer,
-              {
-                backgroundColor: isFocused
-                  ? theme.colors.cardTintMint
-                  : theme.colors.surfaceElevated,
-                borderRadius: theme.radius.md,
-              },
+              minimal
+                ? {
+                    backgroundColor: 'transparent',
+                    width: 28,
+                    height: 28,
+                    marginRight: 8,
+                  }
+                : {
+                    backgroundColor: isFocused
+                      ? theme.colors.cardTintMint
+                      : theme.colors.surfaceElevated,
+                    borderRadius: theme.radius.md,
+                  },
             ]}
           >
             <Icon
               name={leftIcon}
-              size={18}
-              color={isFocused ? theme.colors.primary : theme.colors.textMuted}
+              size={minimal ? 20 : 18}
+              color={
+                minimal
+                  ? isFocused
+                    ? '#FF5E3A'
+                    : isDark
+                    ? '#7E889B'
+                    : theme.colors.textMuted
+                  : isFocused
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+              strokeWidth={1.8}
             />
           </View>
         )}
         <TextInput
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={minimal ? (isDark ? '#64748B' : theme.colors.textMuted) : theme.colors.textMuted}
           style={[
             styles.input,
-            { color: theme.colors.textPrimary },
+            { color: minimal ? (isDark ? '#FFFFFF' : theme.colors.textPrimary) : theme.colors.textPrimary },
             style,
           ]}
           onFocus={(e) => {
@@ -110,7 +147,18 @@ export const InputField: React.FC<InputFieldProps> = ({
             <Icon
               name={isPasswordVisible ? 'eyeOff' : 'eye'}
               size={20}
-              color={isPasswordVisible ? theme.colors.primary : theme.colors.textMuted}
+              color={
+                minimal
+                  ? isPasswordVisible
+                    ? '#FF2A6D'
+                    : isDark
+                    ? '#7E889B'
+                    : theme.colors.textMuted
+                  : isPasswordVisible
+                  ? theme.colors.primary
+                  : theme.colors.textMuted
+              }
+              strokeWidth={1.8}
             />
           </TouchableOpacity>
         ) : rightIcon ? (
@@ -120,12 +168,17 @@ export const InputField: React.FC<InputFieldProps> = ({
             style={styles.rightIconContainer}
             activeOpacity={onPressRightIcon ? 0.7 : 1}
           >
-            <Icon name={rightIcon} size={18} color={theme.colors.textMuted} />
+            <Icon
+              name={rightIcon}
+              size={18}
+              color={minimal ? (isDark ? '#7E889B' : theme.colors.textMuted) : theme.colors.textMuted}
+              strokeWidth={1.8}
+            />
           </TouchableOpacity>
         ) : null}
       </View>
       {error && (
-        <Text style={[styles.errorText, { color: theme.colors.error }]}>
+        <Text style={[styles.errorText, { color: '#FF4D6D' }]}>
           {error}
         </Text>
       )}

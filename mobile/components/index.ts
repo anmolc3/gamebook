@@ -13,6 +13,7 @@ export * from './molecules/IconButton';
 export * from './molecules/InputField';
 export * from './molecules/StatCard';
 export * from './molecules/StoryAvatar';
+export * from './molecules/AiDifficultySelector';
 
 export * from './organisms/AppHeader';
 export * from './organisms/GameCard';
@@ -34,3 +35,6 @@ export * from './organisms/GroupDetailsModal';
 export * from './atoms/MessageReceiptTicks';
 export * from './organisms/MessageInfoModal';
 export * from './organisms/GameAlertModal';
+export * from './organisms/GameSelectorModal';
+export * from './organisms/OtterMascotAnimation';
+export * from './organisms/DeleteAccountModal';

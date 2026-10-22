@@ -199,12 +199,12 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
   },
   WORDLE_DUEL: {
     id: 'WORDLE_DUEL',
-    name: 'Wordle Duel vs AI',
+    name: 'Wordle Duel vs Otter',
     category: 'PUZZLE',
     type: 'AI_OPPONENT',
     difficulties: ['EASY', 'MEDIUM', 'HARD', 'EXPERT'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Race against an intelligent AI bot to deduce the 5-letter secret word in 6 attempts.',
+    description: 'Race against Otter to deduce the 5-letter secret word in 6 attempts.',
     iconName: 'type',
   },
   HANGMAN: {
@@ -285,7 +285,7 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
     type: 'AI_OPPONENT',
     difficulties: ['EASY', 'MEDIUM', 'HARD'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Billiards cue sports duel against an intelligent bot.',
+    description: 'Billiards cue sports duel against Otter.',
     iconName: 'target',
   },
   CARROM: {
@@ -307,7 +307,7 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
     type: 'AI_OPPONENT',
     difficulties: ['EASY', 'MEDIUM', 'HARD'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Bluff and bet against AI opponents with virtual chips.',
+    description: 'Bluff and bet against Otter with virtual chips.',
     iconName: 'gamepad',
   },
   HEARTS: {
@@ -327,7 +327,7 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
     type: 'AI_OPPONENT',
     difficulties: ['EASY', 'MEDIUM', 'HARD'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Bid tricks and play trump spades against AI partners.',
+    description: 'Bid tricks and play trump spades against Otter.',
     iconName: 'gamepad',
   },
   RUMMY: {
@@ -409,7 +409,7 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
     type: 'AI_OPPONENT',
     difficulties: ['EASY', 'MEDIUM', 'HARD'],
     defaultDifficulty: 'MEDIUM',
-    description: 'Fast reflex shootout against AI gunfighters.',
+    description: 'Fast reflex shootout against Otter.',
     iconName: 'target',
   },
 
@@ -498,27 +498,52 @@ export const SOLO_SUPPORTED_GAMES: Record<string, SoloGameInfo> = {
 
 export const BOT_AVATARS: Record<string, { name: string; title: string; personality: string }> = {
   BOT_NOVA: {
-    name: 'Nova',
+    name: 'Otter',
+    title: 'Tactical Strategist',
+    personality: 'Balanced and methodical. Calculates thoughtful moves.',
+  },
+  BOT_OTTER: {
+    name: 'Otter',
     title: 'Tactical Strategist',
     personality: 'Balanced and methodical. Calculates thoughtful moves.',
   },
   BOT_ACE: {
-    name: 'Ace',
+    name: 'Ollie',
+    title: 'Aggressive Master',
+    personality: 'Sharp and opportunistic. Capitalizes quickly on errors.',
+  },
+  BOT_OLLIE: {
+    name: 'Ollie',
     title: 'Aggressive Master',
     personality: 'Sharp and opportunistic. Capitalizes quickly on errors.',
   },
   BOT_ATLAS: {
-    name: 'Atlas',
+    name: 'Otto',
+    title: 'Grandmaster Solver',
+    personality: 'Deep calculation with long-term positional foresight.',
+  },
+  BOT_OTTO: {
+    name: 'Otto',
     title: 'Grandmaster Solver',
     personality: 'Deep calculation with long-term positional foresight.',
   },
   BOT_PIXEL: {
-    name: 'Pixel',
+    name: 'River',
+    title: 'Casual Companion',
+    personality: 'Friendly, playful, and great for newcomers to learn against.',
+  },
+  BOT_RIVER: {
+    name: 'River',
     title: 'Casual Companion',
     personality: 'Friendly, playful, and great for newcomers to learn against.',
   },
   BOT_SCOUT: {
-    name: 'Scout',
+    name: 'Pebble',
+    title: 'Agile Competitor',
+    personality: 'Quick reflex decisions and dynamic counterplay.',
+  },
+  BOT_PEBBLE: {
+    name: 'Pebble',
     title: 'Agile Competitor',
     personality: 'Quick reflex decisions and dynamic counterplay.',
   },

@@ -24,13 +24,15 @@ export class SoloManager {
 
   /**
    * Initializes an authoritative Solo Match (Human vs AI or Solo Puzzle)
+   * Supports single or multiple AI bot opponents with the selected difficulty.
    */
   static startSoloSession(
     userId: string,
     username: string,
     gameType: GameType,
     difficulty: AiDifficulty = 'MEDIUM',
-    preferredBotId?: string
+    preferredBotId?: string,
+    botCount: number = 1
   ): {
     roomCode: string;
     match: ActiveMatch;
@@ -39,7 +41,8 @@ export class SoloManager {
     // Clear any previous solo session for this user
     this.clearUserSoloSession(userId);
 
-    const botProfile = getBotProfile(preferredBotId || difficulty);
+    const safeBotCount = Math.max(1, botCount || 1);
+    const primaryBot = getBotProfile(preferredBotId);
     const virtualCode = `SOLO_${userId.slice(0, 6).toUpperCase()}_${Date.now().toString(36).toUpperCase()}`;
 
     const humanPlayer: GamePlayerMeta = {
@@ -49,35 +52,48 @@ export class SoloManager {
       slotIndex: 0,
     };
 
-    const aiPlayer: GamePlayerMeta = {
-      userId: botProfile.id,
-      username: `${botProfile.name} (AI)`,
-      displayName: `${botProfile.name} (AI)`,
-      slotIndex: 1,
-    };
+    // Build distinct AI bot opponents list from BOT_PROFILES (Otter, Ollie, Otto, River, Pebble)
+    const selectedProfiles: AiBotProfile[] = [primaryBot];
+    for (const p of BOT_PROFILES) {
+      if (selectedProfiles.length >= safeBotCount) break;
+      if (!selectedProfiles.some((sp) => sp.id === p.id || sp.name.toLowerCase() === p.name.toLowerCase())) {
+        selectedProfiles.push(p);
+      }
+    }
 
-    // Determine players: For opponent games, human + AI. For single-player games, human only or with bot
+    const aiPlayers: GamePlayerMeta[] = selectedProfiles.map((prof, idx) => ({
+      userId: prof.id,
+      username: prof.name,
+      displayName: prof.name,
+      avatarUrl: 'otter_mascot',
+      slotIndex: idx + 1,
+    }));
+
+    // Determine players: For opponent games, human + AI(s). For single-player games, human only or with bot
     const isAiGame = AiRegistry.isAiSupported(gameType);
-    const players = isAiGame ? [humanPlayer, aiPlayer] : [humanPlayer];
+    const players = isAiGame ? [humanPlayer, ...aiPlayers] : [humanPlayer];
+    const aiPlayerIds = aiPlayers.map((p) => p.userId);
 
     const match = MatchManager.startMatch(virtualCode, gameType, players, {
       gameMode: 'SOLO',
       aiDifficulty: difficulty,
-      aiPlayerId: botProfile.id,
-      aiPlayerName: botProfile.name,
+      aiPlayerId: aiPlayers[0]?.userId,
+      aiPlayerName: aiPlayers[0]?.displayName,
+      aiPlayerIds,
     });
 
     this.userActiveSolo.set(userId, virtualCode);
 
     // If AI is configured to move first (or simultaneous race games like WORDLE_DUEL)
-    if (isAiGame && (match.state?.turnPlayerId === botProfile.id || gameType === 'WORDLE_DUEL')) {
+    const isFirstTurnAi = isAiGame && (aiPlayerIds.includes(match.state?.turnPlayerId) || gameType === 'WORDLE_DUEL');
+    if (isFirstTurnAi) {
       this.scheduleAiTurn(match);
     }
 
     return {
       roomCode: virtualCode,
       match,
-      botProfile,
+      botProfile: primaryBot,
     };
   }
 
@@ -85,19 +101,22 @@ export class SoloManager {
    * Called whenever a move concludes in an active match
    */
   static onPlayerActionCompleted(match: ActiveMatch): void {
-    if (match.isConcluded || match.gameMode !== 'SOLO' || !match.aiPlayerId) {
+    if (match.isConcluded || match.gameMode !== 'SOLO') {
       return;
     }
 
-    // Check if it's the AI's turn
+    const aiIds = match.aiPlayerIds || (match.aiPlayerId ? [match.aiPlayerId] : []);
+    if (aiIds.length === 0) return;
+
+    // Check if it's ANY AI player's turn
     const state = match.state;
     const isAiTurn =
-      state?.turnPlayerId === match.aiPlayerId ||
-      // Simultaneous games like RPS where AI hasn't made its choice yet
-      (state?.choices && state?.choices[match.aiPlayerId] === null) ||
+      aiIds.includes(state?.turnPlayerId) ||
+      // Simultaneous games like RPS where any AI hasn't made its choice yet
+      (state?.choices && aiIds.some((id) => state.choices[id] === null)) ||
       // Simultaneous puzzle race games like Wordle Duel
       (match.gameType === 'WORDLE_DUEL' &&
-        !state?.isFinished?.[match.aiPlayerId] &&
+        aiIds.some((id) => !state?.isFinished?.[id]) &&
         !this.pendingAiTimers.has(match.roomCode));
 
     if (isAiTurn) {
@@ -110,8 +129,24 @@ export class SoloManager {
    */
   private static scheduleAiTurn(match: ActiveMatch): void {
     const roomCode = match.roomCode;
-    const aiPlayerId = match.aiPlayerId;
-    if (!aiPlayerId) return;
+    const aiIds = match.aiPlayerIds || (match.aiPlayerId ? [match.aiPlayerId] : []);
+    if (aiIds.length === 0) return;
+
+    // Find the current AI bot that should act
+    let targetAiId = aiIds.find((id) => id === match.state?.turnPlayerId);
+    if (!targetAiId) {
+      if (match.state?.choices) {
+        targetAiId = aiIds.find((id) => match.state.choices[id] === null);
+      } else if (match.gameType === 'WORDLE_DUEL') {
+        targetAiId = aiIds.find((id) => !match.state?.isFinished?.[id]);
+      }
+    }
+    if (!targetAiId) {
+      targetAiId = aiIds[0];
+    }
+
+    const aiPlayerMeta = match.players.find((p) => p.userId === targetAiId);
+    const targetAiName = aiPlayerMeta?.displayName || 'Otter';
 
     // Clear any existing timer for this room
     const existing = this.pendingAiTimers.get(roomCode);
@@ -148,8 +183,8 @@ export class SoloManager {
     // Broadcast that AI is thinking
     emitRoom(roomCode, 'solo:ai_thinking', {
       roomCode,
-      aiPlayerId,
-      aiPlayerName: match.aiPlayerName,
+      aiPlayerId: targetAiId,
+      aiPlayerName: targetAiName,
       thinkingMs: delayMs,
     });
 
@@ -159,27 +194,27 @@ export class SoloManager {
       try {
         if (match.isConcluded) return;
 
-        // Calculate AI move
+        // Calculate AI move for the active bot
         const aiMove = await AiRegistry.getMove(
           match.gameType,
           match.state,
-          aiPlayerId,
+          targetAiId,
           difficulty
         );
 
         if (!aiMove) {
-          console.warn(`[SoloManager] AI returned no move for ${match.gameType}`);
+          console.warn(`[SoloManager] AI returned no move for ${match.gameType} (${targetAiId})`);
           return;
         }
 
         // Apply action through the exact same authoritative MatchManager
-        await MatchManager.handleAction(roomCode, aiPlayerId, aiMove);
+        await MatchManager.handleAction(roomCode, targetAiId, aiMove);
 
         // For simultaneous games like WORDLE_DUEL, schedule next AI guess if not finished
         if (
           match.gameType === 'WORDLE_DUEL' &&
           !match.isConcluded &&
-          !match.state?.isFinished?.[aiPlayerId]
+          !match.state?.isFinished?.[targetAiId]
         ) {
           this.scheduleAiTurn(match);
         }

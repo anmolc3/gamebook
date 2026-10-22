@@ -1088,17 +1088,49 @@ export class ChatService {
         groupTitle: conv.title || 'Group',
       };
 
-      // Real-time dispatch to every other group member
+      // Check for @username mentions in message content
+      const mentionMatches = input.content.match(/@(\w+)/g);
+      const mentionedUserIds = new Set<string>();
+      if (mentionMatches && mentionMatches.length > 0) {
+        const mentionedUsernames = mentionMatches.map((m) => m.slice(1).toLowerCase());
+        for (const mUsername of mentionedUsernames) {
+          const targetMember = conv.members.find(
+            (m) => m.userId !== userId && m.user.username.toLowerCase() === mUsername
+          );
+          if (targetMember) {
+            mentionedUserIds.add(targetMember.userId);
+            PushNotificationService.notifyMention(
+              targetMember.userId,
+              senderName,
+              input.content.trim(),
+              {
+                conversationId,
+                senderId: userId,
+                messageId: message.id,
+                senderName,
+              }
+            ).catch(() => null);
+          }
+        }
+      }
+
+      // Real-time dispatch to every other group member and persist notifications
       conv.members.forEach((mem) => {
         if (mem.userId !== userId) {
           emitToUser(mem.userId, 'chat:message_received', messagePayload);
 
-          // Push notifications to offline members
-          if (!isUserOnline(mem.userId)) {
+          // If member was not already notified via mention, notify of new message
+          if (!mentionedUserIds.has(mem.userId)) {
             PushNotificationService.notifyNewMessage(
               mem.userId,
               `${conv.title || 'Group'} • ${senderName}`,
-              input.content.trim()
+              input.content.trim(),
+              {
+                conversationId,
+                senderId: userId,
+                messageId: message.id,
+                senderName,
+              }
             ).catch(() => null);
           }
         }
@@ -1178,20 +1210,52 @@ export class ChatService {
     if (peerId) {
       emitToUser(peerId, 'chat:message_received', messagePayload);
 
-      if (!recipientOnline) {
-        if (input.type === 'GAME_INVITE' && input.metadata) {
-          const meta = input.metadata as any;
-          const roomCode: string = meta?.roomCode || '';
-          const gameName: string = meta?.gameName || 'a game';
-          PushNotificationService.notifyGameInvite(
-            peerId,
+      // Check for @mention in 1-on-1 chat
+      const mentionMatches = input.content.match(/@(\w+)/g);
+      const isMentioned =
+        mentionMatches &&
+        peerMember?.user?.username &&
+        mentionMatches.some((m) => m.slice(1).toLowerCase() === peerMember.user.username.toLowerCase());
+
+      if (isMentioned) {
+        PushNotificationService.notifyMention(
+          peerId,
+          senderName,
+          input.content.trim(),
+          {
+            conversationId,
+            senderId: userId,
+            messageId: message.id,
             senderName,
-            gameName,
-            roomCode
-          ).catch(() => null);
-        } else {
-          PushNotificationService.notifyNewMessage(peerId, senderName, input.content.trim()).catch(() => null);
-        }
+          }
+        ).catch(() => null);
+      } else if (input.type === 'GAME_INVITE' && input.metadata) {
+        const meta = input.metadata as any;
+        const roomCode: string = meta?.roomCode || '';
+        const gameName: string = meta?.gameName || 'a game';
+        PushNotificationService.notifyGameInvite(
+          peerId,
+          senderName,
+          gameName,
+          roomCode,
+          {
+            inviterId: userId,
+            gameType: meta?.gameType,
+            conversationId,
+          }
+        ).catch(() => null);
+      } else {
+        PushNotificationService.notifyNewMessage(
+          peerId,
+          senderName,
+          input.content.trim(),
+          {
+            conversationId,
+            senderId: userId,
+            messageId: message.id,
+            senderName,
+          }
+        ).catch(() => null);
       }
     }
 

@@ -10,55 +10,88 @@ export const AI_CONFIG = {
 export const BOT_PROFILES: AiBotProfile[] = [
   {
     id: 'BOT_NOVA',
-    name: 'Nova',
+    name: 'Otter',
     title: 'Tactical Strategist',
-    avatarSeed: 'nova-ai',
+    avatarSeed: 'otter_mascot',
     personality: 'Balanced and methodical. Calculates thoughtful moves.',
     preferredDifficulty: 'MEDIUM',
   },
   {
     id: 'BOT_ACE',
-    name: 'Ace',
+    name: 'Ollie',
     title: 'Aggressive Master',
-    avatarSeed: 'ace-ai',
+    avatarSeed: 'otter_mascot',
     personality: 'Sharp and opportunistic. Capitalizes quickly on errors.',
     preferredDifficulty: 'HARD',
   },
   {
     id: 'BOT_ATLAS',
-    name: 'Atlas',
+    name: 'Otto',
     title: 'Grandmaster Solver',
-    avatarSeed: 'atlas-ai',
+    avatarSeed: 'otter_mascot',
     personality: 'Deep calculation with long-term positional foresight.',
-    preferredDifficulty: 'EXPERT',
+    preferredDifficulty: 'HARD',
   },
   {
     id: 'BOT_PIXEL',
-    name: 'Pixel',
+    name: 'River',
     title: 'Casual Companion',
-    avatarSeed: 'pixel-ai',
+    avatarSeed: 'otter_mascot',
     personality: 'Friendly, playful, and great for newcomers to learn against.',
     preferredDifficulty: 'EASY',
   },
   {
     id: 'BOT_SCOUT',
-    name: 'Scout',
+    name: 'Pebble',
     title: 'Agile Competitor',
-    avatarSeed: 'scout-ai',
+    avatarSeed: 'otter_mascot',
     personality: 'Quick reflex decisions and dynamic counterplay.',
     preferredDifficulty: 'MEDIUM',
   },
 ];
 
+// Mapping aliases for bot IDs and names
+const BOT_ALIASES: Record<string, string> = {
+  bot_otter: 'BOT_NOVA',
+  otter: 'BOT_NOVA',
+  bot_ollie: 'BOT_ACE',
+  ollie: 'BOT_ACE',
+  bot_otto: 'BOT_ATLAS',
+  otto: 'BOT_ATLAS',
+  bot_river: 'BOT_PIXEL',
+  river: 'BOT_PIXEL',
+  bot_pebble: 'BOT_SCOUT',
+  pebble: 'BOT_SCOUT',
+};
+
 export function getBotProfile(botIdOrDifficulty?: string): AiBotProfile {
   if (botIdOrDifficulty) {
-    const byId = BOT_PROFILES.find((b) => b.id === botIdOrDifficulty || b.name.toLowerCase() === botIdOrDifficulty.toLowerCase());
+    const raw = botIdOrDifficulty.trim();
+    const lower = raw.toLowerCase();
+
+    // Check direct ID match
+    const byId = BOT_PROFILES.find(
+      (b) => b.id === raw || b.id.toLowerCase() === lower
+    );
     if (byId) return byId;
 
-    const byDiff = BOT_PROFILES.find((b) => b.preferredDifficulty === botIdOrDifficulty);
+    // Check alias or name match
+    const aliasId = BOT_ALIASES[lower];
+    if (aliasId) {
+      const byAlias = BOT_PROFILES.find((b) => b.id === aliasId);
+      if (byAlias) return byAlias;
+    }
+
+    const byName = BOT_PROFILES.find((b) => b.name.toLowerCase() === lower);
+    if (byName) return byName;
+
+    // Check preferred difficulty
+    const byDiff = BOT_PROFILES.find(
+      (b) => b.preferredDifficulty === raw.toUpperCase()
+    );
     if (byDiff) return byDiff;
   }
-  // Default to Nova
+  // Default to Otter
   return BOT_PROFILES[0];
 }
 
@@ -83,3 +116,4 @@ export function getThinkingDelayMs(difficulty: AiDifficulty): number {
       return min + randomJitter;
   }
 }
+

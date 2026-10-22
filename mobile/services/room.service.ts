@@ -27,6 +27,16 @@ export type SupportedGameType =
   | 'CARDS'
   | string;
 
+export interface LastMatchResult {
+  winnerId?: string | null;
+  winnerName?: string | null;
+  winnerAvatarUrl?: string | null;
+  reason?: 'WIN' | 'ABANDONED' | 'DRAW' | 'FORFEIT' | string;
+  abandonedByUserId?: string;
+  abandonedByUsername?: string;
+  finishedAt: number;
+}
+
 export interface RoomDetails {
   id: string;
   code: string;
@@ -42,6 +52,7 @@ export interface RoomDetails {
     avatarUrl: string | null;
   } | null;
   players: RoomPlayer[];
+  lastMatchResult?: LastMatchResult | null;
   createdAt: string;
   updatedAt: string;
 }

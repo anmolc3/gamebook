@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,19 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Circle, Polyline, Rect, G } from 'react-native-svg';
 import { useAuth } from '../../features/auth/AuthContext';
+import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
+import {
+  AiDifficulty,
+  AiDifficultySelector,
+  loadSavedAiDifficulty,
+  saveAiDifficultyPreference,
+} from '../../components/molecules/AiDifficultySelector';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -26,47 +34,8 @@ export interface SnakesAndLaddersLobbyScreenProps {
   onPlayWithFriends?: () => void;
   onCreateRoom: (playerCount: 2 | 4) => void;
   onJoinRoom: (roomCode: string) => Promise<void> | void;
-  onPlaySolo?: (playerCount: 2 | 4, difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT', botId?: string) => void;
+  onPlaySolo?: (playerCount: 2 | 4, difficulty?: AiDifficulty, botId?: string) => void;
 }
-
-const AI_BOTS = [
-  {
-    id: 'BOT_PIXEL',
-    name: 'Pixel',
-    title: 'Casual Companion',
-    difficulty: 'EASY' as const,
-    badge: '🟢 Easy',
-    color: '#10B981',
-    desc: 'Relaxed & friendly turns. Great for newcomers.',
-  },
-  {
-    id: 'BOT_NOVA',
-    name: 'Nova',
-    title: 'Tactical Strategist',
-    difficulty: 'MEDIUM' as const,
-    badge: '🟡 Medium',
-    color: '#3B82F6',
-    desc: 'Balanced and methodical. Steady, thoughtful pace.',
-  },
-  {
-    id: 'BOT_ACE',
-    name: 'Ace',
-    title: 'Aggressive Master',
-    difficulty: 'HARD' as const,
-    badge: '🟠 Hard',
-    color: '#F97316',
-    desc: 'Quick, confident, and eager to climb the board.',
-  },
-  {
-    id: 'BOT_ATLAS',
-    name: 'Atlas',
-    title: 'Grandmaster Solver',
-    difficulty: 'EXPERT' as const,
-    badge: '🟣 Expert',
-    color: '#8B5CF6',
-    desc: 'Deep board calculations and maximum precision.',
-  },
-];
 
 export const SnakesAndLaddersLobbyScreen: React.FC<SnakesAndLaddersLobbyScreenProps> = ({
   onBack,
@@ -76,13 +45,38 @@ export const SnakesAndLaddersLobbyScreen: React.FC<SnakesAndLaddersLobbyScreenPr
   onPlaySolo,
 }) => {
   const { user } = useAuth();
+  const { theme, effectiveMode } = useTheme();
+  const isDark = effectiveMode === 'dark';
+
   const [playerCount, setPlayerCount] = useState<2 | 4>(2);
   const [isJoinModalVisible, setIsJoinModalVisible] = useState(false);
   const [isAiModalVisible, setIsAiModalVisible] = useState(false);
-  const [selectedDifficulty, setSelectedDifficulty] = useState<'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT'>('MEDIUM');
+  const [selectedDifficulty, setSelectedDifficulty] = useState<AiDifficulty>('MEDIUM');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSavedAiDifficulty().then((diff) => {
+      setSelectedDifficulty(diff);
+    });
+  }, []);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isJoinModalVisible) {
+        setIsJoinModalVisible(false);
+        return true;
+      }
+      if (isAiModalVisible) {
+        setIsAiModalVisible(false);
+        return true;
+      }
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack, isJoinModalVisible, isAiModalVisible]);
 
   const handleJoin = async () => {
     const code = roomCodeInput.trim().toUpperCase();
@@ -254,14 +248,14 @@ export const SnakesAndLaddersLobbyScreen: React.FC<SnakesAndLaddersLobbyScreenPr
           </View>
         </TouchableOpacity>
 
-        {/* SOLO PRACTICE VS AI BUTTON */}
+        {/* SOLO PRACTICE VS OTTER BUTTON */}
         {onPlaySolo && (
           <TouchableOpacity
             style={styles.soloGreenBtn}
             onPress={() => setIsAiModalVisible(true)}
             activeOpacity={0.85}
           >
-            <Text style={styles.soloBtnText}>🤖 Play Solo vs AI Bot</Text>
+            <Text style={styles.soloBtnText}>🦦 Play Solo vs Otter</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -349,8 +343,12 @@ export const SnakesAndLaddersLobbyScreen: React.FC<SnakesAndLaddersLobbyScreenPr
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
               <View>
-                <Text style={styles.modalHeaderTitle}>🤖 Play vs AI</Text>
-                <Text style={styles.aiModalSubtitle}>Choose your AI opponent bot</Text>
+                <Text style={styles.modalHeaderTitle}>🦦 Play vs AI Bots</Text>
+                <Text style={styles.aiModalSubtitle}>
+                  {playerCount === 2
+                    ? '2-Player Match (You vs Otter)'
+                    : '4-Player Match (You vs Otter, Ollie & Otto)'}
+                </Text>
               </View>
               <TouchableOpacity
                 onPress={() => setIsAiModalVisible(false)}
@@ -360,51 +358,29 @@ export const SnakesAndLaddersLobbyScreen: React.FC<SnakesAndLaddersLobbyScreenPr
               </TouchableOpacity>
             </View>
 
-            {/* AI Bot Cards */}
-            <View style={styles.aiBotList}>
-              {AI_BOTS.map((bot) => {
-                const isSelected = selectedDifficulty === bot.difficulty;
-                return (
-                  <TouchableOpacity
-                    key={bot.id}
-                    style={[
-                      styles.aiBotCard,
-                      isSelected && { backgroundColor: '#F1F5F9' },
-                    ]}
-                    onPress={() => setSelectedDifficulty(bot.difficulty)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={[styles.aiBotAvatar, { backgroundColor: bot.color }]}>
-                      <Text style={styles.aiBotAvatarEmoji}>🤖</Text>
-                    </View>
-                    <View style={styles.aiBotInfo}>
-                      <View style={styles.aiBotHeader}>
-                        <Text style={styles.aiBotName}>{bot.name}</Text>
-                        <Text style={[styles.aiBotBadge, { color: bot.color }]}>{bot.badge}</Text>
-                      </View>
-                      <Text style={styles.aiBotTitle}>{bot.title}</Text>
-                      <Text style={styles.aiBotDesc}>{bot.desc}</Text>
-                    </View>
-                    <View style={[styles.aiRadioCircle, isSelected && { borderColor: bot.color }]}>
-                      {isSelected && <View style={[styles.aiRadioDot, { backgroundColor: bot.color }]} />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* AI Difficulty Selector Component */}
+            <AiDifficultySelector
+              value={selectedDifficulty}
+              onChange={(diff) => {
+                setSelectedDifficulty(diff);
+                saveAiDifficultyPreference(diff);
+              }}
+              variant="cards"
+              showDescription={true}
+              title="Select AI Difficulty"
+            />
 
             {/* Start Match Button */}
             <TouchableOpacity
               style={styles.startAiBtn}
               onPress={() => {
-                const currentBot = AI_BOTS.find((b) => b.difficulty === selectedDifficulty) || AI_BOTS[1];
                 setIsAiModalVisible(false);
-                onPlaySolo?.(playerCount, selectedDifficulty, currentBot.id);
+                onPlaySolo?.(playerCount, selectedDifficulty);
               }}
               activeOpacity={0.85}
             >
               <Text style={styles.startAiBtnText}>
-                Start Match vs {AI_BOTS.find((b) => b.difficulty === selectedDifficulty)?.name || 'Nova'}
+                Start Match ({selectedDifficulty.charAt(0) + selectedDifficulty.slice(1).toLowerCase()})
               </Text>
             </TouchableOpacity>
           </View>

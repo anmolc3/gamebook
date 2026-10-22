@@ -109,4 +109,61 @@ export class ImagePickerService {
       return null;
     }
   }
+
+  /**
+   * Prompts user to take a photo using the device camera
+   */
+  static async takePhotoWithCamera(options?: {
+    quality?: number;
+    allowsEditing?: boolean;
+  }): Promise<PickImageResult | null> {
+    try {
+      const ImagePicker = require('expo-image-picker');
+      if (!ImagePicker) {
+        throw new Error('Image picker native module is not available');
+      }
+
+      if (Platform.OS !== 'web' && ImagePicker.requestCameraPermissionsAsync) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert(
+            'Permission Required',
+            'Camera permission is required to capture photos.'
+          );
+          return null;
+        }
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: options?.quality ?? 0.85,
+        allowsEditing: options?.allowsEditing ?? false,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return { canceled: true, uri: '' };
+      }
+
+      const asset = result.assets[0];
+      let finalUri = asset.uri;
+      if (asset.base64 && !finalUri.startsWith('data:')) {
+        const mime = asset.mimeType || 'image/jpeg';
+        finalUri = `data:${mime};base64,${asset.base64}`;
+      }
+
+      return {
+        canceled: false,
+        uri: finalUri,
+        base64: asset.base64,
+        width: asset.width,
+        height: asset.height,
+      };
+    } catch (err: any) {
+      console.warn('[ImagePickerService] Could not capture photo from camera:', err);
+      // Fallback to library selection
+      return this.pickImageFromDevice(options);
+    }
+  }
 }
+

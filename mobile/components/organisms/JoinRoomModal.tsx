@@ -12,9 +12,15 @@ import {
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
 import { GameLogo } from '../atoms/GameLogo';
+import { Avatar } from '../atoms/Avatar';
 import { RoomService, RoomDetails, SupportedGameType } from '../../services/room.service';
 import { SoloService } from '../../services/solo.service';
 import { AiDifficulty, BOT_AVATARS } from '../../constants/soloGames';
+import {
+  AiDifficultySelector,
+  loadSavedAiDifficulty,
+  saveAiDifficultyPreference,
+} from '../molecules/AiDifficultySelector';
 
 export interface JoinRoomModalProps {
   visible: boolean;
@@ -48,6 +54,9 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
     if (visible) {
       if (initialGameType) setSelectedGameType(initialGameType);
       if (initialTab) setActiveTab(initialTab);
+      loadSavedAiDifficulty().then((diff) => {
+        setSoloDifficulty(diff);
+      });
     }
   }, [visible, initialGameType, initialTab]);
 
@@ -192,7 +201,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   },
                 ]}
               >
-                Solo AI
+                Solo Otter
               </Text>
             </TouchableOpacity>
 
@@ -275,46 +284,16 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
           {/* Tab 0: Solo AI Opponent */}
           {activeTab === 'solo' && (
             <View style={styles.tabBody}>
-              {/* Difficulty Selector */}
-              <View>
-                <Text style={[styles.gameSelectLabel, { color: theme.colors.textSecondary }]}>
-                  AI Difficulty:
-                </Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {(['EASY', 'MEDIUM', 'HARD', 'EXPERT'] as AiDifficulty[]).map((diff) => {
-                    const isSelected = soloDifficulty === diff;
-                    return (
-                      <TouchableOpacity
-                        key={diff}
-                        style={{
-                          flex: 1,
-                          paddingVertical: 10,
-                          borderRadius: 12,
-                          borderWidth: 0,
-                          alignItems: 'center',
-                          backgroundColor: isSelected
-                            ? theme.colors.primary
-                            : theme.colors.surface,
-                        }}
-                        onPress={() => setSoloDifficulty(diff)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12,
-                            fontWeight: '700',
-                            color: isSelected
-                              ? theme.colors.textOnPrimary
-                              : theme.colors.textSecondary,
-                          }}
-                        >
-                          {diff.charAt(0) + diff.slice(1).toLowerCase()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
+              {/* Clean Difficulty Selector with 3 options: Easy, Medium, Hard */}
+              <AiDifficultySelector
+                value={(soloDifficulty === 'EXPERT' ? 'HARD' : soloDifficulty) as 'EASY' | 'MEDIUM' | 'HARD'}
+                onChange={(diff) => {
+                  setSoloDifficulty(diff);
+                  saveAiDifficultyPreference(diff);
+                }}
+                variant="cards"
+                showDescription={true}
+              />
 
               {/* AI Opponent Card */}
               <View
@@ -328,26 +307,15 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   gap: 12,
                 }}
               >
-                <View
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 22,
-                    backgroundColor: theme.colors.primary + '20',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Icon name="bot" size={22} color={theme.colors.primary} />
-                </View>
+                <Avatar displayName="Otter" avatarUrl="otter_mascot" size="md" />
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.textPrimary }}>
-                      {soloDifficulty === 'EASY' ? 'Pixel' : soloDifficulty === 'HARD' ? 'Ace' : soloDifficulty === 'EXPERT' ? 'Atlas' : 'Nova'}
+                      Otter
                     </Text>
                     <View style={{ backgroundColor: theme.colors.primary + '18', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
                       <Text style={{ fontSize: 10, fontWeight: '700', color: theme.colors.primary }}>
-                        AI Opponent
+                        {soloDifficulty.charAt(0) + soloDifficulty.slice(1).toLowerCase()}
                       </Text>
                     </View>
                   </View>
@@ -369,7 +337,7 @@ export const JoinRoomModal: React.FC<JoinRoomModalProps> = ({
                   <>
                     <Icon name="play" size={18} color={theme.colors.textOnPrimary} />
                     <Text style={[styles.actionSubmitText, { color: theme.colors.textOnPrimary }]}>
-                      Play Solo vs AI
+                      {`Play Solo vs Otter (${soloDifficulty.charAt(0) + soloDifficulty.slice(1).toLowerCase()})`}
                     </Text>
                   </>
                 )}

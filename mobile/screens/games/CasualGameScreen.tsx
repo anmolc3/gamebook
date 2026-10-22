@@ -187,8 +187,31 @@ export const CasualGameScreen: React.FC<CasualGameScreenProps> = ({
   };
 
   // Players resolution
-  const p1Name = playerList[0]?.user?.displayName || playerList[0]?.user?.username || 'Player 1';
-  const p2Name = playerList[1]?.user?.displayName || playerList[1]?.user?.username || 'Player 2';
+  const getBotDiffLabel = (uid?: string, dName?: string) => {
+    if (dName && dName.startsWith('Otter (')) return '';
+    if (uid === 'BOT_PIXEL') return ' (Easy)';
+    if (uid === 'BOT_ACE') return ' (Hard)';
+    if (uid === 'BOT_ATLAS') return ' (Expert)';
+    return ' (Medium)';
+  };
+
+  const resolvePlayerName = (p: RoomPlayer | undefined, fallback: string) => {
+    if (!p) return fallback;
+    const rawName = p.user?.displayName || p.user?.username || fallback;
+    if (rawName.startsWith('Otter (')) return rawName;
+    if (
+      p.userId?.startsWith('BOT_') ||
+      rawName.toLowerCase().includes('(ai)') ||
+      rawName.toLowerCase().includes('bot') ||
+      rawName.toLowerCase().includes('computer')
+    ) {
+      return `Otter${getBotDiffLabel(p.userId, rawName)}`;
+    }
+    return rawName;
+  };
+
+  const p1Name = resolvePlayerName(playerList[0], 'Player 1');
+  const p2Name = resolvePlayerName(playerList[1], 'Player 2');
   const p1Id = playerList[0]?.userId || 'p1';
   const p2Id = playerList[1]?.userId || 'p2';
 

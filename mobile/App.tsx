@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameAlertService } from './services/alert.service';
 import { SoundService } from './services/sound.service';
 
@@ -7,7 +7,17 @@ GameAlertService.init();
 // Preload game audio subsystem for instant zero-latency sound effects
 SoundService.init();
 
-import { ActivityIndicator, View, StyleSheet, Alert, StatusBar, Platform, PanResponder } from 'react-native';
+import {
+  ActivityIndicator,
+  View,
+  StyleSheet,
+  Alert,
+  StatusBar,
+  Platform,
+  PanResponder,
+  BackHandler,
+  Linking,
+} from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
@@ -59,32 +69,61 @@ interface ConversationPeer {
   groupMeta?: any;
 }
 
+interface ProfileNavigationOrigin {
+  screen: string;
+  peer?: ConversationPeer | null;
+}
+
+export type AppScreen =
+  | 'home'
+  | 'themes'
+  | 'discovery'
+  | 'leaderboards'
+  | 'profile'
+  | 'friends'
+  | 'chatList'
+  | 'conversation'
+  | 'roomLobby'
+  | 'ticTacToe'
+  | 'ludo'
+  | 'ludoLobby'
+  | 'snakesAndLadders'
+  | 'snakesAndLaddersLobby'
+  | 'boardGame'
+  | 'boardGame2'
+  | 'casualGame'
+  | 'cardGame'
+  | 'puzzleGame'
+  | 'partyGame';
+
+export interface RouteEntry {
+  screen: AppScreen;
+  profileUserId?: string;
+  activePeer?: ConversationPeer | null;
+  currentRoomCode?: string | null;
+  currentRoomDetails?: any;
+  currentBoardGameType?: 'CONNECT_FOUR' | 'REVERSI' | 'GOMOKU' | 'CHECKERS' | 'CHESS';
+  currentBoardGame2Type?:
+    | 'CARROM'
+    | 'SNAKES_AND_LADDERS'
+    | 'BATTLESHIP'
+    | 'DOMINOES'
+    | 'BACKGAMMON'
+    | 'MANCALA'
+    | 'CHINESE_CHECKERS';
+  currentCasualGameType?: CasualGameType;
+  currentCardGameType?: CardGameType;
+  currentPuzzleGameType?: PuzzleGameType;
+  currentPartyGameType?: PartyGameType;
+}
+
 function MainNavigator() {
   const { theme } = useTheme();
   const { user, isAuthenticated, isLoading, isNewlyRegistered, dismissNewRegistration } = useAuth();
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
-  const [currentScreen, setCurrentScreen] = useState<
-    | 'home'
-    | 'themes'
-    | 'discovery'
-    | 'leaderboards'
-    | 'profile'
-    | 'friends'
-    | 'chatList'
-    | 'conversation'
-    | 'roomLobby'
-    | 'ticTacToe'
-    | 'ludo'
-    | 'ludoLobby'
-    | 'snakesAndLadders'
-    | 'snakesAndLaddersLobby'
-    | 'boardGame'
-    | 'boardGame2'
-    | 'casualGame'
-    | 'cardGame'
-    | 'puzzleGame'
-    | 'partyGame'
-  >('home');
+  const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
+  const [history, setHistory] = useState<RouteEntry[]>([]);
+
   const [currentBoardGameType, setCurrentBoardGameType] = useState<
     'CONNECT_FOUR' | 'REVERSI' | 'GOMOKU' | 'CHECKERS' | 'CHESS'
   >('CHESS');
@@ -106,6 +145,7 @@ function MainNavigator() {
   const [currentPartyGameType, setCurrentPartyGameType] =
     useState<PartyGameType>('WOULD_YOU_RATHER');
   const [profileUserId, setProfileUserId] = useState<string | undefined>(undefined);
+  const [profileOrigin, setProfileOrigin] = useState<ProfileNavigationOrigin | null>(null);
   const [activePeer, setActivePeer] = useState<ConversationPeer | null>(null);
   const [currentRoomCode, setCurrentRoomCode] = useState<string | null>(null);
   const [currentRoomDetails, setCurrentRoomDetails] = useState<any>(null);
@@ -119,11 +159,109 @@ function MainNavigator() {
   const insets = useSafeAreaInsets();
   const processedMessageIdsRef = React.useRef<Set<string>>(new Set());
 
+  // Context-aware navigation: pushes current screen snapshot onto history stack
+  const navigate = useCallback(
+    (targetScreen: AppScreen, params?: Partial<RouteEntry>) => {
+      // Capture current state snapshot
+      const snapshot: RouteEntry = {
+        screen: currentScreen,
+        profileUserId,
+        activePeer,
+        currentRoomCode,
+        currentRoomDetails,
+        currentBoardGameType,
+        currentBoardGame2Type,
+        currentCasualGameType,
+        currentCardGameType,
+        currentPuzzleGameType,
+        currentPartyGameType,
+      };
+
+      setHistory((prev) => {
+        const last = prev[prev.length - 1];
+        if (
+          last &&
+          last.screen === snapshot.screen &&
+          last.profileUserId === snapshot.profileUserId &&
+          last.activePeer?.id === snapshot.activePeer?.id &&
+          last.currentRoomCode === snapshot.currentRoomCode
+        ) {
+          return prev;
+        }
+        return [...prev, snapshot];
+      });
+
+      if (params?.profileUserId !== undefined) setProfileUserId(params.profileUserId);
+      if (params?.activePeer !== undefined) setActivePeer(params.activePeer);
+      if (params?.currentRoomCode !== undefined) setCurrentRoomCode(params.currentRoomCode);
+      if (params?.currentRoomDetails !== undefined) setCurrentRoomDetails(params.currentRoomDetails);
+      if (params?.currentBoardGameType !== undefined) setCurrentBoardGameType(params.currentBoardGameType);
+      if (params?.currentBoardGame2Type !== undefined) setCurrentBoardGame2Type(params.currentBoardGame2Type);
+      if (params?.currentCasualGameType !== undefined) setCurrentCasualGameType(params.currentCasualGameType);
+      if (params?.currentCardGameType !== undefined) setCurrentCardGameType(params.currentCardGameType);
+      if (params?.currentPuzzleGameType !== undefined) setCurrentPuzzleGameType(params.currentPuzzleGameType);
+      if (params?.currentPartyGameType !== undefined) setCurrentPartyGameType(params.currentPartyGameType);
+
+      setCurrentScreen(targetScreen);
+    },
+    [
+      currentScreen,
+      profileUserId,
+      activePeer,
+      currentRoomCode,
+      currentRoomDetails,
+      currentBoardGameType,
+      currentBoardGame2Type,
+      currentCasualGameType,
+      currentCardGameType,
+      currentPuzzleGameType,
+      currentPartyGameType,
+    ]
+  );
+
+  // Context-aware goBack: pops previous screen from history and restores exact state
+  const goBack = useCallback(
+    (fallbackScreen: AppScreen = 'home') => {
+      setHistory((prev) => {
+        if (prev.length === 0) {
+          setProfileUserId(undefined);
+          setCurrentRoomCode(null);
+          setCurrentRoomDetails(null);
+          setCurrentScreen(fallbackScreen);
+          return [];
+        }
+
+        const next = [...prev];
+        const prevEntry = next.pop()!;
+
+        setProfileUserId(prevEntry.profileUserId);
+        setActivePeer(prevEntry.activePeer ?? null);
+        setCurrentRoomCode(prevEntry.currentRoomCode ?? null);
+        setCurrentRoomDetails(prevEntry.currentRoomDetails ?? null);
+        if (prevEntry.currentBoardGameType) setCurrentBoardGameType(prevEntry.currentBoardGameType);
+        if (prevEntry.currentBoardGame2Type) setCurrentBoardGame2Type(prevEntry.currentBoardGame2Type);
+        if (prevEntry.currentCasualGameType) setCurrentCasualGameType(prevEntry.currentCasualGameType);
+        if (prevEntry.currentCardGameType) setCurrentCardGameType(prevEntry.currentCardGameType);
+        if (prevEntry.currentPuzzleGameType) setCurrentPuzzleGameType(prevEntry.currentPuzzleGameType);
+        if (prevEntry.currentPartyGameType) setCurrentPartyGameType(prevEntry.currentPartyGameType);
+
+        setCurrentScreen(prevEntry.screen);
+        return next;
+      });
+    },
+    []
+  );
+
   const handleJoinedRoom = (room: any) => {
-    setCurrentRoomCode(room.code);
-    setCurrentRoomDetails(room);
+    let boardType = currentBoardGameType;
+    let board2Type = currentBoardGame2Type;
+    let casualType = currentCasualGameType;
+    let cardType = currentCardGameType;
+    let puzzleType = currentPuzzleGameType;
+    let partyType = currentPartyGameType;
+
     if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
-      setCurrentBoardGameType(room.gameType as any);
+      boardType = room.gameType as any;
     } else if (
       [
         'CARROM',
@@ -135,7 +273,7 @@ function MainNavigator() {
         'CHINESE_CHECKERS',
       ].includes(room.gameType)
     ) {
-      setCurrentBoardGame2Type(room.gameType as any);
+      board2Type = room.gameType as any;
     } else if (
       [
         'POOL_8_BALL',
@@ -146,7 +284,7 @@ function MainNavigator() {
         'TABLE_TENNIS',
       ].includes(room.gameType)
     ) {
-      setCurrentCasualGameType(room.gameType as any);
+      casualType = room.gameType as any;
     } else if (
       [
         'UNO_STYLE',
@@ -163,7 +301,7 @@ function MainNavigator() {
         'POKER',
       ].includes(room.gameType)
     ) {
-      setCurrentCardGameType(room.gameType as any);
+      cardType = room.gameType as any;
     } else if (
       [
         'ROCK_PAPER_SCISSORS',
@@ -185,34 +323,35 @@ function MainNavigator() {
         'TYPING_RACE',
       ].includes(room.gameType)
     ) {
-      setCurrentPuzzleGameType(room.gameType as any);
+      puzzleType = room.gameType as any;
     } else {
-      setCurrentPartyGameType(room.gameType as any);
+      partyType = room.gameType as any;
     }
 
+    let targetScreen: AppScreen = 'roomLobby';
     if (room.code.startsWith('SOLO_') || room.status === 'PLAYING') {
       if (room.gameType === 'TICTACTOE') {
-        setCurrentScreen('ticTacToe');
+        targetScreen = 'ticTacToe';
       } else if (room.gameType === 'LUDO') {
-        setCurrentScreen('ludo');
+        targetScreen = 'ludo';
       } else if (room.gameType === 'SNAKES_AND_LADDERS') {
-        setCurrentScreen('snakesAndLadders');
+        targetScreen = 'snakesAndLadders';
       } else if (['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)) {
-        setCurrentScreen('boardGame');
+        targetScreen = 'boardGame';
       } else if (
         ['CARROM', 'SNAKES_AND_LADDERS', 'BATTLESHIP', 'DOMINOES', 'BACKGAMMON', 'MANCALA', 'CHINESE_CHECKERS'].includes(
           room.gameType
         )
       ) {
-        setCurrentScreen('boardGame2');
+        targetScreen = 'boardGame2';
       } else if (['POOL_8_BALL', 'MINI_GOLF', 'AIR_HOCKEY', 'DARTS', 'BOWLING', 'TABLE_TENNIS'].includes(room.gameType)) {
-        setCurrentScreen('casualGame');
+        targetScreen = 'casualGame';
       } else if (
         ['UNO_STYLE', 'HEARTS', 'SPADES', 'RUMMY', 'GIN_RUMMY', 'CRAZY_EIGHTS', 'GO_FISH', 'WAR', 'DURAK', 'PRESIDENT', 'BLACKJACK', 'POKER'].includes(
           room.gameType
         )
       ) {
-        setCurrentScreen('cardGame');
+        targetScreen = 'cardGame';
       } else if (
         [
           'ROCK_PAPER_SCISSORS',
@@ -234,13 +373,22 @@ function MainNavigator() {
           'TYPING_RACE',
         ].includes(room.gameType)
       ) {
-        setCurrentScreen('puzzleGame');
+        targetScreen = 'puzzleGame';
       } else {
-        setCurrentScreen('partyGame');
+        targetScreen = 'partyGame';
       }
-    } else {
-      setCurrentScreen('roomLobby');
     }
+
+    navigate(targetScreen, {
+      currentRoomCode: room.code,
+      currentRoomDetails: room,
+      currentBoardGameType: boardType,
+      currentBoardGame2Type: board2Type,
+      currentCasualGameType: casualType,
+      currentCardGameType: cardType,
+      currentPuzzleGameType: puzzleType,
+      currentPartyGameType: partyType,
+    });
   };
 
   // Listen globally to incoming messages & invites over socket to post system notifications
@@ -274,7 +422,8 @@ function MainNavigator() {
         return;
       }
 
-      const senderTitle = msg.sender?.displayName || msg.sender?.username || 'New Message';
+      const rawSender = msg.sender?.displayName || msg.sender?.username || 'New Message';
+      const senderTitle = rawSender.replace(/^💬\s*/, '').trim() || 'New Message';
       const previewText = msg.metadata?.isViewOnce
         ? '📷 Sent a view-once photo'
         : msg.type === 'GAME_INVITE'
@@ -282,7 +431,7 @@ function MainNavigator() {
         : msg.content || 'Sent an attachment';
 
       NotificationService.displayLocalNotification(
-        `💬 ${senderTitle}`,
+        senderTitle,
         previewText,
         {
           type: msg.type === 'GAME_INVITE' ? 'GAME_INVITE' : 'CHAT_MESSAGE',
@@ -337,9 +486,32 @@ function MainNavigator() {
       );
     });
 
+    const unsubscribeNotif = MobileSocketService.onNotificationReceived((notif: any) => {
+      if (!notif) return;
+
+      // Don't show redundant local alert if actively inside conversation with this peer
+      if (
+        (notif.type === 'CHAT_MESSAGE' || notif.type === 'MENTION') &&
+        currentScreen === 'conversation' &&
+        activePeer &&
+        (activePeer.id === notif.data?.senderId || activePeer.conversationId === notif.data?.conversationId)
+      ) {
+        return;
+      }
+
+      const cleanTitle = (notif.title || 'Notification').replace(/^💬\s*/, '').trim();
+      NotificationService.displayLocalNotification(
+        cleanTitle,
+        notif.message,
+        notif.data,
+        notif.type === 'MISSED_CALL' ? CHANNELS.MESSAGES : CHANNELS.DEFAULT
+      );
+    });
+
     return () => {
       unsubscribeChat();
       unsubscribeInvite();
+      unsubscribeNotif();
     };
   }, [isAuthenticated, currentScreen, activePeer, user?.id]);
 
@@ -369,18 +541,210 @@ function MainNavigator() {
           if (gestureState.dx < -50 && currentIndex < MAIN_SWIPE_TABS.length - 1) {
             const nextScreen = MAIN_SWIPE_TABS[currentIndex + 1];
             setProfileUserId(undefined);
+            setProfileOrigin(null);
+            setHistory([]);
             setCurrentScreen(nextScreen);
           }
           // Swipe Right (finger moves right) -> Previous Tab
           else if (gestureState.dx > 50 && currentIndex > 0) {
             const prevScreen = MAIN_SWIPE_TABS[currentIndex - 1];
             setProfileUserId(undefined);
+            setProfileOrigin(null);
+            setHistory([]);
             setCurrentScreen(prevScreen);
           }
         },
       }),
     [currentScreen, profileUserId]
   );
+
+  // Deep linking & Notification response listener (with valid back navigation path)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleNotificationDataNavigation = (data: any) => {
+      if (!data) return;
+      if (
+        (data.type === 'CHAT_MESSAGE' || data.type === 'MENTION' || data.type === 'MISSED_CALL') &&
+        (data.senderId || data.callerId || data.conversationId)
+      ) {
+        navigate('conversation', {
+          activePeer: {
+            id: data.senderId || data.callerId,
+            name: data.senderName || data.callerName || 'Player',
+            username: data.senderUsername || data.callerUsername || data.senderName || 'player',
+            avatarUrl: data.senderAvatarUrl || data.callerAvatarUrl || null,
+            conversationId: data.conversationId,
+          },
+        });
+      } else if (data.type === 'GAME_INVITE' && data.roomCode) {
+        navigate('roomLobby', { currentRoomCode: data.roomCode });
+      } else if (data.type === 'FRIEND_REQUEST' || data.type === 'FRIEND_ACCEPTED') {
+        navigate('friends');
+      }
+    };
+
+    // Check cold-start notification response
+    NotificationService.getLastNotificationResponse().then((resp) => {
+      if (!resp) return;
+      const data = resp.notification?.request?.content?.data as any;
+      handleNotificationDataNavigation(data);
+    });
+
+    // Foreground / background notification tap response listener
+    const unsubResponse = NotificationService.addResponseListener((resp) => {
+      if (!resp) return;
+      const data = resp.notification?.request?.content?.data as any;
+      handleNotificationDataNavigation(data);
+    });
+
+    // Deep link handling (e.g. gamearena://room/CODE, gamearena://chat/USERID, gamearena://profile/USERID)
+    const handleUrl = (event: { url: string }) => {
+      if (!event.url) return;
+      try {
+        const urlStr = event.url;
+        if (urlStr.includes('/room/')) {
+          const code = urlStr.split('/room/')[1]?.split('?')[0]?.toUpperCase();
+          if (code) navigate('roomLobby', { currentRoomCode: code });
+        } else if (urlStr.includes('/chat/')) {
+          const peerId = urlStr.split('/chat/')[1]?.split('?')[0];
+          if (peerId) {
+            navigate('conversation', {
+              activePeer: {
+                id: peerId,
+                name: 'Player',
+                username: 'player',
+                avatarUrl: null,
+              },
+            });
+          }
+        } else if (urlStr.includes('/profile/')) {
+          const targetId = urlStr.split('/profile/')[1]?.split('?')[0];
+          if (targetId) navigate('profile', { profileUserId: targetId });
+        }
+      } catch (err) {
+        console.warn('Deep link parse error:', err);
+      }
+    };
+
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl({ url });
+    });
+    const subUrl = Linking.addEventListener('url', handleUrl);
+
+    return () => {
+      unsubResponse();
+      subUrl.remove();
+    };
+  }, [isAuthenticated, navigate]);
+
+  // Handle global Android hardware back button
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      // 1. If modals open in App.tsx, close them
+      if (isJoinModalVisible) {
+        setIsJoinModalVisible(false);
+        return true;
+      }
+      if (soloModalGameId) {
+        setSoloModalGameId(null);
+        return true;
+      }
+      if (isAchievementsModalVisible) {
+        setAchievementsModalVisible(false);
+        return true;
+      }
+      if (activeStoryTray) {
+        setActiveStoryTray(null);
+        return true;
+      }
+
+      // 2. If in live match screen: return to room lobby
+      if (
+        [
+          'ticTacToe',
+          'ludo',
+          'snakesAndLadders',
+          'boardGame',
+          'boardGame2',
+          'casualGame',
+          'cardGame',
+          'puzzleGame',
+          'partyGame',
+        ].includes(currentScreen)
+      ) {
+        goBack('roomLobby');
+        return true;
+      }
+
+      // 3. If in room lobby: clear room and return to origin
+      if (currentScreen === 'roomLobby') {
+        setCurrentRoomCode(null);
+        setCurrentRoomDetails(null);
+        goBack('home');
+        return true;
+      }
+
+      // 4. If viewing peer profile: return to origin
+      if (currentScreen === 'profile' && profileUserId) {
+        setProfileUserId(undefined);
+        setProfileOrigin(null);
+        goBack('friends');
+        return true;
+      }
+
+      // 5. If viewing own profile and opened as non-tab or from elsewhere
+      if (currentScreen === 'profile' && !profileUserId) {
+        if (history.length > 0) {
+          goBack('home');
+          return true;
+        }
+        if (profileOrigin?.screen) {
+          const orig = profileOrigin.screen;
+          setProfileOrigin(null);
+          setCurrentScreen(orig as any);
+          return true;
+        }
+      }
+
+      // 6. If in conversation: return to chat list or previous origin
+      if (currentScreen === 'conversation') {
+        setActivePeer(null);
+        goBack('chatList');
+        return true;
+      }
+
+      // 7. If history has previous screens, goBack()
+      if (history.length > 0) {
+        goBack('home');
+        return true;
+      }
+
+      // 8. If on a secondary screen without history, go to home
+      if (['chatList', 'friends', 'leaderboards', 'themes', 'discovery'].includes(currentScreen)) {
+        if (currentScreen !== 'home') {
+          setCurrentScreen('home');
+          return true;
+        }
+      }
+
+      // 9. On home screen: let default OS exit app
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
+    return () => sub.remove();
+  }, [
+    currentScreen,
+    profileUserId,
+    profileOrigin,
+    history,
+    goBack,
+    isJoinModalVisible,
+    soloModalGameId,
+    isAchievementsModalVisible,
+    activeStoryTray,
+  ]);
 
   if (isLoading) {
     return (
@@ -413,7 +777,7 @@ function MainNavigator() {
       <TicTacToeScreen
         roomCode={currentRoomCode}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -424,8 +788,9 @@ function MainNavigator() {
     return (
       <LudoScreen
         roomCode={currentRoomCode}
+        roomDetails={currentRoomDetails}
         onLeave={() => {
-          setCurrentScreen('ludoLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -438,7 +803,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         roomDetails={currentRoomDetails}
         onLeave={() => {
-          setCurrentScreen('snakesAndLaddersLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -451,7 +816,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentBoardGameType}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -464,7 +829,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentBoardGame2Type}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -477,7 +842,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentCasualGameType}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -490,7 +855,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentCardGameType}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -503,7 +868,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentPuzzleGameType}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -516,7 +881,7 @@ function MainNavigator() {
         roomCode={currentRoomCode}
         gameType={currentPartyGameType}
         onLeave={() => {
-          setCurrentScreen('roomLobby');
+          goBack('roomLobby');
         }}
       />
     );
@@ -531,108 +896,9 @@ function MainNavigator() {
         onBack={() => {
           setCurrentRoomCode(null);
           setCurrentRoomDetails(null);
-          setCurrentScreen('home');
+          goBack('home');
         }}
-        onGameStart={(room) => {
-          if (room.gameType === 'TICTACTOE') {
-            setCurrentScreen('ticTacToe');
-          } else if (room.gameType === 'LUDO') {
-            setCurrentScreen('ludo');
-          } else if (room.gameType === 'SNAKES_AND_LADDERS') {
-            setCurrentScreen('snakesAndLadders');
-          } else if (
-            ['CONNECT_FOUR', 'REVERSI', 'GOMOKU', 'CHECKERS', 'CHESS'].includes(room.gameType)
-          ) {
-            setCurrentBoardGameType(room.gameType as any);
-            setCurrentScreen('boardGame');
-          } else if (
-            [
-              'CARROM',
-              'SNAKES_AND_LADDERS',
-              'BATTLESHIP',
-              'DOMINOES',
-              'BACKGAMMON',
-              'MANCALA',
-              'CHINESE_CHECKERS',
-            ].includes(room.gameType)
-          ) {
-            setCurrentBoardGame2Type(room.gameType as any);
-            setCurrentScreen('boardGame2');
-          } else if (
-            [
-              'POOL_8_BALL',
-              'MINI_GOLF',
-              'AIR_HOCKEY',
-              'DARTS',
-              'BOWLING',
-              'TABLE_TENNIS',
-            ].includes(room.gameType)
-          ) {
-            setCurrentCasualGameType(room.gameType as any);
-            setCurrentScreen('casualGame');
-          } else if (
-            [
-              'UNO_STYLE',
-              'HEARTS',
-              'SPADES',
-              'RUMMY',
-              'GIN_RUMMY',
-              'CRAZY_EIGHTS',
-              'GO_FISH',
-              'WAR',
-              'DURAK',
-              'PRESIDENT',
-              'BLACKJACK',
-              'POKER',
-            ].includes(room.gameType)
-          ) {
-            setCurrentCardGameType(room.gameType as any);
-            setCurrentScreen('cardGame');
-          } else if (
-            [
-              'ROCK_PAPER_SCISSORS',
-              'REACTION_TEST',
-              'NUMBER_GUESS',
-              'SPEED_TAP',
-              'COLOR_MATCH',
-              'MATH_BATTLE',
-              'QUICK_DRAW',
-              'WORDLE_DUEL',
-              'HANGMAN',
-              'MEMORY_MATCH',
-              'QUIZ_BATTLE',
-              '2048_MULTIPLAYER',
-              'MINESWEEPER_DUEL',
-              'PATTERN_MATCH',
-              'MASTERMIND',
-              'WORD_SCRAMBLE',
-              'TYPING_RACE',
-            ].includes(room.gameType)
-          ) {
-            setCurrentPuzzleGameType(room.gameType as any);
-            setCurrentScreen('puzzleGame');
-          } else if (
-            [
-              'WOULD_YOU_RATHER',
-              'TRUTH_OR_DARE',
-              'CHARADES',
-              'GUESS_PICTURE',
-              'GUESS_WORD',
-              'GUESS_SONG',
-              'WHO_AM_I',
-              'IMPOSTER',
-              'MAFIA',
-              'DRAW_AND_GUESS',
-              'PICTIONARY',
-              'NEVER_HAVE_I_EVER',
-              'THIS_OR_THAT',
-              'TWO_TRUTHS_AND_A_LIE',
-            ].includes(room.gameType)
-          ) {
-            setCurrentPartyGameType(room.gameType as any);
-            setCurrentScreen('partyGame');
-          }
-        }}
+        onGameStart={handleJoinedRoom}
         onInviteFriends={() => {
           // Handled directly via in-lobby InvitePlayersModal
         }}
@@ -640,47 +906,89 @@ function MainNavigator() {
     );
   }
 
-  // Active Conversation Screen (1-on-1 or Group)
-  if (currentScreen === 'conversation' && activePeer) {
+  // Active Conversation Screen (1-on-1 or Group) & Overlay Profile when opened from Conversation
+  if (
+    (currentScreen === 'conversation' ||
+      (currentScreen === 'profile' && profileOrigin?.screen === 'conversation')) &&
+    activePeer
+  ) {
     return (
-      <ConversationScreen
-        peerId={activePeer.id}
-        peerName={activePeer.name}
-        peerUsername={activePeer.username}
-        peerAvatarUrl={activePeer.avatarUrl}
-        initialConversationId={activePeer.conversationId}
-        isGroup={activePeer.isGroup}
-        groupMeta={activePeer.groupMeta}
-        onBack={() => setCurrentScreen('chatList')}
-        onNavigateToProfile={(targetId) => {
-          setProfileUserId(targetId);
-          setCurrentScreen('profile');
-        }}
-        onJoinGameRoom={(roomCode) => {
-          setCurrentRoomCode(roomCode);
-          setCurrentScreen('roomLobby');
-        }}
-      />
+      <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
+        <ConversationScreen
+          peerId={activePeer.id}
+          peerName={activePeer.name}
+          peerUsername={activePeer.username}
+          peerAvatarUrl={activePeer.avatarUrl}
+          initialConversationId={activePeer.conversationId}
+          isGroup={activePeer.isGroup}
+          groupMeta={activePeer.groupMeta}
+          onBack={() => {
+            setActivePeer(null);
+            goBack('chatList');
+          }}
+          onNavigateToProfile={(targetId) => {
+            setProfileOrigin({
+              screen: 'conversation',
+              peer: activePeer,
+            });
+            navigate('profile', { profileUserId: targetId });
+          }}
+          onJoinGameRoom={(roomCode) => {
+            navigate('roomLobby', { currentRoomCode: roomCode });
+          }}
+        />
+
+        {currentScreen === 'profile' && profileUserId && (
+          <View style={StyleSheet.absoluteFill}>
+            <ProfileScreen
+              userId={profileUserId}
+              onBack={() => {
+                setProfileUserId(undefined);
+                setProfileOrigin(null);
+                goBack('conversation');
+              }}
+              onNavigateToChat={(targetId, username) => {
+                setProfileUserId(undefined);
+                setProfileOrigin(null);
+                if (activePeer.id !== targetId) {
+                  setActivePeer({
+                    id: targetId,
+                    name: username,
+                    username,
+                    avatarUrl: null,
+                  });
+                }
+                setCurrentScreen('conversation');
+              }}
+              onChallenge={() => setIsJoinModalVisible(true)}
+            />
+          </View>
+        )}
+      </View>
     );
   }
 
-  // Peer's profile (viewing someone else)
+  // Peer's profile (viewing someone else from non-conversation origin, e.g. friends, social feed)
   if (currentScreen === 'profile' && profileUserId) {
     return (
       <ProfileScreen
         userId={profileUserId}
         onBack={() => {
           setProfileUserId(undefined);
-          setCurrentScreen('friends');
+          setProfileOrigin(null);
+          goBack('friends');
         }}
         onNavigateToChat={(targetId, username) => {
-          setActivePeer({
-            id: targetId,
-            name: username,
-            username,
-            avatarUrl: null,
+          setProfileUserId(undefined);
+          setProfileOrigin(null);
+          navigate('conversation', {
+            activePeer: {
+              id: targetId,
+              name: username,
+              username,
+              avatarUrl: null,
+            },
           });
-          setCurrentScreen('conversation');
         }}
         onChallenge={() => setIsJoinModalVisible(true)}
       />
@@ -702,21 +1010,18 @@ function MainNavigator() {
   };
 
   const handleTabSelect = (tab: NavTab) => {
+    setProfileUserId(undefined);
+    setProfileOrigin(null);
+    setHistory([]);
     if (tab === 'play') {
       setCurrentScreen('discovery');
-      return;
-    }
-    if (tab === 'home') {
-      setProfileUserId(undefined);
+    } else if (tab === 'home') {
       setCurrentScreen('home');
     } else if (tab === 'friends') {
-      setProfileUserId(undefined);
       setCurrentScreen('friends');
     } else if (tab === 'chatList') {
-      setProfileUserId(undefined);
       setCurrentScreen('chatList');
     } else if (tab === 'profile') {
-      setProfileUserId(undefined);
       setCurrentScreen('profile');
     }
   };
@@ -734,16 +1039,16 @@ function MainNavigator() {
           <ThemeShowcaseScreen
             onPressProfile={() => {
               setProfileUserId(undefined);
-              setCurrentScreen('profile');
+              navigate('profile');
             }}
-            onPressFriends={() => setCurrentScreen('friends')}
-            onPressChat={() => setCurrentScreen('chatList')}
-            onPressThemes={() => setCurrentScreen('themes')}
+            onPressFriends={() => navigate('friends')}
+            onPressChat={() => navigate('chatList')}
+            onPressThemes={() => navigate('themes')}
             onPressPlay={(gameType) => {
               if (gameType === 'LUDO') {
-                setCurrentScreen('ludoLobby');
+                navigate('ludoLobby');
               } else if (gameType === 'SNAKES_AND_LADDERS') {
-                setCurrentScreen('snakesAndLaddersLobby');
+                navigate('snakesAndLaddersLobby');
               } else if (gameType) {
                 setSoloModalGameId(gameType);
               } else {
@@ -752,21 +1057,24 @@ function MainNavigator() {
                 setIsJoinModalVisible(true);
               }
             }}
-            onPressDiscovery={() => setCurrentScreen('discovery')}
-            onPressLeaderboards={() => setCurrentScreen('leaderboards')}
+            onPressDiscovery={() => navigate('discovery')}
+            onPressLeaderboards={() => navigate('leaderboards')}
             onPressStoryTray={(tray) => setActiveStoryTray(tray)}
+            onOpenConversation={(peer) => {
+              navigate('conversation', { activePeer: peer });
+            }}
           />
         )}
 
         {currentScreen === 'themes' && (
           <ThemesScreen
-            onBack={() => setCurrentScreen('home')}
+            onBack={() => goBack('home')}
           />
         )}
 
         {currentScreen === 'ludoLobby' && (
           <LudoLobbyScreen
-            onBack={() => setCurrentScreen('discovery')}
+            onBack={() => goBack('discovery')}
             onPlayOnline={async (playerCount) => {
               try {
                 const res = await RoomService.matchmake('LUDO', playerCount);
@@ -796,9 +1104,9 @@ function MainNavigator() {
                 Alert.alert('Join Room Failed', err.message || 'Could not join room with this code');
               }
             }}
-            onPlaySolo={async (playerCount) => {
+            onPlaySolo={async (playerCount, difficulty = 'MEDIUM') => {
               try {
-                const res = await SoloService.startSoloMatch('LUDO', 'MEDIUM');
+                const res = await SoloService.startSoloMatch('LUDO', difficulty as any, undefined, playerCount - 1, playerCount);
                 handleJoinedRoom({
                   id: res.matchId,
                   code: res.roomCode,
@@ -808,10 +1116,12 @@ function MainNavigator() {
                   isPrivate: true,
                   maxPlayers: playerCount,
                   createdAt: new Date().toISOString(),
-                  participants: [],
+                  participants: res.players || [],
+                  players: res.players || [],
+                  state: res.state,
                 });
               } catch (err: any) {
-                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs AI');
+                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs Otter');
               }
             }}
           />
@@ -819,7 +1129,7 @@ function MainNavigator() {
 
         {currentScreen === 'snakesAndLaddersLobby' && (
           <SnakesAndLaddersLobbyScreen
-            onBack={() => setCurrentScreen('discovery')}
+            onBack={() => goBack('discovery')}
             onPlayOnline={async (playerCount) => {
               try {
                 const res = await RoomService.matchmake('SNAKES_AND_LADDERS', playerCount);
@@ -851,7 +1161,7 @@ function MainNavigator() {
             }}
             onPlaySolo={async (playerCount, difficulty = 'MEDIUM', botId) => {
               try {
-                const res = await SoloService.startSoloMatch('SNAKES_AND_LADDERS', difficulty as any, botId);
+                const res = await SoloService.startSoloMatch('SNAKES_AND_LADDERS', difficulty as any, botId, playerCount - 1, playerCount);
                 handleJoinedRoom({
                   id: res.matchId,
                   code: res.roomCode,
@@ -866,7 +1176,7 @@ function MainNavigator() {
                   state: res.state,
                 });
               } catch (err: any) {
-                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs AI');
+                Alert.alert('Solo Mode Error', err.message || 'Could not start match vs Otter');
               }
             }}
           />
@@ -876,21 +1186,22 @@ function MainNavigator() {
           <GameDiscoveryScreen
             onSelectGame={(gameId) => {
               if (gameId === 'LUDO') {
-                setCurrentScreen('ludoLobby');
+                navigate('ludoLobby');
               } else if (gameId === 'SNAKES_AND_LADDERS') {
-                setCurrentScreen('snakesAndLaddersLobby');
+                navigate('snakesAndLaddersLobby');
               } else {
                 setSoloModalGameId(gameId);
               }
             }}
-            onPressLeaderboards={() => setCurrentScreen('leaderboards')}
+            onPressLeaderboards={() => navigate('leaderboards')}
             onPressAchievements={() => setAchievementsModalVisible(true)}
+            onBack={() => goBack('home')}
           />
         )}
 
         {currentScreen === 'leaderboards' && (
           <LeaderboardScreen
-            onBack={() => setCurrentScreen('home')}
+            onBack={() => goBack('home')}
             onPressAchievements={() => setAchievementsModalVisible(true)}
             onRequestRematch={(_gameType) => {
               setIsJoinModalVisible(true);
@@ -900,19 +1211,19 @@ function MainNavigator() {
 
         {currentScreen === 'friends' && (
           <FriendsScreen
-            onBack={() => setCurrentScreen('home')}
+            onBack={() => goBack('home')}
             onViewProfile={(targetId) => {
-              setProfileUserId(targetId);
-              setCurrentScreen('profile');
+              navigate('profile', { profileUserId: targetId });
             }}
             onNavigateToChat={(targetId, username) => {
-              setActivePeer({
-                id: targetId,
-                name: username,
-                username,
-                avatarUrl: null,
+              navigate('conversation', {
+                activePeer: {
+                  id: targetId,
+                  name: username,
+                  username,
+                  avatarUrl: null,
+                },
               });
-              setCurrentScreen('conversation');
             }}
             onChallenge={() => setIsJoinModalVisible(true)}
           />
@@ -920,34 +1231,38 @@ function MainNavigator() {
 
         {currentScreen === 'chatList' && (
           <ChatListScreen
-            onBack={() => setCurrentScreen('home')}
-            onNavigateToFriends={() => setCurrentScreen('friends')}
+            onBack={() => goBack('home')}
+            onNavigateToFriends={() => navigate('friends')}
             onSelectConversation={(peerId, peerName, peerUsername, peerAvatarUrl, convId, isGroup, groupMeta) => {
-              setActivePeer({
-                id: peerId,
-                name: peerName,
-                username: peerUsername,
-                avatarUrl: peerAvatarUrl,
-                conversationId: convId,
-                isGroup,
-                groupMeta,
+              navigate('conversation', {
+                activePeer: {
+                  id: peerId,
+                  name: peerName,
+                  username: peerUsername,
+                  avatarUrl: peerAvatarUrl,
+                  conversationId: convId,
+                  isGroup,
+                  groupMeta,
+                },
               });
-              setCurrentScreen('conversation');
             }}
           />
         )}
 
         {currentScreen === 'profile' && !profileUserId && (
           <ProfileScreen
-            onBack={() => setCurrentScreen('home')}
+            onBack={() => {
+              goBack('home');
+            }}
             onNavigateToChat={(targetId, username) => {
-              setActivePeer({
-                id: targetId,
-                name: username,
-                username,
-                avatarUrl: null,
+              navigate('conversation', {
+                activePeer: {
+                  id: targetId,
+                  name: username,
+                  username,
+                  avatarUrl: null,
+                },
               });
-              setCurrentScreen('conversation');
             }}
             onChallenge={() => setIsJoinModalVisible(true)}
           />
@@ -1036,7 +1351,7 @@ function MainNavigator() {
         onClose={dismissNewRegistration}
         onViewProfile={(targetUserId) => {
           dismissNewRegistration();
-          setProfileUserId(targetUserId);
+          navigate('profile', { profileUserId: targetUserId });
         }}
       />
 

@@ -27,6 +27,16 @@ export interface GroupMetaItem {
   members: GroupMemberItem[];
 }
 
+export type MessageType =
+  | 'TEXT'
+  | 'GAME_INVITE'
+  | 'GAME_RESULT'
+  | 'SYSTEM'
+  | 'IMAGE'
+  | 'VOICE'
+  | 'AUDIO'
+  | 'FILE';
+
 export interface ConversationItem {
   id: string;
   isGroup?: boolean;
@@ -35,11 +45,12 @@ export interface ConversationItem {
   lastMessage: {
     id: string;
     content: string;
-    type: 'TEXT' | 'GAME_INVITE' | 'GAME_RESULT' | 'SYSTEM';
+    type: MessageType;
     status: 'SENT' | 'DELIVERED' | 'READ';
     senderId: string;
     senderName?: string;
     createdAt: string;
+    metadata?: Record<string, any>;
   } | null;
   group?: GroupMetaItem | null;
   peer: {
@@ -59,7 +70,7 @@ export interface ChatMessage {
   senderName: string;
   senderAvatarUrl?: string | null;
   content: string;
-  type: 'TEXT' | 'GAME_INVITE' | 'GAME_RESULT' | 'SYSTEM';
+  type: MessageType;
   status: 'SENT' | 'DELIVERED' | 'READ';
   metadata?: Record<string, any>;
   createdAt: string;
@@ -234,7 +245,7 @@ export class ChatService {
   static async sendMessage(
     conversationId: string,
     content: string,
-    type: 'TEXT' | 'GAME_INVITE' | 'GAME_RESULT' | 'SYSTEM' = 'TEXT',
+    type: MessageType = 'TEXT',
     metadata?: Record<string, any>
   ): Promise<ChatMessage> {
     const headers = await this.getAuthHeaders();

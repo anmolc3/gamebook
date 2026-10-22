@@ -10,6 +10,7 @@ interface AvatarProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   status?: PresenceType;
   style?: ViewStyle;
+  fallbackToOtter?: boolean;
 }
 
 const SIZE_MAP = {
@@ -25,6 +26,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   size = 'md',
   status,
   style,
+  fallbackToOtter = false,
 }) => {
   const { theme } = useTheme();
   const dimension = SIZE_MAP[size];
@@ -37,11 +39,18 @@ export const Avatar: React.FC<AvatarProps> = ({
         .toUpperCase()
     : '??';
 
+  const isOtter =
+    displayName === 'Otter' ||
+    displayName?.startsWith('Otter') ||
+    displayName?.toLowerCase().startsWith('otter');
+  const resolvedAvatarId =
+    avatarUrl || (isOtter || fallbackToOtter ? 'otter_mascot' : null);
+
   return (
     <View style={[{ width: dimension, height: dimension }, style]}>
-      {avatarUrl ? (
+      {resolvedAvatarId ? (
         <View style={{ width: dimension, height: dimension, borderRadius: dimension / 2, overflow: 'hidden' }}>
-          <PresetAvatar presetId={avatarUrl} size={dimension} />
+          <PresetAvatar presetId={resolvedAvatarId} size={dimension} />
         </View>
       ) : (
         <View

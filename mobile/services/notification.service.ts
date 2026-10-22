@@ -2,7 +2,8 @@ import type * as NotificationsType from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
-import { apiPost } from './api';
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from './api';
+import { MobileSocketService } from './socket.service';
 
 // Detect whether running inside Expo Go
 const isExpoGo =
@@ -46,17 +47,36 @@ export const CHANNELS = {
 
 export type NotificationType =
   | 'CHAT_MESSAGE'
+  | 'MENTION'
+  | 'MISSED_CALL'
   | 'FRIEND_REQUEST'
   | 'FRIEND_ACCEPTED'
   | 'GAME_INVITE'
   | 'ACHIEVEMENT'
-  | 'YOUR_TURN';
+  | 'YOUR_TURN'
+  | string;
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data?: any;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 export interface NotificationData {
   type: NotificationType;
   roomCode?: string;
   recipientId?: string;
   userId?: string;
+  conversationId?: string;
+  senderId?: string;
+  callerId?: string;
+  messageId?: string;
 }
 
 /**
@@ -166,7 +186,8 @@ export class NotificationService {
 
     await Promise.all([
       Notifications.setNotificationChannelAsync(CHANNELS.DEFAULT, {
-        name: 'General',
+        name: 'Otter General',
+        description: 'Otter general updates and notifications',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#3ED598',
@@ -176,8 +197,8 @@ export class NotificationService {
         showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.MESSAGES, {
-        name: 'Messages',
-        description: 'New chat messages from friends',
+        name: 'Otter Messages',
+        description: 'New chat messages in Otter',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 100, 200, 100],
         lightColor: '#3ED598',
@@ -187,8 +208,8 @@ export class NotificationService {
         showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.SOCIAL, {
-        name: 'Social',
-        description: 'Friend requests and social activity',
+        name: 'Otter Social',
+        description: 'Friend requests and social updates in Otter',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 200, 100, 200],
         lightColor: '#60A5FA',
@@ -198,8 +219,8 @@ export class NotificationService {
         showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.GAMES, {
-        name: 'Games',
-        description: 'Game invites and turn reminders',
+        name: 'Otter Games',
+        description: 'Game invites and turn reminders in Otter',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 100, 100, 300],
         lightColor: '#F59E0B',
@@ -209,8 +230,8 @@ export class NotificationService {
         showBadge: true,
       }),
       Notifications.setNotificationChannelAsync(CHANNELS.ACHIEVEMENTS, {
-        name: 'Achievements',
-        description: 'Achievement unlocks and milestones',
+        name: 'Otter Achievements',
+        description: 'Otter achievement unlocks and milestones',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 500],
         lightColor: '#FFD700',
@@ -235,7 +256,9 @@ export class NotificationService {
     channelId: string = CHANNELS.MESSAGES
   ): Promise<void> {
     if (!Notifications) return;
-    const notifKey = `${title}:::${body}:::${data?.messageId || data?.conversationId || ''}`;
+    const cleanTitle = (title || 'New Message').replace(/^💬\s*/, '').trim() || 'New Message';
+    const cleanBody = (body || '').replace(/^💬\s*/, '').trim();
+    const notifKey = `${cleanTitle}:::${cleanBody}:::${data?.messageId || data?.conversationId || ''}`;
     const now = Date.now();
     const lastTimestamp = this.recentNotifMap.get(notifKey);
     if (lastTimestamp && now - lastTimestamp < 3500) {
@@ -256,10 +279,11 @@ export class NotificationService {
       }
       await Notifications.scheduleNotificationAsync({
         content: {
-          title,
-          body,
+          title: cleanTitle,
+          body: cleanBody,
           data,
           sound: 'default',
+          color: '#3ED598',
           ...(channelId ? { channelId } : {}),
         } as any,
         trigger: null,
@@ -349,5 +373,202 @@ export class NotificationService {
 
   static get expoPushToken(): string | null {
     return this._expoPushToken;
+  }
+
+  // ─── Unified In-App Notifications & Real-Time Syncing ───────────────────────
+
+  private static notifListeners = new Set<(notif: AppNotification) => void>();
+  private static unreadListeners = new Set<(count: number) => void>();
+  private static cachedNotifications: AppNotification[] = [];
+  private static cachedUnreadCount: number = 0;
+  private static socketSubscribed = false;
+
+  static initRealtimeListeners(): void {
+    if (this.socketSubscribed) return;
+    this.socketSubscribed = true;
+
+    MobileSocketService.onNotificationReceived((newNotif: any) => {
+      if (!newNotif || !newNotif.id) return;
+
+      const existsIndex = this.cachedNotifications.findIndex((n) => n.id === newNotif.id);
+      if (existsIndex >= 0) {
+        this.cachedNotifications[existsIndex] = { ...this.cachedNotifications[existsIndex], ...newNotif };
+      } else {
+        this.cachedNotifications = [newNotif, ...this.cachedNotifications];
+        if (!newNotif.isRead) {
+          this.cachedUnreadCount += 1;
+          this.notifyUnreadListeners(this.cachedUnreadCount);
+        }
+      }
+
+      this.notifListeners.forEach((cb) => {
+        try {
+          cb(newNotif);
+        } catch (e) {
+          console.warn('[NotificationService] Error in notif listener:', e);
+        }
+      });
+    });
+
+    MobileSocketService.onUnreadNotificationCount((data: { unreadCount: number }) => {
+      if (typeof data?.unreadCount === 'number') {
+        this.cachedUnreadCount = data.unreadCount;
+        this.notifyUnreadListeners(this.cachedUnreadCount);
+      }
+    });
+  }
+
+  static addNotificationListener(listener: (notif: AppNotification) => void): () => void {
+    this.initRealtimeListeners();
+    this.notifListeners.add(listener);
+    return () => {
+      this.notifListeners.delete(listener);
+    };
+  }
+
+  static addUnreadCountListener(listener: (count: number) => void): () => void {
+    this.initRealtimeListeners();
+    this.unreadListeners.add(listener);
+    listener(this.cachedUnreadCount);
+    return () => {
+      this.unreadListeners.delete(listener);
+    };
+  }
+
+  private static notifyUnreadListeners(count: number): void {
+    this.unreadListeners.forEach((cb) => {
+      try {
+        cb(count);
+      } catch (e) {
+        console.warn('[NotificationService] Error in unread listener:', e);
+      }
+    });
+  }
+
+  /**
+   * Load existing notifications from the backend API.
+   */
+  static async fetchNotifications(limit: number = 40): Promise<AppNotification[]> {
+    try {
+      this.initRealtimeListeners();
+      const res = await apiGet<{ success: boolean; data: AppNotification[] }>(
+        `/notifications?limit=${limit}`
+      );
+      if (res && res.data && Array.isArray(res.data)) {
+        this.cachedNotifications = res.data;
+        this.cachedUnreadCount = res.data.filter((n) => !n.isRead).length;
+        this.notifyUnreadListeners(this.cachedUnreadCount);
+        return res.data;
+      }
+      return [];
+    } catch (err) {
+      console.warn('[NotificationService] fetchNotifications failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Fetch unread notification count.
+   */
+  static async fetchUnreadCount(): Promise<number> {
+    try {
+      this.initRealtimeListeners();
+      const res = await apiGet<{ success: boolean; data: { unreadCount: number } }>(
+        '/notifications/unread-count'
+      );
+      if (res && res.data && typeof res.data.unreadCount === 'number') {
+        this.cachedUnreadCount = res.data.unreadCount;
+        this.notifyUnreadListeners(this.cachedUnreadCount);
+        return this.cachedUnreadCount;
+      }
+      return this.cachedUnreadCount;
+    } catch (err) {
+      console.warn('[NotificationService] fetchUnreadCount failed:', err);
+      return this.cachedUnreadCount;
+    }
+  }
+
+  /**
+   * Mark all unread notifications as read.
+   */
+  static async markAllAsRead(): Promise<void> {
+    try {
+      await apiPut('/notifications/mark-read');
+      this.cachedNotifications = this.cachedNotifications.map((n) => ({ ...n, isRead: true }));
+      this.cachedUnreadCount = 0;
+      this.notifyUnreadListeners(0);
+    } catch (err) {
+      console.warn('[NotificationService] markAllAsRead failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Mark a single notification as read.
+   */
+  static async markAsRead(id: string): Promise<void> {
+    try {
+      await apiPatch(`/notifications/${id}/read`);
+      this.cachedNotifications = this.cachedNotifications.map((n) =>
+        n.id === id ? { ...n, isRead: true } : n
+      );
+      this.cachedUnreadCount = Math.max(0, this.cachedNotifications.filter((n) => !n.isRead).length);
+      this.notifyUnreadListeners(this.cachedUnreadCount);
+    } catch (err) {
+      console.warn('[NotificationService] markAsRead failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Clear all notifications.
+   */
+  static async clearAll(): Promise<void> {
+    try {
+      await apiDelete('/notifications');
+      this.cachedNotifications = [];
+      this.cachedUnreadCount = 0;
+      this.notifyUnreadListeners(0);
+    } catch (err) {
+      console.warn('[NotificationService] clearAll failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Delete a single notification.
+   */
+  static async deleteNotification(id: string): Promise<void> {
+    try {
+      await apiDelete(`/notifications/${id}`);
+      this.cachedNotifications = this.cachedNotifications.filter((n) => n.id !== id);
+      this.cachedUnreadCount = this.cachedNotifications.filter((n) => !n.isRead).length;
+      this.notifyUnreadListeners(this.cachedUnreadCount);
+    } catch (err) {
+      console.warn('[NotificationService] deleteNotification failed:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Human readable time ago formatting.
+   */
+  static formatTimeAgo(dateString: string): string {
+    if (!dateString) return 'Just now';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0 || isNaN(diffMs)) return 'Just now';
+
+    const diffSecs = Math.floor(diffMs / 1000);
+    if (diffSecs < 45) return 'Just now';
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   }
 }

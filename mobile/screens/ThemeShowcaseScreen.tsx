@@ -8,6 +8,7 @@ import {
   StatusBar,
   TouchableOpacity,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, getThemeGradients } from '../theme';
@@ -28,6 +29,7 @@ import { StoryTrayItem } from '../components/organisms/StoryBar';
 import { StoryService } from '../services/story.service';
 import { GameService } from '../services/game.service';
 import { Icon } from '../icons';
+import { NotificationService, AppNotification } from '../services/notification.service';
 
 export interface ThemeShowcaseScreenProps {
   onPressProfile?: () => void;
@@ -38,6 +40,7 @@ export interface ThemeShowcaseScreenProps {
   onPressDiscovery?: () => void;
   onPressThemes?: () => void;
   onPressStoryTray?: (tray: StoryTrayItem) => void;
+  onOpenConversation?: (peer: any) => void;
 }
 
 export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
@@ -49,12 +52,13 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   onPressDiscovery,
   onPressThemes,
   onPressStoryTray,
+  onOpenConversation,
 }) => {
   const { theme, themeId, effectiveMode } = useTheme();
   const themeGradients = getThemeGradients(themeId, effectiveMode);
   const { user } = useAuth();
   const [notificationsModalVisible, setNotificationsModalVisible] = useState(false);
-  const [hasUnreadNotifs, setHasUnreadNotifs] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>([]);
@@ -83,10 +87,44 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
     loadStoryFeed();
   }, [loadStoryFeed]);
 
+  useEffect(() => {
+    NotificationService.fetchUnreadCount()
+      .then((count) => setUnreadNotifCount(count))
+      .catch(() => {});
+
+    const unsub = NotificationService.addUnreadCountListener((count) => {
+      setUnreadNotifCount(count);
+    });
+
+    return unsub;
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2500);
   };
+
+  // Dismiss open modals or clear search on Android hardware Back
+  useEffect(() => {
+    const handleHardwareBack = () => {
+      if (isCreateStoryVisible) {
+        setIsCreateStoryVisible(false);
+        return true;
+      }
+      if (notificationsModalVisible) {
+        setNotificationsModalVisible(false);
+        return true;
+      }
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        return true;
+      }
+      return false;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
+    return () => sub.remove();
+  }, [isCreateStoryVisible, notificationsModalVisible, searchQuery]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -99,9 +137,10 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
       <AppHeader
         userName={user?.displayName || 'Player'}
         avatarUrl={user?.avatarUrl}
-        hasUnreadNotifications={hasUnreadNotifs}
+        hasUnreadNotifications={unreadNotifCount > 0}
+        unreadNotifCount={unreadNotifCount}
         onPressNotifications={() => {
-          setHasUnreadNotifs(false);
+          setUnreadNotifCount(0);
           setNotificationsModalVisible(true);
         }}
         onPressProfile={onPressProfile}
@@ -331,6 +370,30 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
         onClose={() => setNotificationsModalVisible(false)}
         onAcceptInvite={(gameType) => {
           if (onPressPlay) onPressPlay(gameType);
+        }}
+        onSelectNotification={(notif) => {
+          if (
+            notif.type === 'MENTION' ||
+            notif.type === 'CHAT_MESSAGE' ||
+            notif.type === 'MISSED_CALL'
+          ) {
+            const data = notif.data || {};
+            if (onOpenConversation && (data.senderId || data.callerId || data.conversationId)) {
+              onOpenConversation({
+                id: data.senderId || data.callerId || '',
+                name: data.senderName || data.callerName || notif.title || 'Conversation',
+                username: data.senderUsername || data.callerUsername || 'player',
+                avatarUrl: data.senderAvatarUrl || null,
+                conversationId: data.conversationId,
+              });
+              return;
+            }
+            if (onPressChat) {
+              onPressChat();
+            }
+          } else if (notif.type === 'FRIEND_REQUEST' || notif.type === 'FRIEND_ACCEPTED') {
+            if (onPressFriends) onPressFriends();
+          }
         }}
       />
 

@@ -82,6 +82,18 @@ export class PresenceService {
   }
 
   /**
+   * Completely removes a user from presence tracking on account deletion
+   */
+  static removeUser(userId: string): void {
+    const timer = this.disconnectTimers.get(userId);
+    if (timer) {
+      clearTimeout(timer);
+      this.disconnectTimers.delete(userId);
+    }
+    this.activeSockets.delete(userId);
+  }
+
+  /**
    * Verify if viewer is blocked by target or blocked target
    */
   static async isBlocked(viewerId: string, targetUserId: string): Promise<boolean> {

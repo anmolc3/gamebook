@@ -797,11 +797,18 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
     );
 
     const isMe = targetUserId === user?.id || (isSoloMatch && slotIdx === 0);
+    const getBotDiff = (uid?: string) => {
+      if (uid === 'BOT_PIXEL') return ' (Easy)';
+      if (uid === 'BOT_ACE') return ' (Hard)';
+      if (uid === 'BOT_ATLAS') return ' (Expert)';
+      return ' (Medium)';
+    };
+
     let name = defaultName;
     if (isMe) {
       name = 'You';
     } else if (targetUserId?.startsWith('BOT_')) {
-      name = `${targetUserId.replace('BOT_', '')} (AI)`;
+      name = `Otter${getBotDiff(targetUserId)}`;
     } else if (roomP) {
       const rAny = roomP as any;
       name =
@@ -813,11 +820,19 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
         defaultName;
     }
 
-    const isAi = targetUserId?.startsWith('BOT_') || name.includes('(AI)');
+    if (
+      name.toLowerCase().includes('(ai)') ||
+      name.toLowerCase().includes('bot') ||
+      name.toLowerCase().includes('computer')
+    ) {
+      name = `Otter${getBotDiff(targetUserId)}`;
+    }
+
+    const isAi = targetUserId?.startsWith('BOT_') || name.startsWith('Otter');
     const initial = isMe
       ? user?.displayName?.charAt(0) || 'Y'
       : isAi
-      ? '🤖'
+      ? '🦦'
       : name.charAt(0) || 'O';
 
     return {
@@ -959,13 +974,16 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
       if (state.winnerId || state.isComplete) {
         setIsMatchOver(true);
         const winPlayer = state.players?.find((p: any) => p.userId === state.winnerId);
+        const winDiff =
+          state.winnerId === 'BOT_PIXEL' ? ' (Easy)' :
+          state.winnerId === 'BOT_ACE' ? ' (Hard)' :
+          state.winnerId === 'BOT_ATLAS' ? ' (Expert)' : ' (Medium)';
         setWinnerInfo({
           id: state.winnerId,
           name:
-            winPlayer?.name ||
-            (state.winnerId?.startsWith('BOT_')
-              ? `${state.winnerId.replace('BOT_', '')} (AI)`
-              : 'Player'),
+            state.winnerId?.startsWith('BOT_')
+              ? (winPlayer?.name?.startsWith('Otter') ? winPlayer.name : `Otter${winDiff}`)
+              : winPlayer?.name || 'Player',
         });
         SoundService.play('gameOver');
       } else {
@@ -1010,7 +1028,7 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
           setWinnerInfo({
             id: payload.winnerId,
             name: isWinnerAi
-              ? `${payload.winnerId.replace('BOT_', '')} (AI)`
+              ? 'Otter'
               : winPlayer?.user?.displayName || winPlayer?.user?.username || winPlayer?.displayName || 'Player',
           });
         }
@@ -1040,7 +1058,7 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
     const unsubAiThinking = SoloService.onAiThinking((data) => {
       if (data.roomCode === roomCode) {
         setIsAiThinking(true);
-        setAiThinkingName(data.aiPlayerName || 'AI Opponent');
+        setAiThinkingName(data.aiPlayerName || 'Otter');
         setTimeout(() => {
           setIsAiThinking(false);
           setAiThinkingName(null);
@@ -1126,8 +1144,12 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
 
         if (isComplete) {
           setIsMatchOver(true);
+          const localWinDiff =
+            playerId === 'BOT_PIXEL' ? ' (Easy)' :
+            playerId === 'BOT_ACE' ? ' (Hard)' :
+            playerId === 'BOT_ATLAS' ? ' (Expert)' : ' (Medium)';
           const winName = playerId.startsWith('BOT_')
-            ? `${playerId.replace('BOT_', '')} (AI)`
+            ? `Otter${localWinDiff}`
             : 'You';
           setWinnerInfo({ id: playerId, name: winName });
           SoundService.play('gameOver');
@@ -1148,7 +1170,7 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
     if (!currentTurn || !currentTurn.startsWith('BOT_')) return;
 
     setIsAiThinking(true);
-    setAiThinkingName(p2Info.name || 'AI Opponent');
+    setAiThinkingName(p2Info.name || 'Otter');
 
     const aiTimer = setTimeout(() => {
       if (gameState.turnPlayerId !== currentTurn) return;
@@ -1303,10 +1325,19 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
                 {
                   borderColor: p2Info.isAi ? '#10B981' : '#F43F5E',
                   backgroundColor: p2Info.isAi ? '#064E3B' : '#881337',
+                  overflow: 'hidden',
                 },
               ]}
             >
-              <Text style={styles.avatarInitial}>{p2Info.initial}</Text>
+              {p2Info.isAi ? (
+                <Image
+                  source={require('../../assets/icon.png')}
+                  style={{ width: 28, height: 28, borderRadius: 14 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.avatarInitial}>{p2Info.initial}</Text>
+              )}
             </View>
             {/* Token pawn color dot */}
             <View style={[styles.tokenDot, { backgroundColor: '#EF4444' }]} />
@@ -1505,7 +1536,7 @@ export const SnakesAndLaddersScreen: React.FC<SnakesAndLaddersScreenProps> = ({
                   ? 'Rolling...'
                   : 'Tap to Roll'
                 : isAiThinking
-                ? `🤖 ${aiThinkingName || 'AI'} is rolling...`
+                ? `🦦 ${aiThinkingName || 'Otter'} is rolling...`
                 : `Waiting for ${p2Info.name}... (${secondsRemaining}s)`}
             </Text>
           </View>

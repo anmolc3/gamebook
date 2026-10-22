@@ -112,4 +112,95 @@ router.put('/mark-read', async (req: AuthRequest, res: Response): Promise<void> 
   }
 });
 
+/**
+ * PATCH /api/v1/notifications/:id/read
+ * Mark a single notification as read.
+ */
+router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+      return;
+    }
+
+    const id = String(req.params.id);
+    await prisma.notification.updateMany({
+      where: { id, userId },
+      data: { isRead: true },
+    });
+
+    res.status(200).json({ success: true, message: 'Notification marked as read' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+/**
+ * DELETE /api/v1/notifications
+ * Clear all notifications for the authenticated user.
+ */
+router.delete('/', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+      return;
+    }
+
+    await prisma.notification.deleteMany({
+      where: { userId },
+    });
+
+    res.status(200).json({ success: true, message: 'All notifications cleared' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+/**
+ * DELETE /api/v1/notifications/:id
+ * Delete a single notification.
+ */
+router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+      return;
+    }
+
+    const id = String(req.params.id);
+    await prisma.notification.deleteMany({
+      where: { id, userId },
+    });
+
+    res.status(200).json({ success: true, message: 'Notification deleted' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
+/**
+ * GET /api/v1/notifications/unread-count
+ * Get count of unread notifications for badge display.
+ */
+router.get('/unread-count', async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ success: false, error: { message: 'Unauthorized' } });
+      return;
+    }
+
+    const count = await prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+
+    res.status(200).json({ success: true, data: { unreadCount: count } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: { message: err.message } });
+  }
+});
+
 export default router;

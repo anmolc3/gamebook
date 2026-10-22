@@ -24,9 +24,22 @@ export class LudoAI implements GameAI<LudoState, LudoAction> {
       return { type: 'MOVE_TOKEN', tokenId: validMoves[0] };
     }
 
+    // EASY: Makes simpler decisions and more mistakes (gives beginners a fair chance)
     if (difficulty === 'EASY') {
-      const randToken = validMoves[Math.floor(Math.random() * validMoves.length)];
-      return { type: 'MOVE_TOKEN', tokenId: randToken };
+      if (Math.random() < 0.6) {
+        const randToken = validMoves[Math.floor(Math.random() * validMoves.length)];
+        return { type: 'MOVE_TOKEN', tokenId: randToken };
+      }
+      // Simple naive advancement without capture/threat calculation
+      return { type: 'MOVE_TOKEN', tokenId: validMoves[0] };
+    }
+
+    // MEDIUM: Balances smart moves with occasional mistakes (15% blunder chance)
+    if (difficulty === 'MEDIUM') {
+      if (Math.random() < 0.15) {
+        const randToken = validMoves[Math.floor(Math.random() * validMoves.length)];
+        return { type: 'MOVE_TOKEN', tokenId: randToken };
+      }
     }
 
     const aiPlayer = state.players.find((p) => p.userId === aiPlayerId);
@@ -47,20 +60,20 @@ export class LudoAI implements GameAI<LudoState, LudoAction> {
 
       let score = 0;
 
-      // 1. Unlocking from yard
+      // 1. Unlocking from yard on a 6
       if (token.step === -1 && roll === 6) {
-        score += 65;
+        score += difficulty === 'HARD' ? 95 : 70;
       } else {
         const nextStep = token.step + roll;
 
-        // 2. Finishing token
+        // 2. Finishing token in home triangle
         if (nextStep === HOME_FINISH_STEP) {
-          score += 100;
+          score += 150;
         }
 
         // 3. Entering home stretch (safe from captures)
         if (token.step < 51 && nextStep >= 51) {
-          score += 50;
+          score += 70;
         }
 
         // 4. Capture check on main circuit
@@ -76,14 +89,34 @@ export class LudoAI implements GameAI<LudoState, LudoAction> {
                 if (oppTok.step >= 0 && oppTok.step < 51) {
                   const oppGlobalCell = (oppOffset + oppTok.step) % 52;
                   if (oppGlobalCell === nextGlobalCell) {
-                    score += 90; // Big capture bonus!
+                    score += 120; // High capture priority
                   }
                 }
               }
             }
           } else {
             // Safe zone landing bonus
-            score += 40;
+            score += 55;
+          }
+
+          // HARD mode: Threat evasion (escapes if opponent is 1-6 cells behind on unsafe tile)
+          if (difficulty === 'HARD' && token.step >= 0) {
+            const currentGlobal = (aiOffset + token.step) % 52;
+            if (!SAFE_CELLS.has(currentGlobal)) {
+              for (const opp of state.players) {
+                if (opp.userId === aiPlayerId) continue;
+                const oppOffset = COLOR_OFFSETS[opp.color];
+                for (const oppTok of opp.tokens) {
+                  if (oppTok.step >= 0 && oppTok.step < 51) {
+                    const oppGlobal = (oppOffset + oppTok.step) % 52;
+                    const distBehind = (currentGlobal - oppGlobal + 52) % 52;
+                    if (distBehind >= 1 && distBehind <= 6) {
+                      score += 60; // Evasion bonus to move vulnerable token away
+                    }
+                  }
+                }
+              }
+            }
           }
         }
 
@@ -91,8 +124,10 @@ export class LudoAI implements GameAI<LudoState, LudoAction> {
         score += token.step * 0.5;
       }
 
-      // Small jitter for personality
-      score += Math.random() * 5;
+      // Small jitter for Medium personality; zero jitter for Hard to guarantee optimal play
+      if (difficulty !== 'HARD') {
+        score += Math.random() * 6;
+      }
 
       if (score > bestScore) {
         bestScore = score;

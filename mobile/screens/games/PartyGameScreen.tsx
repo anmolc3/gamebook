@@ -160,6 +160,28 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
     [roomCode]
   );
 
+  const getBotDiffLabel = (uid?: string, dName?: string) => {
+    if (dName && dName.startsWith('Otter (')) return '';
+    if (uid === 'BOT_PIXEL') return ' (Easy)';
+    if (uid === 'BOT_ACE') return ' (Hard)';
+    if (uid === 'BOT_ATLAS') return ' (Expert)';
+    return ' (Medium)';
+  };
+
+  const resolvePlayerName = (p: RoomPlayer, idx: number) => {
+    const rawName = p.user?.displayName || p.user?.username || `P${idx + 1}`;
+    if (rawName.startsWith('Otter (')) return rawName;
+    if (
+      p.userId?.startsWith('BOT_') ||
+      rawName.toLowerCase().includes('(ai)') ||
+      rawName.toLowerCase().includes('bot') ||
+      rawName.toLowerCase().includes('computer')
+    ) {
+      return `Otter${getBotDiffLabel(p.userId, rawName)}`;
+    }
+    return rawName;
+  };
+
   const handleOfferRematch = () => {
     MobileSocketService.requestRematch(roomCode);
   };
@@ -659,7 +681,7 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
                   onPress={() => sendAction({ type: 'VOTE_IMPOSTER', targetUserId: p.userId })}
                 >
                   <Text style={[styles.suspectName, { color: theme.colors.textPrimary }]}>
-                    {p.user?.displayName || p.user?.username || `P${idx + 1}`}
+                    {resolvePlayerName(p, idx)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1080,9 +1102,9 @@ export const PartyGameScreen: React.FC<PartyGameScreenProps> = ({
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scoreScroll}>
           {playerList.map((p, idx) => (
             <View key={idx} style={styles.playerScoreItem}>
-              <Avatar displayName={p.user?.displayName || p.user?.username || `P${idx + 1}`} size="sm" />
+              <Avatar displayName={resolvePlayerName(p, idx)} size="sm" />
               <Text style={[styles.playerNameText, { color: theme.colors.textPrimary }]}>
-                {p.user?.displayName || p.user?.username || `P${idx + 1}`}
+                {resolvePlayerName(p, idx)}
               </Text>
               <Text style={styles.playerScoreValue}>{scores[p.userId] || 0}</Text>
             </View>

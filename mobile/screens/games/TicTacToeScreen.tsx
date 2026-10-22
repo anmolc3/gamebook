@@ -246,8 +246,30 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
   const playerXMeta = playerList.find((p) => p.userId === playerXId);
   const playerOMeta = playerList.find((p) => p.userId === playerOId);
 
-  const playerXName = playerXMeta?.user?.displayName || (playerXId === user?.id ? 'You' : 'Player X');
-  const playerOName = playerOMeta?.user?.displayName || (playerOId === user?.id ? 'You' : 'Player O');
+  const resolvePlayerName = (id: string, meta?: RoomPlayer, fallback = 'Player') => {
+    const getBotDiff = (uid?: string) => {
+      if (uid === 'BOT_PIXEL') return ' (Easy)';
+      if (uid === 'BOT_ACE') return ' (Hard)';
+      if (uid === 'BOT_ATLAS') return ' (Expert)';
+      return ' (Medium)';
+    };
+    if (id?.startsWith('BOT_')) {
+      const explicit = meta?.user?.displayName;
+      return explicit && explicit.startsWith('Otter') ? explicit : `Otter${getBotDiff(id)}`;
+    }
+    const name = meta?.user?.displayName || (id === user?.id ? 'You' : fallback);
+    if (
+      name.toLowerCase().includes('(ai)') ||
+      name.toLowerCase().includes('bot') ||
+      name.toLowerCase().includes('computer')
+    ) {
+      return `Otter${getBotDiff(id)}`;
+    }
+    return name;
+  };
+
+  const playerXName = resolvePlayerName(playerXId, playerXMeta, 'Player X');
+  const playerOName = resolvePlayerName(playerOId, playerOMeta, 'Player O');
 
   const playerXScore = scores[playerXId] || 0;
   const playerOScore = scores[playerOId] || 0;
@@ -462,7 +484,7 @@ export const TicTacToeScreen: React.FC<TicTacToeScreenProps> = ({
                 ? 'Match Concluded'
                 : isMyTurn
                 ? `Your Turn (Mark ${myMark})`
-                : `Waiting for Opponent (${turnPlayerId === playerXId ? playerXName : playerOName})...`}
+                : `Waiting for ${turnPlayerId === playerXId ? playerXName : playerOName}...`}
             </Text>
           </View>
 

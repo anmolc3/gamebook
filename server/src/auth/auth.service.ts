@@ -10,6 +10,7 @@ import {
   ForgotPasswordInput,
   ResetPasswordInput,
   GoogleSignInInput,
+  DeleteAccountInput,
 } from './auth.validation';
 
 interface PasswordResetEntry {
@@ -173,10 +174,18 @@ export class AuthService {
       throw new Error('Google account email is not verified');
     }
 
-    // If GOOGLE_CLIENT_ID is configured in environment, verify audience
-    const configuredClientId = process.env.GOOGLE_CLIENT_ID;
-    if (configuredClientId && payload.aud !== configuredClientId) {
-      throw new Error('Google token audience mismatch');
+    // Verify audience matches any configured Google OAuth client
+    const allowedClientIds = [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
+      process.env.GOOGLE_IOS_CLIENT_ID,
+      '584037157308-6jortk40dk68qg2hiuam5pjqgrro0lam.apps.googleusercontent.com',
+    ].filter(Boolean) as string[];
+
+    if (allowedClientIds.length > 0 && !allowedClientIds.includes(payload.aud)) {
+      if (!allowedClientIds.includes(payload.azp)) {
+        throw new Error('Google token audience mismatch');
+      }
     }
 
     const email = payload.email.toLowerCase().trim();
@@ -261,6 +270,92 @@ export class AuthService {
         createdAt: user.createdAt,
       },
       token,
+    };
+  }
+
+  /**
+   * Generates Google OAuth 2.0 redirect URL for mobile and web flows
+   */
+  static getGoogleAuthUrl(returnTo?: string): string {
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID ||
+      '584037157308-6jortk40dk68qg2hiuam5pjqgrro0lam.apps.googleusercontent.com';
+    const callbackUrl =
+      process.env.GOOGLE_CALLBACK_URL ||
+      'https://gamebook-production.up.railway.app/api/v1/auth/google/callback';
+
+    const statePayload = {
+      returnTo: returnTo || 'socialgamingarena://google-callback',
+      timestamp: Date.now(),
+    };
+    const state = Buffer.from(JSON.stringify(statePayload)).toString('base64url');
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: callbackUrl,
+      response_type: 'code',
+      scope: 'openid email profile',
+      state,
+      prompt: 'select_account',
+      access_type: 'offline',
+    });
+
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  /**
+   * Exchanges authorization code from Google for tokens and signs in user
+   */
+  static async handleGoogleCallback(
+    code: string,
+    state?: string
+  ): Promise<{ token: string; user: any; returnTo: string }> {
+    const clientId =
+      process.env.GOOGLE_CLIENT_ID ||
+      '584037157308-6jortk40dk68qg2hiuam5pjqgrro0lam.apps.googleusercontent.com';
+    const clientSecret =
+      process.env.GOOGLE_CLIENT_SECRET ||
+      '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Pg';
+    const callbackUrl =
+      process.env.GOOGLE_CALLBACK_URL ||
+      'https://gamebook-production.up.railway.app/api/v1/auth/google/callback';
+
+    let returnTo = 'socialgamingarena://google-callback';
+    if (state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+        if (decoded.returnTo) returnTo = decoded.returnTo;
+      } catch {
+        // use default fallback
+      }
+    }
+
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: callbackUrl,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const tokenData: any = await tokenRes.json();
+    if (!tokenRes.ok || !tokenData.id_token) {
+      const errorMsg =
+        tokenData.error_description ||
+        tokenData.error ||
+        'Failed to exchange authorization code with Google';
+      throw new Error(errorMsg);
+    }
+
+    const authResult = await this.googleSignIn({ idToken: tokenData.id_token });
+    return {
+      token: authResult.token,
+      user: authResult.user,
+      returnTo,
     };
   }
 
@@ -417,6 +512,188 @@ export class AuthService {
     return {
       success: true,
       message: 'Your password has been reset successfully. You can now sign in.',
+    };
+  }
+
+  /**
+   * Securely and permanently deletes a user account across all database tables,
+   * cascades personal data, cleans up hosted/participating game rooms, anonymizes
+   * historical game match statistics, disconnects real-time sockets, terminates calls,
+   * and clears push tokens.
+   */
+  static async deleteAccount(
+    userId: string,
+    input: DeleteAccountInput
+  ): Promise<{
+    success: boolean;
+    message: string;
+    deletedAt: string;
+    retainedDataNotice: string;
+  }> {
+    // 1. Fetch user to verify existence and credentials
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+
+    if (!user) {
+      throw new Error('User account not found or already deleted');
+    }
+
+    // 2. Verification / Reauthentication
+    let authenticated = false;
+
+    if (input.password && input.password.trim().length > 0) {
+      const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);
+      if (!isPasswordValid) {
+        throw new Error('Incorrect password. Please verify your credentials and try again.');
+      }
+      authenticated = true;
+    } else if (input.googleToken && input.googleToken.trim().length > 0) {
+      try {
+        const googleRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(input.googleToken)}`
+        );
+        const payload: any = await googleRes.json();
+        if (
+          googleRes.ok &&
+          payload.email &&
+          payload.email.toLowerCase() === user.email.toLowerCase()
+        ) {
+          authenticated = true;
+        } else {
+          throw new Error('Google authentication verification failed.');
+        }
+      } catch (err: any) {
+        throw new Error(err.message || 'Google token re-authentication failed.');
+      }
+    } else {
+      // Verified via active JWT session token
+      authenticated = true;
+    }
+
+    // 3. Clean up active Socket.IO connections, presence, active calls, and in-game rooms
+    try {
+      const { disconnectUserSockets } = require('../sockets/socket.server');
+      if (typeof disconnectUserSockets === 'function') {
+        disconnectUserSockets(userId, 'account_deleted');
+      }
+    } catch (socketErr) {
+      console.warn('[AuthService] Socket cleanup warning:', socketErr);
+    }
+
+    // 4. Atomic database deletion and anonymization transaction
+    await prisma.$transaction(
+      async (tx) => {
+        // (A) Handle GameRooms hosted by this user
+        const hostedRooms = await tx.gameRoom.findMany({
+          where: { hostId: userId },
+          include: {
+            players: {
+              orderBy: { slotIndex: 'asc' },
+            },
+          },
+        });
+
+        for (const room of hostedRooms) {
+          const remainingPlayers = room.players.filter((p) => p.userId !== userId);
+          if (remainingPlayers.length === 0) {
+            // Disband and delete the empty room
+            await tx.gameRoom.delete({ where: { id: room.id } });
+          } else {
+            // Transfer host role to next lowest slotIndex player
+            const nextHost = remainingPlayers[0];
+            await tx.gameRoom.update({
+              where: { id: room.id },
+              data: { hostId: nextHost.userId },
+            });
+            await tx.gamePlayer.update({
+              where: { id: nextHost.id },
+              data: { isReady: true },
+            });
+          }
+        }
+
+        // (B) Remove player participation records from all rooms
+        await tx.gamePlayer.deleteMany({
+          where: { userId },
+        });
+
+        // (C) Anonymize historical GameResult records
+        // Clear foreign key winnerId
+        await tx.gameResult.updateMany({
+          where: { winnerId: userId },
+          data: { winnerId: null },
+        });
+
+        // Anonymize player personal identity in playersData JSON while preserving opponent's match history
+        const userPattern = `%${userId}%`;
+        const matchRecords: Array<{ id: string; playersData: any }> = await tx.$queryRaw`
+          SELECT id, "playersData" FROM "GameResult"
+          WHERE "playersData"::text LIKE ${userPattern}
+        `;
+
+        for (const record of matchRecords) {
+          if (Array.isArray(record.playersData)) {
+            const anonymized = record.playersData.map((p: any) => {
+              if (p && p.userId === userId) {
+                return {
+                  ...p,
+                  username: 'deleted_user',
+                  displayName: 'Deleted Player',
+                  avatarUrl: null,
+                  isDeleted: true,
+                };
+              }
+              return p;
+            });
+
+            await tx.gameResult.update({
+              where: { id: record.id },
+              data: { playersData: anonymized },
+            });
+          }
+        }
+
+        // (D) Handle Conversations: remove creatorId reference if user created group conversations
+        await tx.conversation.updateMany({
+          where: { creatorId: userId },
+          data: { creatorId: null },
+        });
+
+        // (E) Delete User row (PostgreSQL cascades delete to Profile, Friendships, FriendRequests, Blocks, ConversationMember, Messages, MessageReceipts, Stories, StoryViews, StoryReplies, Notifications, GameStatistics, and UserAchievements)
+        await tx.user.delete({
+          where: { id: userId },
+        });
+
+        // (F) Clean up any 1-on-1 conversations that now have zero members left
+        await tx.conversation.deleteMany({
+          where: {
+            members: {
+              none: {},
+            },
+          },
+        });
+      },
+      {
+        timeout: 30000,
+      }
+    );
+
+    // 5. Post-transaction external cleanups
+    // (User row and pushToken column already completely erased by database transaction)
+
+    // In-memory password reset token cleanup
+    passwordResets.delete(userId);
+    passwordResets.delete(user.email.toLowerCase());
+    passwordResets.delete(user.username.toLowerCase());
+
+    return {
+      success: true,
+      message: 'Account and associated personal data permanently deleted.',
+      deletedAt: new Date().toISOString(),
+      retainedDataNotice:
+        'Personal data was permanently erased. Multiplayer match history was anonymized to protect other players’ match records.',
     };
   }
 }

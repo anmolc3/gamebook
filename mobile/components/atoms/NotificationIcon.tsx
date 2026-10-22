@@ -1,44 +1,57 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
-import Svg, {
-  Defs,
-  LinearGradient,
-  Stop,
-  Path,
-  Circle,
-  G,
-} from 'react-native-svg';
+import { View, StyleSheet, Animated, Image, Text, StyleProp, ViewStyle } from 'react-native';
+import { useTheme } from '../../theme';
 
 export interface NotificationIconProps {
   size?: number;
   hasUnread?: boolean;
+  /** Numeric count shown inside the badge; if omitted shows a plain dot */
+  unreadCount?: number;
+  style?: StyleProp<ViewStyle>;
 }
 
+const otterColorIcon = require('../../assets/images/otter-notification.png');
+const otterBlackIcon = require('../../assets/images/otter-notification-black.png');
+
 export const NotificationIcon: React.FC<NotificationIconProps> = ({
-  size = 28,
+  size = 32,
   hasUnread = false,
+  unreadCount,
+  style,
 }) => {
+  const { theme, effectiveMode } = useTheme();
+  const isDark = (theme?.mode || effectiveMode) !== 'light';
+
+  // ─── Shake animation ─────────────────────────────────────────────────────────
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let animLoop: Animated.CompositeAnimation | null = null;
 
     if (hasUnread) {
-      // Natural bell ringing shake sequence: left-right wobble followed by pause
+      // Energetic bell-ring shake: fast rattle then rest
       animLoop = Animated.loop(
         Animated.sequence([
-          Animated.timing(shakeAnim, { toValue: -1, duration: 75, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 1, duration: 75, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: -0.8, duration: 70, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 0.8, duration: 70, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: -0.4, duration: 60, useNativeDriver: true }),
+          // First ring
+          Animated.timing(shakeAnim, { toValue: -1.2, duration: 60, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 1.2, duration: 60, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -1.0, duration: 55, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 1.0, duration: 55, useNativeDriver: true }),
+          // Second ring
+          Animated.timing(shakeAnim, { toValue: -0.8, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0.8, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -0.5, duration: 45, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0.5, duration: 45, useNativeDriver: true }),
+          // Settle
           Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
-          Animated.delay(2400), // Calm interval between alert rings
+          // Long calm pause before next ring
+          Animated.delay(3200),
         ])
       );
       animLoop.start();
     } else {
-      shakeAnim.setValue(0);
+      shakeAnim.stopAnimation();
+      Animated.timing(shakeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
     }
 
     return () => {
@@ -47,12 +60,49 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
   }, [hasUnread, shakeAnim]);
 
   const rotation = shakeAnim.interpolate({
-    inputRange: [-1, 0, 1],
+    inputRange: [-1.2, 0, 1.2],
     outputRange: ['-18deg', '0deg', '18deg'],
   });
 
+  // ─── Badge dot (pulsing scale) ────────────────────────────────────────────────
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    let pulseLoop: Animated.CompositeAnimation | null = null;
+    if (hasUnread) {
+      pulseLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.35, duration: 650, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.0, duration: 650, useNativeDriver: true }),
+        ])
+      );
+      pulseLoop.start();
+    } else {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+    }
+    return () => pulseLoop?.stop();
+  }, [hasUnread, pulseAnim]);
+
+  // ─── Sizing ───────────────────────────────────────────────────────────────────
+  const dotSize = Math.max(8, Math.round(size * 0.3));
+  const dotBorder = Math.max(1.5, Math.round(size * 0.055));
+  const dotBorderColor = theme?.colors?.background || (isDark ? '#000000' : '#FFFFFF');
+
+  // Determine badge display text
+  const showCount = typeof unreadCount === 'number' && unreadCount > 0;
+  const badgeText = showCount ? (unreadCount! > 99 ? '99+' : String(unreadCount)) : undefined;
+  const badgeFontSize = Math.max(7, Math.round(dotSize * 0.55));
+
+  // Badge is larger when showing a number
+  const badgeSize = badgeText
+    ? Math.max(dotSize, badgeText.length > 1 ? dotSize + 4 : dotSize)
+    : dotSize;
+  const badgeWidth = badgeText && badgeText.length > 1 ? badgeSize + 6 : badgeSize;
+
   return (
-    <View style={[styles.container, { width: size, height: size }]}>
+    <View style={[styles.container, { width: size, height: size }, style]}>
+      {/* Bell / Otter icon with shake */}
       <Animated.View
         style={{
           width: size,
@@ -62,56 +112,42 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
           transform: [{ rotate: rotation }],
         }}
       >
-        <Svg width={size} height={size} viewBox="0 0 900 800" fill="none">
-          <Defs>
-            {/* Blue face gradient from notification_icon.svg */}
-            <LinearGradient id="notif_blue" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#59D7FF" />
-              <Stop offset="0.5" stopColor="#1789F5" />
-              <Stop offset="1" stopColor="#0750C7" />
-            </LinearGradient>
-
-            {/* Gold rim gradient from notification_icon.svg */}
-            <LinearGradient id="notif_gold" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFF49A" />
-              <Stop offset="0.35" stopColor="#FFD12E" />
-              <Stop offset="0.72" stopColor="#E99A12" />
-              <Stop offset="1" stopColor="#9C5A08" />
-            </LinearGradient>
-          </Defs>
-
-          <G stroke="#071B55" strokeWidth={12} strokeLinejoin="round">
-            {/* Bottom Clapper */}
-            <Circle cx="450" cy="672" r="52" fill="url(#notif_gold)" />
-
-            {/* Top Knob */}
-            <Circle cx="450" cy="150" r="34" fill="url(#notif_gold)" />
-
-            {/* Outer Gold Rim Bell */}
-            <Path
-              d="M450 170C340 170 270 260 270 380V500C270 540 240 565 210 590C195 603 205 625 225 625H675C695 625 705 603 690 590C660 565 630 540 630 500V380C630 260 560 170 450 170Z"
-              fill="url(#notif_gold)"
-            />
-
-            {/* Inner Blue Face Bell */}
-            <G transform="translate(63, 56) scale(0.86)">
-              <Path
-                d="M450 170C340 170 270 260 270 380V500C270 540 240 565 210 590C195 603 205 625 225 625H675C695 625 705 603 690 590C660 565 630 540 630 500V380C630 260 560 170 450 170Z"
-                fill="url(#notif_blue)"
-              />
-            </G>
-          </G>
-
-          {/* Gloss Highlights */}
-          <G fill="none" stroke="#FFFFFF" strokeLinecap="round" opacity={0.45}>
-            <Path d="M330 300C344 258 375 228 420 218" strokeWidth={24} />
-            <Path d="M325 400V470" strokeWidth={18} />
-          </G>
-        </Svg>
+        <Image
+          source={isDark ? otterColorIcon : otterBlackIcon}
+          style={{ width: size, height: size }}
+          resizeMode="contain"
+          accessibilityLabel="Notifications"
+        />
       </Animated.View>
 
-      {/* Red Unseen Notification Alert Dot: ONLY displayed when hasUnread is true */}
-      {hasUnread && <View style={styles.unreadDot} />}
+      {/* Pulsing Red Badge Dot */}
+      {hasUnread && (
+        <Animated.View
+          style={[
+            styles.badge,
+            {
+              minWidth: badgeWidth,
+              height: badgeSize,
+              borderRadius: badgeSize / 2,
+              borderWidth: dotBorder,
+              borderColor: dotBorderColor,
+              paddingHorizontal: badgeText ? 3 : 0,
+              top: Math.round(size * 0.0),
+              right: Math.round(size * 0.0),
+              transform: [{ scale: pulseAnim }],
+            },
+          ]}
+        >
+          {badgeText ? (
+            <Text
+              style={[styles.badgeText, { fontSize: badgeFontSize }]}
+              numberOfLines={1}
+            >
+              {badgeText}
+            </Text>
+          ) : null}
+        </Animated.View>
+      )}
     </View>
   );
 };
@@ -121,17 +157,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
+    backgroundColor: 'transparent',
   },
-  unreadDot: {
+  badge: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
     backgroundColor: '#EF4444',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
     zIndex: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });

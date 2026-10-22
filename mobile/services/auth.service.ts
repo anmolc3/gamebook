@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import { API_BASE_URL } from './api';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const TOKEN_STORAGE_KEY = '@gameapp_jwt_token';
 
@@ -69,6 +73,55 @@ export class MobileAuthService {
     }
 
     return json.data;
+  }
+
+  static async googleSignIn(idToken: string): Promise<{ user: AuthUserData; token: string }> {
+    const res = await fetch(`${API_BASE_URL}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+    });
+
+    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(json.error?.message || 'Google sign-in failed');
+    }
+
+    return json.data;
+  }
+
+  static async promptGoogleOAuth(): Promise<{ user: AuthUserData; token: string } | null> {
+    const redirectUrl = AuthSession.makeRedirectUri({
+      scheme: 'socialgamingarena',
+      path: 'google-callback',
+    });
+
+    const authUrl = `${API_BASE_URL}/auth/google/start?return_to=${encodeURIComponent(redirectUrl)}`;
+
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+
+    if (result.type !== 'success' || !result.url) {
+      return null;
+    }
+
+    const queryString = result.url.includes('?') ? result.url.split('?')[1] : '';
+    const params = new URLSearchParams(queryString);
+    const token = params.get('token');
+    const userJson = params.get('user');
+    const error = params.get('error');
+
+    if (error) {
+      throw new Error(decodeURIComponent(error));
+    }
+
+    if (!token || !userJson) {
+      throw new Error('Authentication succeeded but response was incomplete.');
+    }
+
+    const user: AuthUserData = JSON.parse(decodeURIComponent(userJson));
+    await this.setStoredToken(token);
+
+    return { user, token };
   }
 
   static async getMe(token: string): Promise<AuthUserData> {
@@ -148,6 +201,50 @@ export class MobileAuthService {
     } catch (err: any) {
       if (err.name === 'AbortError') {
         throw new Error('Request timed out. Please check your internet or server status.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Permanently deletes the authenticated user account and all personal data
+   */
+  static async deleteAccount(data: {
+    password?: string;
+    googleToken?: string;
+    confirm: boolean;
+    reason?: string;
+  }): Promise<{ success: boolean; message: string; deletedAt?: string; retainedDataNotice?: string }> {
+    const token = await this.getStoredToken();
+    if (!token) {
+      throw new Error('Not authenticated. Please sign in to proceed.');
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to delete account');
+      }
+
+      return json.data || json;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out. The server is taking too long to process the deletion. Please retry.');
       }
       throw err;
     } finally {

@@ -27,7 +27,8 @@ export class SoloService {
   static createLocalFallbackSession(
     gameType: string,
     difficulty: AiDifficulty = 'MEDIUM',
-    botId?: string
+    botId?: string,
+    botCount: number = 1
   ): SoloSessionStartResponse {
     const selectedBotId =
       botId ||
@@ -39,7 +40,7 @@ export class SoloService {
         ? 'BOT_ATLAS'
         : 'BOT_NOVA');
     const botMeta = BOT_AVATARS[selectedBotId] || {
-      name: 'Nova',
+      name: 'Otter',
       title: 'Tactical Strategist',
       personality: 'Balanced and methodical.',
     };
@@ -52,19 +53,39 @@ export class SoloService {
       displayName: 'You',
       slotIndex: 0,
     };
-    const aiPlayer = {
-      userId: selectedBotId,
-      username: `${botMeta.name} (AI)`,
-      displayName: `${botMeta.name} (AI)`,
-      slotIndex: 1,
-    };
+
+    // Candidate bots pool
+    const botPool = [
+      { id: selectedBotId, name: botMeta.name },
+      { id: 'BOT_ACE', name: 'Ollie' },
+      { id: 'BOT_ATLAS', name: 'Otto' },
+      { id: 'BOT_PIXEL', name: 'River' },
+      { id: 'BOT_SCOUT', name: 'Pebble' },
+    ];
+
+    const safeCount = Math.max(1, botCount || 1);
+    const chosenBots: { id: string; name: string }[] = [];
+    for (const b of botPool) {
+      if (chosenBots.length >= safeCount) break;
+      if (!chosenBots.some((cb) => cb.id === b.id || cb.name === b.name)) {
+        chosenBots.push(b);
+      }
+    }
+
+    const aiPlayers = chosenBots.map((b, idx) => ({
+      userId: b.id,
+      username: b.name,
+      displayName: b.name,
+      avatarUrl: 'otter_mascot',
+      slotIndex: idx + 1,
+    }));
 
     let initialState: any = null;
     if (gameType.toUpperCase() === 'SNAKES_AND_LADDERS') {
       initialState = {
         players: [
           { userId: humanPlayer.userId, position: 1 },
-          { userId: aiPlayer.userId, position: 1 },
+          ...aiPlayers.map((p) => ({ userId: p.userId, position: 1 })),
         ],
         turnPlayerId: humanPlayer.userId,
         currentDiceRoll: null,
@@ -83,12 +104,17 @@ export class SoloService {
       };
     }
 
+    const initialScores: Record<string, number> = { [humanPlayer.userId]: 0 };
+    aiPlayers.forEach((p) => {
+      initialScores[p.userId] = 0;
+    });
+
     return {
       success: true,
       roomCode,
       matchId,
       gameType: gameType.toUpperCase(),
-      players: [humanPlayer, aiPlayer],
+      players: [humanPlayer, ...aiPlayers],
       aiProfile: {
         id: selectedBotId,
         name: botMeta.name,
@@ -97,7 +123,7 @@ export class SoloService {
       },
       state: initialState,
       round: 1,
-      scores: { [humanPlayer.userId]: 0, [aiPlayer.userId]: 0 },
+      scores: initialScores,
       sequenceNumber: 1,
     };
   }
@@ -109,9 +135,12 @@ export class SoloService {
   static async startSoloMatch(
     gameType: string,
     difficulty: AiDifficulty = 'MEDIUM',
-    botId?: string
+    botId?: string,
+    botCount?: number,
+    playerCount?: number
   ): Promise<SoloSessionStartResponse> {
     const socket = getSocket();
+    const resolvedBotCount = botCount || (playerCount ? playerCount - 1 : 1);
 
     // 1. Primary: Socket.IO real-time emission with 2500ms timeout
     if (socket && socket.connected) {
@@ -123,7 +152,13 @@ export class SoloService {
 
           socket.emit(
             'solo:start',
-            { gameType: gameType.toUpperCase(), difficulty, botId },
+            {
+              gameType: gameType.toUpperCase(),
+              difficulty,
+              botId,
+              botCount: resolvedBotCount,
+              playerCount,
+            },
             (res: any) => {
               clearTimeout(timeout);
               if (res && res.success) {
@@ -146,6 +181,8 @@ export class SoloService {
         gameType: gameType.toUpperCase(),
         difficulty,
         botId,
+        botCount: resolvedBotCount,
+        playerCount,
       });
       if (restRes && restRes.success) {
         return restRes;
@@ -155,7 +192,7 @@ export class SoloService {
     }
 
     // 3. Guaranteed Local Fallback: Always starts smoothly offline or with disconnected server
-    return this.createLocalFallbackSession(gameType, difficulty, botId);
+    return this.createLocalFallbackSession(gameType, difficulty, botId, resolvedBotCount);
   }
 
   /**

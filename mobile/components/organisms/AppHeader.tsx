@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../atoms/Avatar';
 import { NotificationIcon } from '../atoms/NotificationIcon';
-import { GameControllerLogo } from '../atoms/GameControllerLogo';
 
 interface AppHeaderProps {
   userName?: string;
   avatarUrl?: string | null;
   greeting?: string;
   hasUnreadNotifications?: boolean;
+  /** Actual count to show in badge */
+  unreadNotifCount?: number;
   onPressNotifications?: () => void;
   onPressProfile?: () => void;
 }
@@ -19,6 +20,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   avatarUrl,
   greeting = 'Welcome back',
   hasUnreadNotifications = true,
+  unreadNotifCount,
   onPressNotifications,
   onPressProfile,
 }) => {
@@ -36,10 +38,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <Avatar displayName={userName || 'Player'} avatarUrl={avatarUrl} size="md" status="online" />
       </TouchableOpacity>
 
-      <View style={styles.centerBrand} pointerEvents="none">
-        <GameControllerLogo size={32} color={theme.colors.primary} />
-      </View>
-
       <View style={styles.right}>
         {onPressNotifications && (
           <TouchableOpacity
@@ -48,7 +46,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             accessibilityLabel="Notifications"
             style={styles.notifBtn}
           >
-            <NotificationIcon size={36} hasUnread={hasUnreadNotifications} />
+            <NotificationIcon size={32} hasUnread={hasUnreadNotifications} unreadCount={unreadNotifCount} />
           </TouchableOpacity>
         )}
       </View>
@@ -71,14 +69,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 2,
-  },
-  centerBrand: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
   },
   right: {
     flexDirection: 'row',
