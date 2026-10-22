@@ -15,12 +15,14 @@ import { Asset } from 'expo-asset';
 export interface OtterMascotAnimationProps {
   /** Optional custom width in pixels. Defaults to responsive width (~65% screen width, max 260px) */
   width?: number;
-  /** Format to use for playback: 'webp' (recommended for lowest memory and smooth Android playback) or 'mp4' (hardware video). Defaults to 'webp' */
-  format?: 'webp' | 'mp4';
+  /** Format to use for playback: 'mp4' (hardware video) or 'webp'. Defaults to 'mp4' */
+  format?: 'mp4' | 'webp';
   /** Whether the mascot is active/visible on the screen. Controls playback to avoid background battery drain */
   isActive?: boolean;
-  /** Whether audio from the video should be muted (only applicable for MP4 format). Defaults to true */
+  /** Whether audio from the video should be muted. Defaults to true */
   muted?: boolean;
+  /** Play the mascot greeting voice once on initial appearance, muting on all subsequent loops and navigations */
+  playVoiceOnce?: boolean;
   /** Custom container style */
   style?: ViewStyle;
   /** Accessibility label for screen readers */
@@ -35,23 +37,28 @@ const DEFAULT_WIDTH = Math.min(Math.round(SCREEN_WIDTH * 0.65), 260);
 
 const WEBP_ASSET = require('../../assets/animations/otter-wave.webp');
 const MP4_ASSET = require('../../assets/animations/otter-wave.mp4');
+const AAC_ASSET = require('../../assets/animations/otter-audio.aac');
 
-// Module-level preloading for immediate instantaneous display
+// Module-level flags: ensure greeting audio voice plays ONLY ONCE per app session
+let hasPlayedGreetingVoice = false;
 let isPreloaded = false;
+
 function preloadMascotAsset() {
   if (isPreloaded) return;
   isPreloaded = true;
   try {
     Asset.fromModule(WEBP_ASSET).downloadAsync().catch(() => null);
+    Asset.fromModule(MP4_ASSET).downloadAsync().catch(() => null);
   } catch {}
 }
 preloadMascotAsset();
 
 export const OtterMascotAnimation: React.FC<OtterMascotAnimationProps> = ({
   width = DEFAULT_WIDTH,
-  format = 'webp',
+  format = 'mp4',
   isActive = true,
   muted = true,
+  playVoiceOnce = false,
   style,
   accessibilityLabel = 'Otter mascot waving animation',
   testID = 'otter-mascot-animation',
@@ -59,6 +66,7 @@ export const OtterMascotAnimation: React.FC<OtterMascotAnimationProps> = ({
   const height = Math.round(width / ASPECT_RATIO);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const [appIsActive, setAppIsActive] = useState<boolean>(true);
+  const [videoReady, setVideoReady] = useState<boolean>(false);
 
   // Preload asset on mount
   useEffect(() => {
@@ -74,17 +82,49 @@ export const OtterMascotAnimation: React.FC<OtterMascotAnimationProps> = ({
     return () => subscription.remove();
   }, []);
 
+  // Determine whether this instance should trigger the one-time greeting voice
+  const shouldPlayVoice = playVoiceOnce && !hasPlayedGreetingVoice;
+  if (shouldPlayVoice) {
+    hasPlayedGreetingVoice = true;
+  }
+
   // If format is MP4, initialize expo-video player
   const player = useVideoPlayer(
     format === 'mp4' ? MP4_ASSET : null,
     (p) => {
       p.loop = true;
-      p.muted = muted;
+      // If we should play the voice once, unmute for the first play cycle
+      p.muted = shouldPlayVoice ? false : muted;
+      
+      // Once the first video cycle finishes, permanently mute
+      if (shouldPlayVoice) {
+        try {
+          p.addListener('playToEnd', () => {
+            try {
+              p.muted = true;
+            } catch {}
+          });
+        } catch {}
+      }
+
       if (isActive && appIsActive) {
         p.play();
       }
     }
   );
+
+  // WebP fallback one-time audio greeting via expo-audio if requested
+  useEffect(() => {
+    if (format === 'webp' && shouldPlayVoice) {
+      try {
+        const ExpoAudio = require('expo-audio');
+        if (ExpoAudio && typeof ExpoAudio.createAudioPlayer === 'function') {
+          const sound = ExpoAudio.createAudioPlayer(AAC_ASSET);
+          sound.play();
+        }
+      } catch {}
+    }
+  }, [format, shouldPlayVoice]);
 
   // Handle active/pause lifecycle for MP4
   useEffect(() => {
@@ -118,23 +158,25 @@ export const OtterMascotAnimation: React.FC<OtterMascotAnimationProps> = ({
       accessibilityLabel={accessibilityLabel}
       testID={testID}
     >
-      {format === 'webp' ? (
-        shouldRender ? (
-          <Image
-            source={WEBP_ASSET}
-            style={styles.media}
-            resizeMode="contain"
-            fadeDuration={0}
-          />
-        ) : null
-      ) : (
+      {/* Instant fallback poster while video buffers or if format is webp */}
+      {(!videoReady || format === 'webp') && shouldRender && (
+        <Image
+          source={WEBP_ASSET}
+          style={styles.media}
+          resizeMode="contain"
+          fadeDuration={0}
+        />
+      )}
+
+      {format === 'mp4' && shouldRender && (
         <VideoView
           player={player}
-          style={styles.media}
+          style={[styles.media, StyleSheet.absoluteFill]}
           contentFit="contain"
           nativeControls={false}
           allowsPictureInPicture={false}
           startsPictureInPictureAutomatically={false}
+          onLayout={() => setVideoReady(true)}
         />
       )}
     </View>

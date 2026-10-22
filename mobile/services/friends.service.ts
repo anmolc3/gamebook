@@ -63,6 +63,12 @@ export interface BlockedPlayer {
   blockedAt: string;
 }
 
+import { CacheService } from './cache.service';
+
+const CACHE_FRIENDS_KEY = '@gameapp:cache:friends';
+const CACHE_REQUESTS_KEY = '@gameapp:cache:requests';
+const CACHE_SUGGESTED_KEY = '@gameapp:cache:suggested';
+
 export class FriendsService {
   private static async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await MobileAuthService.getStoredToken();
@@ -72,43 +78,67 @@ export class FriendsService {
     };
   }
 
+  static async getCachedFriends(): Promise<FriendUser[] | null> {
+    return await CacheService.get<FriendUser[]>(CACHE_FRIENDS_KEY);
+  }
+
+  static async getCachedRequests(): Promise<FriendRequestsPayload | null> {
+    return await CacheService.get<FriendRequestsPayload>(CACHE_REQUESTS_KEY);
+  }
+
+  static async getCachedSuggestedFriends(): Promise<SuggestedPlayer[] | null> {
+    return await CacheService.get<SuggestedPlayer[]>(CACHE_SUGGESTED_KEY);
+  }
+
   static async fetchFriends(): Promise<FriendUser[]> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/friends`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe('fetchFriends', async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/friends`, {
+        method: 'GET',
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch friends');
+      }
+      const data = json.data || [];
+      await CacheService.set(CACHE_FRIENDS_KEY, data, 1000 * 60 * 10);
+      return data;
     });
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch friends');
-    }
-    return json.data || [];
   }
 
   static async fetchSuggestedFriends(limit = 15): Promise<SuggestedPlayer[]> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/friends/suggestions?limit=${limit}`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe(`fetchSuggestedFriends_${limit}`, async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/friends/suggestions?limit=${limit}`, {
+        method: 'GET',
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch suggested players');
+      }
+      const data = json.data || [];
+      await CacheService.set(CACHE_SUGGESTED_KEY, data, 1000 * 60 * 15);
+      return data;
     });
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch suggested players');
-    }
-    return json.data || [];
   }
 
   static async fetchRequests(): Promise<FriendRequestsPayload> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/friends/requests`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe('fetchRequests', async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/friends/requests`, {
+        method: 'GET',
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch friend requests');
+      }
+      const data = json.data || { incoming: [], outgoing: [] };
+      await CacheService.set(CACHE_REQUESTS_KEY, data, 1000 * 60 * 5);
+      return data;
     });
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch friend requests');
-    }
-    return json.data || { incoming: [], outgoing: [] };
   }
 
   static async sendRequest(targetUserId: string): Promise<{ requestId: string; status: string }> {

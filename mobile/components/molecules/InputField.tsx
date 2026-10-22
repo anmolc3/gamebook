@@ -20,6 +20,7 @@ interface InputFieldProps extends TextInputProps {
   isPassword?: boolean;
   containerStyle?: ViewStyle;
   minimal?: boolean;
+  forceDark?: boolean;
 }
 
 export const InputField: React.FC<InputFieldProps> = ({
@@ -31,6 +32,7 @@ export const InputField: React.FC<InputFieldProps> = ({
   isPassword,
   containerStyle,
   minimal = false,
+  forceDark = false,
   style,
   onFocus,
   onBlur,
@@ -43,7 +45,7 @@ export const InputField: React.FC<InputFieldProps> = ({
 
   const isPasswordField = isPassword || secureTextEntry;
 
-  const isDark = theme.mode === 'dark';
+  const isDark = forceDark || theme.mode === 'dark';
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -121,6 +123,8 @@ export const InputField: React.FC<InputFieldProps> = ({
         )}
         <TextInput
           placeholderTextColor={minimal ? (isDark ? '#64748B' : theme.colors.textMuted) : theme.colors.textMuted}
+          cursorColor={isDark ? '#FF2A6D' : theme.colors.primary}
+          selectionColor={isDark ? 'rgba(255, 42, 109, 0.35)' : undefined}
           style={[
             styles.input,
             { color: minimal ? (isDark ? '#FFFFFF' : theme.colors.textPrimary) : theme.colors.textPrimary },

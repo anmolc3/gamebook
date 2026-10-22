@@ -127,7 +127,10 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
   const [submittingCommentId, setSubmittingCommentId] = useState<string | null>(null);
 
   // 1. Load Real-Time Feeds from Backend
-  const loadFeeds = useCallback(async () => {
+  const loadFeeds = useCallback(async (silent = false) => {
+    if (!silent && posts.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const data = await FeedService.getFeeds();
       setPosts(data);
@@ -136,10 +139,20 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [posts.length]);
 
   useEffect(() => {
-    loadFeeds();
+    // 1. Immediately read cached feeds from local storage
+    let isMounted = true;
+    FeedService.getCachedFeeds().then((cached) => {
+      if (isMounted && cached && cached.length > 0) {
+        setPosts(cached);
+        setIsLoading(false);
+      }
+    }).catch(() => null);
+
+    // 2. Fetch fresh posts in the background
+    loadFeeds(true);
 
     // 2. Real-Time WebSocket Listeners for Instant Synchronization
     const unsubNewPost = FeedService.onNewPost((incomingPost) => {
@@ -506,7 +519,7 @@ export const SocialFeedSection: React.FC<SocialFeedSectionProps> = ({
       </View>
 
       {/* Loading state indicator */}
-      {isLoading && (
+      {isLoading && displayedPosts.length === 0 && (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="small" color={theme.colors.primary} />
           <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>

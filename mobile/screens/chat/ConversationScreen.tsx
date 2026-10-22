@@ -441,8 +441,18 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   // Initialize conversation and load messages
   const initializeConversation = useCallback(async () => {
     try {
-      setIsLoading(true);
-      let targetConvId = conversationId;
+      let targetConvId = conversationId || initialConversationId || (isGroup ? peerId : undefined);
+
+      // 1. Immediately display cached messages if available
+      if (targetConvId) {
+        try {
+          const cached = await ChatService.getCachedMessages(targetConvId);
+          if (cached && cached.length > 0) {
+            setMessages(cached);
+            setIsLoading(false);
+          }
+        } catch {}
+      }
 
       if (isGroup) {
         targetConvId = initialConversationId || peerId;
@@ -467,7 +477,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       if (targetConvId) {
         // Join socket room
         MobileSocketService.joinConversation(targetConvId);
-        // Load messages
+        // Load fresh messages in background
         const msgs = await ChatService.fetchMessages(targetConvId, 60);
         setMessages(msgs);
         // Mark unread messages as read
@@ -475,7 +485,6 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       }
     } catch (err: any) {
       console.warn('Failed to load conversation:', err);
-      Alert.alert('Error', err.message || 'Unable to open conversation');
     } finally {
       setIsLoading(false);
     }
@@ -1780,12 +1789,9 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
       >
         {/* Messages Stream */}
-        {isLoading ? (
+        {isLoading && displayedMessages.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-              Loading messages...
-            </Text>
+            <ActivityIndicator size="small" color={theme.colors.primary} />
           </View>
         ) : (
           <FlatList

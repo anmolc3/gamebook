@@ -36,39 +36,52 @@ interface AchievementsModalProps {
   onClose: () => void;
 }
 
+import { CacheService } from '../../services/cache.service';
+
+const DEFAULT_ACHIEVEMENTS: AchievementItem[] = [
+  { id: '1', key: 'FIRST_WIN', title: 'First Victory', description: 'Win your first multiplayer match in any game.', iconName: 'TrophyIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
+  { id: '2', key: 'STREAK_3', title: 'Hot Streak', description: 'Achieve a winning streak of 3 consecutive matches.', iconName: 'FlameIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
+  { id: '3', key: 'STREAK_5', title: 'Unstoppable', description: 'Achieve a winning streak of 5 consecutive matches.', iconName: 'FlameIcon', isUnlocked: false },
+  { id: '4', key: 'GAMES_10', title: 'Veteran Challenger', description: 'Complete 10 multiplayer matches.', iconName: 'TargetIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
+  { id: '5', key: 'GAMES_50', title: 'Arena Legend', description: 'Complete 50 multiplayer matches.', iconName: 'CrownIcon', isUnlocked: false },
+  { id: '6', key: 'BOARD_MASTER', title: 'Grandmaster Mind', description: 'Win 5 classic board game matches.', iconName: 'StarIcon', isUnlocked: false },
+  { id: '7', key: 'CARD_SHARK', title: 'Card Shark', description: 'Win 5 card table matches.', iconName: 'StarIcon', isUnlocked: false },
+  { id: '8', key: 'PUZZLE_GENIUS', title: 'Puzzle Genius', description: 'Win 5 puzzle, quiz, or word duel matches.', iconName: 'StarIcon', isUnlocked: false },
+  { id: '9', key: 'PARTY_STAR', title: 'Life of the Party', description: 'Participate in 5 party and social games.', iconName: 'StarIcon', isUnlocked: false },
+  { id: '10', key: 'SPEED_DEMON', title: 'Speed Demon', description: 'Win a reflex or fast competitive duel.', iconName: 'ClockIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
+];
+
 export const AchievementsModal: React.FC<AchievementsModalProps> = ({
   visible,
   onClose,
 }) => {
   const { theme } = useTheme();
-  const [achievements, setAchievements] = useState<AchievementItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [achievements, setAchievements] = useState<AchievementItem[]>(DEFAULT_ACHIEVEMENTS);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      loadAchievements();
+      CacheService.get<AchievementItem[]>('@gameapp:cache:achievements').then((cached) => {
+        if (cached && cached.length > 0) {
+          setAchievements(cached);
+        }
+      }).catch(() => null);
+
+      loadAchievements(true);
     }
   }, [visible]);
 
-  const loadAchievements = async () => {
-    setLoading(true);
+  const loadAchievements = async (silent = false) => {
+    if (!silent && achievements.length === 0) setLoading(true);
     try {
       const res = await apiGet<{ achievements: AchievementItem[] }>('/achievements/my');
-      setAchievements(res.achievements || []);
+      const data = res.achievements || [];
+      if (data.length > 0) {
+        setAchievements(data);
+        CacheService.set('@gameapp:cache:achievements', data, 1000 * 60 * 30);
+      }
     } catch {
-      // Fallback display
-      setAchievements([
-        { id: '1', key: 'FIRST_WIN', title: 'First Victory', description: 'Win your first multiplayer match in any game.', iconName: 'TrophyIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
-        { id: '2', key: 'STREAK_3', title: 'Hot Streak', description: 'Achieve a winning streak of 3 consecutive matches.', iconName: 'FlameIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
-        { id: '3', key: 'STREAK_5', title: 'Unstoppable', description: 'Achieve a winning streak of 5 consecutive matches.', iconName: 'FlameIcon', isUnlocked: false },
-        { id: '4', key: 'GAMES_10', title: 'Veteran Challenger', description: 'Complete 10 multiplayer matches.', iconName: 'TargetIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
-        { id: '5', key: 'GAMES_50', title: 'Arena Legend', description: 'Complete 50 multiplayer matches.', iconName: 'CrownIcon', isUnlocked: false },
-        { id: '6', key: 'BOARD_MASTER', title: 'Grandmaster Mind', description: 'Win 5 classic board game matches.', iconName: 'StarIcon', isUnlocked: false },
-        { id: '7', key: 'CARD_SHARK', title: 'Card Shark', description: 'Win 5 card table matches.', iconName: 'StarIcon', isUnlocked: false },
-        { id: '8', key: 'PUZZLE_GENIUS', title: 'Puzzle Genius', description: 'Win 5 puzzle, quiz, or word duel matches.', iconName: 'StarIcon', isUnlocked: false },
-        { id: '9', key: 'PARTY_STAR', title: 'Life of the Party', description: 'Participate in 5 party and social games.', iconName: 'StarIcon', isUnlocked: false },
-        { id: '10', key: 'SPEED_DEMON', title: 'Speed Demon', description: 'Win a reflex or fast competitive duel.', iconName: 'ClockIcon', isUnlocked: true, unlockedAt: new Date().toISOString() },
-      ]);
+      // Keep existing items
     } finally {
       setLoading(false);
     }
@@ -124,9 +137,9 @@ export const AchievementsModal: React.FC<AchievementsModalProps> = ({
           </View>
 
           {/* List */}
-          {loading ? (
+          {loading && achievements.length === 0 ? (
             <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <ActivityIndicator size="small" color={theme.colors.primary} />
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.listContent}>

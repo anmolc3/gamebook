@@ -64,6 +64,8 @@ export interface UpdateProfilePayload {
   readReceipts?: boolean;
 }
 
+import { CacheService } from './cache.service';
+
 export class ProfileService {
   private static async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await MobileAuthService.getStoredToken();
@@ -73,43 +75,56 @@ export class ProfileService {
     };
   }
 
+  static async getCachedProfile(userId: string): Promise<UserProfile | null> {
+    return await CacheService.get<UserProfile>(`@gameapp:cache:profile_${userId}`);
+  }
+
+  static async setCachedProfile(userId: string, profile: UserProfile): Promise<void> {
+    await CacheService.set(`@gameapp:cache:profile_${userId}`, profile, 1000 * 60 * 30);
+  }
+
   static async fetchMyProfile(): Promise<UserProfile> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/profiles/me`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe('fetchMyProfile', async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/profiles/me`, {
+        method: 'GET',
+        headers,
+      });
+
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(
+          res.status === 404
+            ? 'Profile service not found'
+            : `Server returned ${res.status}`
+        );
+      }
+
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.message || 'Failed to fetch personal profile');
+      }
+
+      const profile: UserProfile = json.data;
+      // Load local bannerUrl and avatarUrl if stored locally
+      try {
+        const localBanner = await AsyncStorage.getItem(`@gameapp:profile_banner_${profile.id}`);
+        if (localBanner) {
+          profile.bannerUrl = localBanner;
+        }
+        const localAvatar = await AsyncStorage.getItem(`@gameapp:profile_avatar_${profile.id}`);
+        if (localAvatar) {
+          profile.avatarUrl = localAvatar;
+        }
+      } catch {}
+
+      await this.setCachedProfile(profile.id, profile);
+      await this.setCachedProfile('me', profile);
+
+      return profile;
     });
-
-    const text = await res.text();
-    let json: any;
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new Error(
-        res.status === 404
-          ? 'Profile service not found'
-          : `Server returned ${res.status}`
-      );
-    }
-
-    if (!res.ok) {
-      throw new Error(json.error?.message || json.message || 'Failed to fetch personal profile');
-    }
-
-    const profile: UserProfile = json.data;
-    // Load local bannerUrl and avatarUrl if stored locally
-    try {
-      const localBanner = await AsyncStorage.getItem(`@gameapp:profile_banner_${profile.id}`);
-      if (localBanner) {
-        profile.bannerUrl = localBanner;
-      }
-      const localAvatar = await AsyncStorage.getItem(`@gameapp:profile_avatar_${profile.id}`);
-      if (localAvatar) {
-        profile.avatarUrl = localAvatar;
-      }
-    } catch {}
-
-    return profile;
   }
 
   static async updateMyProfile(payload: UpdateProfilePayload): Promise<UserProfile> {
@@ -224,17 +239,23 @@ export class ProfileService {
   }
 
   static async fetchUserProfile(userId: string): Promise<UserProfile> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/profiles/${userId}`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe(`fetchUserProfile_${userId}`, async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/profiles/${userId}`, {
+        method: 'GET',
+        headers,
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch player profile');
+      }
+
+      const data = json.data;
+      if (data) {
+        await this.setCachedProfile(userId, data);
+      }
+      return data;
     });
-
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch player profile');
-    }
-
-    return json.data;
   }
 }

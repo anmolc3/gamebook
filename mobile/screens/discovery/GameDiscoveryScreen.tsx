@@ -59,6 +59,17 @@ const CATEGORIES = [
   { id: 'PARTY', label: 'Party' },
 ];
 
+import { CacheService } from '../../services/cache.service';
+
+const DEFAULT_FALLBACK_GAMES: CatalogGame[] = [
+  { id: 'TICTACTOE', name: 'Tic-Tac-Toe Arena', category: 'BOARD', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 15, description: 'Classic 3x3 alignment duel with instant rematches.', iconName: 'tictactoe', activeRooms: 5 },
+  { id: 'LUDO', name: 'Ludo World Arena', category: 'BOARD', minPlayers: 2, maxPlayers: 4, turnTimeSeconds: 20, description: '4-quadrant token race with safe zones and captures.', iconName: 'ludo', activeRooms: 12 },
+  { id: 'CHESS', name: 'Chess Grandmaster', category: 'BOARD', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 30, description: 'Standard 8x8 FIDE rules, checks, and pawn promotions.', iconName: 'chess', activeRooms: 8 },
+  { id: 'WORDLE_DUEL', name: 'Wordle Duel', category: 'PUZZLE', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 30, description: '5-letter secret word deduction in 6 attempts.', iconName: 'wordle', activeRooms: 14 },
+  { id: 'WOULD_YOU_RATHER', name: 'Would You Rather?', category: 'PARTY', minPlayers: 2, maxPlayers: 8, turnTimeSeconds: 20, description: 'Dilemmas with live votes and majority consensus bonuses.', iconName: 'wyr', activeRooms: 9 },
+  { id: 'UNO_STYLE', name: 'Color Match Clash', category: 'CARD', minPlayers: 2, maxPlayers: 4, turnTimeSeconds: 15, description: 'Fast card shedding with wild skips and reverses.', iconName: 'cards', activeRooms: 11 },
+];
+
 export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   onSelectGame,
   onPressLeaderboards,
@@ -69,9 +80,9 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
-  const [games, setGames] = useState<CatalogGame[]>([]);
+  const [games, setGames] = useState<CatalogGame[]>(DEFAULT_FALLBACK_GAMES);
   const [trending, setTrending] = useState<CatalogGame[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [selectedRulesGame, setSelectedRulesGame] = useState<CatalogGame | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -102,11 +113,25 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
   }, [selectedRulesGame, searchQuery, selectedCategory, onBack]);
 
   useEffect(() => {
-    loadCatalog();
+    let isMounted = true;
+    CacheService.get<{ games: CatalogGame[]; trending: CatalogGame[] }>(
+      `@gameapp:cache:catalog_${selectedCategory}`
+    ).then((cached) => {
+      if (isMounted && cached?.games && cached.games.length > 0) {
+        setGames(cached.games);
+        if (cached.trending) setTrending(cached.trending);
+      }
+    }).catch(() => null);
+
+    loadCatalog(true);
+
+    return () => {
+      isMounted = false;
+    };
   }, [selectedCategory]);
 
   const loadCatalog = async (silent = false) => {
-    if (!silent) setLoading(true);
+    if (!silent && games.length === 0) setLoading(true);
     try {
       const url =
         selectedCategory === 'ALL'
@@ -116,18 +141,17 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
         games: CatalogGame[];
         trending: CatalogGame[];
       }>(url);
-      setGames(res.games || []);
-      if (res.trending) setTrending(res.trending);
+      if (res.games) {
+        setGames(res.games);
+        if (res.trending) setTrending(res.trending);
+        CacheService.set(
+          `@gameapp:cache:catalog_${selectedCategory}`,
+          { games: res.games, trending: res.trending || [] },
+          1000 * 60 * 30
+        );
+      }
     } catch {
-      // Graceful fallback list
-      setGames([
-        { id: 'TICTACTOE', name: 'Tic-Tac-Toe Arena', category: 'BOARD', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 15, description: 'Classic 3x3 alignment duel with instant rematches.', iconName: 'tictactoe', activeRooms: 5 },
-        { id: 'LUDO', name: 'Ludo World Arena', category: 'BOARD', minPlayers: 2, maxPlayers: 4, turnTimeSeconds: 20, description: '4-quadrant token race with safe zones and captures.', iconName: 'ludo', activeRooms: 12 },
-        { id: 'CHESS', name: 'Chess Grandmaster', category: 'BOARD', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 30, description: 'Standard 8x8 FIDE rules, checks, and pawn promotions.', iconName: 'chess', activeRooms: 8 },
-        { id: 'WORDLE_DUEL', name: 'Wordle Duel', category: 'PUZZLE', minPlayers: 2, maxPlayers: 2, turnTimeSeconds: 30, description: '5-letter secret word deduction in 6 attempts.', iconName: 'wordle', activeRooms: 14 },
-        { id: 'WOULD_YOU_RATHER', name: 'Would You Rather?', category: 'PARTY', minPlayers: 2, maxPlayers: 8, turnTimeSeconds: 20, description: 'Dilemmas with live votes and majority consensus bonuses.', iconName: 'wyr', activeRooms: 9 },
-        { id: 'UNO_STYLE', name: 'Color Match Clash', category: 'CARD', minPlayers: 2, maxPlayers: 4, turnTimeSeconds: 15, description: 'Fast card shedding with wild skips and reverses.', iconName: 'cards', activeRooms: 11 },
-      ]);
+      // Keep existing or fallback list
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -256,9 +280,9 @@ export const GameDiscoveryScreen: React.FC<GameDiscoveryScreenProps> = ({
       </View>
 
       {/* Main Body */}
-      {loading ? (
+      {loading && games.length === 0 ? (
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <ActivityIndicator size="small" color={theme.colors.primary} />
         </View>
       ) : (
         <ScrollView

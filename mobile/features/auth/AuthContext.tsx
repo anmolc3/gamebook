@@ -4,6 +4,8 @@ import { MobileAuthService, AuthUserData } from '../../services/auth.service';
 import { NotificationService } from '../../services/notification.service';
 import { MobileSocketService } from '../../services/socket.service';
 
+import { CacheService } from '../../services/cache.service';
+
 interface AuthContextType {
   user: AuthUserData | null;
   token: string | null;
@@ -28,28 +30,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isNewlyRegistered, setIsNewlyRegistered] = useState(false);
 
-  // Restore stored session on launch
+  // Restore stored session on launch - zero blocking delay with cached user
   useEffect(() => {
+    let isMounted = true;
+
     async function restoreSession() {
       try {
-        const storedToken = await MobileAuthService.getStoredToken();
-        if (storedToken) {
-          const profile = await MobileAuthService.getMe(storedToken);
-          setUser(profile);
-          setToken(storedToken);
-          // Re-register push token on session restore (token may have refreshed)
+        const [storedToken, storedUser] = await Promise.all([
+          MobileAuthService.getStoredToken(),
+          MobileAuthService.getStoredUser(),
+        ]);
+
+        if (storedToken && storedUser) {
+          // 1. Immediately activate cached session - no waiting on network!
+          if (isMounted) {
+            setUser(storedUser);
+            setToken(storedToken);
+            setIsLoading(false);
+          }
+
+          // 2. Initialize push notifications and socket asynchronously
           NotificationService.initialize().catch(() => null);
           MobileSocketService.connect();
+
+          // 3. Revalidate session with backend in background
+          MobileAuthService.getMe(storedToken)
+            .then((freshProfile) => {
+              if (isMounted && freshProfile) {
+                setUser(freshProfile);
+                MobileAuthService.setStoredUser(freshProfile).catch(() => null);
+              }
+            })
+            .catch(async (err: any) => {
+              // Only invalidate if the server explicitly rejected the token (401/403/invalid)
+              const msg = (err?.message || '').toLowerCase();
+              if (msg.includes('401') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('jwt')) {
+                console.warn('Session expired or revoked, clearing credentials');
+                await MobileAuthService.clearStoredToken();
+                await MobileAuthService.clearStoredUser();
+                await CacheService.clearAllUserScopedData(storedUser.id);
+                if (isMounted) {
+                  setUser(null);
+                  setToken(null);
+                }
+              } else {
+                // Network error / offline - keep using cached session!
+                console.log('Background auth revalidation skipped due to network status');
+              }
+            });
+        } else if (storedToken) {
+          // Token exists but user cache not yet created (e.g. legacy installation)
+          try {
+            const profile = await MobileAuthService.getMe(storedToken);
+            if (isMounted) {
+              setUser(profile);
+              setToken(storedToken);
+              await MobileAuthService.setStoredUser(profile);
+              NotificationService.initialize().catch(() => null);
+              MobileSocketService.connect();
+            }
+          } catch (err) {
+            console.warn('Failed to verify token on startup');
+            await MobileAuthService.clearStoredToken();
+          } finally {
+            if (isMounted) setIsLoading(false);
+          }
+        } else {
+          // Unauthenticated user
+          if (isMounted) setIsLoading(false);
         }
       } catch (err) {
-        console.warn('Session expired or invalid, clearing stored token');
-        await MobileAuthService.clearStoredToken();
-      } finally {
-        setIsLoading(false);
+        console.warn('Error during session restoration:', err);
+        if (isMounted) setIsLoading(false);
       }
     }
 
     restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (usernameOrEmail: string, password: string) => {
@@ -58,7 +118,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await MobileAuthService.login({ usernameOrEmail, password });
       setUser(data.user);
       setToken(data.token);
-      await MobileAuthService.setStoredToken(data.token);
+      await Promise.all([
+        MobileAuthService.setStoredToken(data.token),
+        MobileAuthService.setStoredUser(data.user),
+      ]);
       // Register push token after successful login
       NotificationService.initialize().catch(() => null);
       MobileSocketService.connect();
@@ -73,7 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await MobileAuthService.googleSignIn(idToken);
       setUser(data.user);
       setToken(data.token);
-      await MobileAuthService.setStoredToken(data.token);
+      await Promise.all([
+        MobileAuthService.setStoredToken(data.token),
+        MobileAuthService.setStoredUser(data.user),
+      ]);
       NotificationService.initialize().catch(() => null);
       MobileSocketService.connect();
     } finally {
@@ -90,6 +156,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setUser(result.user);
       setToken(result.token);
+      await Promise.all([
+        MobileAuthService.setStoredToken(result.token),
+        MobileAuthService.setStoredUser(result.user),
+      ]);
       NotificationService.initialize().catch(() => null);
       MobileSocketService.connect();
       return true;
@@ -105,7 +175,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data.user);
       setToken(data.token);
       setIsNewlyRegistered(true);
-      await MobileAuthService.setStoredToken(data.token);
+      await Promise.all([
+        MobileAuthService.setStoredToken(data.token),
+        MobileAuthService.setStoredUser(data.user),
+      ]);
       // Register push token for new accounts
       NotificationService.initialize().catch(() => null);
       MobileSocketService.connect();
@@ -120,11 +193,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     setIsLoading(true);
+    const previousUserId = user?.id;
     try {
       // Disconnect socket and unregister push token
       MobileSocketService.disconnect();
       await NotificationService.unregister().catch(() => null);
       await MobileAuthService.clearStoredToken();
+      await MobileAuthService.clearStoredUser();
+      
+      // Clear all cached private user data to prevent cross-account leakage
+      await CacheService.clearAllUserScopedData(previousUserId);
+
       setUser(null);
       setToken(null);
       setIsNewlyRegistered(false);
@@ -148,18 +227,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       MobileSocketService.disconnect();
       await NotificationService.unregister().catch(() => null);
       await MobileAuthService.clearStoredToken();
+      await MobileAuthService.clearStoredUser();
 
-      // Clear account-specific cache keys from local storage
-      if (currentUserId) {
-        await AsyncStorage.multiRemove([
-          `@gameapp:profile_banner_${currentUserId}`,
-          `@gameapp:profile_avatar_${currentUserId}`,
-          '@gameapp_auth_user',
-          '@gameapp:archived_convs',
-          '@gameapp:favorite_convs',
-          '@gameapp:locked_convs',
-        ]).catch(() => null);
-      }
+      // Clear all account-specific cache keys
+      await CacheService.clearAllUserScopedData(currentUserId);
 
       setUser(null);
       setToken(null);
@@ -170,7 +241,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateUser = (updatedUser: Partial<AuthUserData>) => {
-    setUser((prev) => (prev ? { ...prev, ...updatedUser } : null));
+    setUser((prev) => {
+      if (!prev) return null;
+      const merged = { ...prev, ...updatedUser };
+      MobileAuthService.setStoredUser(merged).catch(() => null);
+      return merged;
+    });
   };
 
   return (

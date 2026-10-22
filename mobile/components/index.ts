@@ -7,6 +7,7 @@ export * from './atoms/GameLogo';
 export * from './atoms/GameControllerLogo';
 
 export * from './atoms/NotificationIcon';
+export * from './atoms/StoryGradientRing';
 
 export * from './molecules/PrimaryButton';
 export * from './molecules/IconButton';

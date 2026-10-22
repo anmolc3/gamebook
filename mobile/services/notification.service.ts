@@ -4,6 +4,7 @@ import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from './api';
 import { MobileSocketService } from './socket.service';
+import { CacheService } from './cache.service';
 
 // Detect whether running inside Expo Go
 const isExpoGo =
@@ -446,25 +447,43 @@ export class NotificationService {
   }
 
   /**
+   * Get cached notifications from memory or storage immediately
+   */
+  static async getCachedNotifications(): Promise<AppNotification[]> {
+    if (this.cachedNotifications && this.cachedNotifications.length > 0) {
+      return this.cachedNotifications;
+    }
+    const stored = await CacheService.get<AppNotification[]>('@gameapp:cache:notifications');
+    if (stored && stored.length > 0) {
+      this.cachedNotifications = stored;
+      return stored;
+    }
+    return [];
+  }
+
+  /**
    * Load existing notifications from the backend API.
    */
   static async fetchNotifications(limit: number = 40): Promise<AppNotification[]> {
-    try {
-      this.initRealtimeListeners();
-      const res = await apiGet<{ success: boolean; data: AppNotification[] }>(
-        `/notifications?limit=${limit}`
-      );
-      if (res && res.data && Array.isArray(res.data)) {
-        this.cachedNotifications = res.data;
-        this.cachedUnreadCount = res.data.filter((n) => !n.isRead).length;
-        this.notifyUnreadListeners(this.cachedUnreadCount);
-        return res.data;
+    return CacheService.dedupe('fetchNotifications', async () => {
+      try {
+        this.initRealtimeListeners();
+        const res = await apiGet<{ success: boolean; data: AppNotification[] }>(
+          `/notifications?limit=${limit}`
+        );
+        if (res && res.data && Array.isArray(res.data)) {
+          this.cachedNotifications = res.data;
+          this.cachedUnreadCount = res.data.filter((n) => !n.isRead).length;
+          this.notifyUnreadListeners(this.cachedUnreadCount);
+          await CacheService.set('@gameapp:cache:notifications', res.data, 1000 * 60 * 15);
+          return res.data;
+        }
+        return [];
+      } catch (err) {
+        console.warn('[NotificationService] fetchNotifications failed:', err);
+        return this.cachedNotifications || [];
       }
-      return [];
-    } catch (err) {
-      console.warn('[NotificationService] fetchNotifications failed:', err);
-      throw err;
-    }
+    });
   }
 
   /**

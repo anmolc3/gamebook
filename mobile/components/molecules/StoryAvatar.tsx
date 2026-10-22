@@ -2,14 +2,16 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../atoms/Avatar';
+import { StoryGradientRing } from '../atoms/StoryGradientRing';
 import { Icon } from '../../icons';
 
-interface StoryAvatarProps {
+export interface StoryAvatarProps {
   name: string;
   avatarUrl?: string | null;
   hasUnviewedStory?: boolean;
   isAddStory?: boolean;
   onPress: () => void;
+  size?: number;
 }
 
 export const StoryAvatar: React.FC<StoryAvatarProps> = ({
@@ -18,42 +20,50 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
   hasUnviewedStory = false,
   isAddStory = false,
   onPress,
+  size = 64,
 }) => {
   const { theme } = useTheme();
+
+  // Consistent ring stroke & gap geometry
+  const strokeWidth = 2.4;
+  const gap = 2.6;
+  const innerSize = Math.max(0, Math.round(size - 2 * (strokeWidth + gap)));
 
   return (
     <TouchableOpacity
       onPress={onPress}
       activeOpacity={0.8}
-      style={styles.container}
+      style={[styles.container, { width: size + 8 }]}
       accessibilityRole="button"
       accessibilityLabel={isAddStory ? 'Add new story' : `${name}'s story`}
     >
-      <View
-        style={[
-          styles.ring,
-          {
-            borderColor: isAddStory
-              ? theme.colors.border
-              : hasUnviewedStory
-              ? theme.colors.primary
-              : theme.colors.border,
-            borderStyle: isAddStory ? 'dashed' : 'solid',
-          },
-        ]}
-      >
-        <Avatar displayName={name} avatarUrl={avatarUrl} size="md" />
+      <View style={styles.ringWrapper}>
+        <StoryGradientRing
+          size={size}
+          strokeWidth={strokeWidth}
+          gap={gap}
+          isActive={hasUnviewedStory}
+          isDashed={isAddStory && !hasUnviewedStory}
+        >
+          <Avatar
+            displayName={isAddStory ? 'You' : name}
+            avatarUrl={avatarUrl}
+            size={innerSize}
+            fallbackToOtter={true}
+          />
+        </StoryGradientRing>
+
         {isAddStory && (
           <View
             style={[
               styles.plusBadge,
               {
-                backgroundColor: theme.colors.primary,
+                backgroundColor: theme.colors.accentPink || theme.colors.primary,
                 borderColor: theme.colors.background,
               },
             ]}
           >
-            <Icon name="plus" size={12} color="#FFFFFF" strokeWidth={3} />
+            <Icon name="plus" size={11} color="#FFFFFF" strokeWidth={3} />
           </View>
         )}
       </View>
@@ -69,7 +79,7 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
           },
         ]}
       >
-        {isAddStory ? 'Your Story' : name}
+        {isAddStory ? 'Your Story' : name.split(' ')[0]}
       </Text>
     </TouchableOpacity>
   );
@@ -78,28 +88,26 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
-    marginRight: 14,
-    width: 68,
+    marginRight: 10,
   },
-  ring: {
-    padding: 3,
-    borderRadius: 32,
-    borderWidth: 2,
-    marginBottom: 6,
+  ringWrapper: {
+    position: 'relative',
+    marginBottom: 5,
   },
   plusBadge: {
     position: 'absolute',
-    bottom: 2,
-    right: 2,
+    bottom: 0,
+    right: 0,
     width: 20,
     height: 20,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
+    zIndex: 10,
   },
   name: {
-    fontSize: 12,
+    fontSize: 11.5,
     textAlign: 'center',
   },
 });

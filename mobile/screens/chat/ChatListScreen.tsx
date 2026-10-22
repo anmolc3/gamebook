@@ -210,7 +210,10 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     onBack,
   ]);
 
-  const loadConversations = useCallback(async () => {
+  const loadConversations = useCallback(async (silent = false) => {
+    if (!silent && conversations.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const [data, friendsData] = await Promise.all([
         ChatService.fetchConversations().catch(() => []),
@@ -240,10 +243,27 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [conversations.length]);
 
   useEffect(() => {
-    loadConversations();
+    // 1. Immediately render cached conversations
+    let isMounted = true;
+    Promise.all([
+      ChatService.getCachedConversations(),
+      FriendsService.getCachedFriends(),
+    ]).then(([cachedConvs, cachedFriends]) => {
+      if (!isMounted) return;
+      if (cachedConvs && cachedConvs.length > 0) {
+        setConversations(cachedConvs);
+        setIsLoading(false);
+      }
+      if (cachedFriends && cachedFriends.length > 0) {
+        setFriends(cachedFriends);
+      }
+    }).catch(() => null);
+
+    // 2. Fetch fresh conversations in the background
+    loadConversations(true);
 
     // Ensure socket connected
     MobileSocketService.connect();
@@ -1078,12 +1098,9 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
           )}
 
           {/* Content Area */}
-          {isLoading ? (
+          {isLoading && filteredConversations.length === 0 ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-                Loading conversations...
-              </Text>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
             </View>
           ) : filteredConversations.length === 0 ? (
             <View style={styles.emptyContainer}>

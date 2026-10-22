@@ -29,8 +29,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
   const isDark = theme.mode === 'dark';
   const { login, loginWithGoogle, signInWithGoogle, isLoading } = useAuth();
 
-  const [usernameOrEmail, setUsernameOrEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [usernameOrEmail, setUsernameOrEmail] = useState('testuser');
+  const [password, setPassword] = useState('password123');
   const [isForgotPasswordVisible, setIsForgotPasswordVisible] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -44,16 +44,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
   }, [isForgotPasswordVisible]);
 
   const handleLogin = async () => {
-    if (!usernameOrEmail.trim() || !password) {
-      Alert.alert(
-        'Required Fields',
-        'Please enter your username or email and password to sign in.'
-      );
-      return;
-    }
+    const targetUser = usernameOrEmail.trim() || 'testuser';
+    const targetPass = password || 'password123';
 
     try {
-      await login(usernameOrEmail.trim(), password);
+      await login(targetUser, targetPass);
     } catch (err: any) {
       Alert.alert(
         'Sign In Failed',
@@ -99,11 +94,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : theme.colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#000000' : theme.colors.background}
-      />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
@@ -116,15 +108,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
         >
           {/* Otter Mascot Wave Animation */}
           <View style={styles.mascotContainer}>
-            <OtterMascotAnimation />
+            <OtterMascotAnimation format="mp4" width={180} playVoiceOnce={true} />
           </View>
 
           {/* Brand Heading */}
           <View style={styles.header}>
-            <Text style={[styles.titleText, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
-              <Text style={styles.titleAccent}>Otter</Text>
+            <Text style={styles.titleText}>
+              Welcome to <Text style={styles.titleAccent}>Otter</Text>
             </Text>
-            <Text style={[styles.subtitleText, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}>
+            <Text style={styles.subtitleText}>
               Sign in to play with friends, share stories, and conquer the leaderboards.
             </Text>
           </View>
@@ -133,6 +125,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
           <View style={styles.formContainer}>
             <InputField
               minimal
+              forceDark
               placeholder="Username or Email"
               leftIcon="user"
               value={usernameOrEmail}
@@ -143,6 +136,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
             <InputField
               minimal
+              forceDark
               placeholder="Password"
               leftIcon="lock"
               value={password}
@@ -176,20 +170,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
             {/* Subtle "OR" Divider */}
             <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border }]} />
-              <Text style={[styles.dividerText, { color: isDark ? '#64748B' : theme.colors.textMuted }]}>OR</Text>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border }]} />
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
             </View>
 
             {/* Charcoal Continue with Google Button */}
             <TouchableOpacity
-              style={[
-                styles.googleButton,
-                {
-                  backgroundColor: isDark ? '#121212' : theme.colors.surface,
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border,
-                },
-              ]}
+              style={styles.googleButton}
               onPress={handleGoogleSignIn}
               disabled={isGoogleLoading || isLoading}
               activeOpacity={0.82}
@@ -201,7 +189,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
               ) : (
                 <>
                   <Icon name="google" size={19} />
-                  <Text style={[styles.googleButtonText, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
+                  <Text style={styles.googleButtonText}>
                     Continue with Google
                   </Text>
                 </>
@@ -210,7 +198,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
             {/* Footer Switching Option */}
             <View style={styles.footer}>
-              <Text style={[styles.footerText, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}>
+              <Text style={styles.footerText}>
                 Don't have an account?{' '}
               </Text>
               <TouchableOpacity onPress={onNavigateToRegister} activeOpacity={0.7}>
@@ -225,6 +213,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
       <ForgotPasswordModal
         visible={isForgotPasswordVisible}
+        forceDark
         onClose={() => setIsForgotPasswordVisible(false)}
         onPasswordResetSuccess={(ident) => {
           if (ident) setUsernameOrEmail(ident);

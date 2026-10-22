@@ -45,6 +45,8 @@ interface MatchHistoryItem {
   createdAt: string;
 }
 
+import { CacheService } from '../../services/cache.service';
+
 interface LeaderboardScreenProps {
   onBack: () => void;
   onPressAchievements: () => void;
@@ -58,7 +60,7 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
 }) => {
   const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState<'global' | 'friends' | 'history'>('global');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardPlayer[]>([]);
   const [history, setHistory] = useState<MatchHistoryItem[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -72,38 +74,65 @@ export const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({
   }, [onBack]);
 
   useEffect(() => {
-    fetchData();
+    let isMounted = true;
+    // 1. Immediately read cached data for this tab
+    CacheService.get<any>(`@gameapp:cache:leaderboard_${activeTab}`).then((cached) => {
+      if (!isMounted || !cached) return;
+      if (activeTab === 'history') {
+        if (Array.isArray(cached) && cached.length > 0) setHistory(cached);
+      } else {
+        if (Array.isArray(cached) && cached.length > 0) setLeaderboard(cached);
+      }
+    }).catch(() => null);
+
+    // 2. Fetch fresh rankings in background
+    fetchData(true);
+
+    return () => {
+      isMounted = false;
+    };
   }, [activeTab]);
 
   const fetchData = async (silent = false) => {
-    if (!silent) setLoading(true);
+    const hasData = activeTab === 'history' ? history.length > 0 : leaderboard.length > 0;
+    if (!silent && !hasData) setLoading(true);
     try {
       if (activeTab === 'global') {
         const res = await apiGet<{ leaderboard: LeaderboardPlayer[] }>('/games/leaderboard/global');
-        setLeaderboard(res.leaderboard || []);
+        const data = res.leaderboard || [];
+        setLeaderboard(data);
+        if (data.length > 0) CacheService.set('@gameapp:cache:leaderboard_global', data, 1000 * 60 * 10);
       } else if (activeTab === 'friends') {
         const res = await apiGet<{ leaderboard: LeaderboardPlayer[] }>('/games/TICTACTOE/leaderboard?scope=friends');
-        setLeaderboard(res.leaderboard || []);
+        const data = res.leaderboard || [];
+        setLeaderboard(data);
+        if (data.length > 0) CacheService.set('@gameapp:cache:leaderboard_friends', data, 1000 * 60 * 10);
       } else if (activeTab === 'history') {
         const res = await apiGet<{ history: MatchHistoryItem[] }>('/games/history');
-        setHistory(res.history || []);
+        const data = res.history || [];
+        setHistory(data);
+        if (data.length > 0) CacheService.set('@gameapp:cache:leaderboard_history', data, 1000 * 60 * 10);
       }
     } catch {
       // Mock fallback data for graceful offline display
       if (activeTab === 'global' || activeTab === 'friends') {
-        setLeaderboard([
-          { rank: 1, userId: '1', username: 'alex_champion', displayName: 'Alex Mercer', matchesPlayed: 42, matchesWon: 35, winRate: 83, highestStreak: 9 },
-          { rank: 2, userId: '2', username: 'elena_queen', displayName: 'Elena Rostova', matchesPlayed: 38, matchesWon: 29, winRate: 76, highestStreak: 6 },
-          { rank: 3, userId: '3', username: 'marcus_grand', displayName: 'Marcus Vance', matchesPlayed: 31, matchesWon: 22, winRate: 71, highestStreak: 5 },
-          { rank: 4, userId: '4', username: 'sarah_gamer', displayName: 'Sarah Connor', matchesPlayed: 25, matchesWon: 17, winRate: 68, highestStreak: 4 },
-          { rank: 5, userId: '5', username: 'you', displayName: 'You (Current User)', matchesPlayed: 20, matchesWon: 14, winRate: 70, highestStreak: 4, isCurrentUser: true },
-        ]);
+        if (leaderboard.length === 0) {
+          setLeaderboard([
+            { rank: 1, userId: '1', username: 'alex_champion', displayName: 'Alex Mercer', matchesPlayed: 42, matchesWon: 35, winRate: 83, highestStreak: 9 },
+            { rank: 2, userId: '2', username: 'elena_queen', displayName: 'Elena Rostova', matchesPlayed: 38, matchesWon: 29, winRate: 76, highestStreak: 6 },
+            { rank: 3, userId: '3', username: 'marcus_grand', displayName: 'Marcus Vance', matchesPlayed: 31, matchesWon: 22, winRate: 71, highestStreak: 5 },
+            { rank: 4, userId: '4', username: 'sarah_gamer', displayName: 'Sarah Connor', matchesPlayed: 25, matchesWon: 17, winRate: 68, highestStreak: 4 },
+            { rank: 5, userId: '5', username: 'you', displayName: 'You (Current User)', matchesPlayed: 20, matchesWon: 14, winRate: 70, highestStreak: 4, isCurrentUser: true },
+          ]);
+        }
       } else {
-        setHistory([
-          { id: 'h1', gameType: 'CHESS', gameName: 'Chess Grandmaster', isWinner: true, isDraw: false, durationSeconds: 245, createdAt: new Date(Date.now() - 3600000).toISOString() },
-          { id: 'h2', gameType: 'WORDLE_DUEL', gameName: 'Wordle Duel', isWinner: false, isDraw: false, durationSeconds: 120, createdAt: new Date(Date.now() - 7200000).toISOString() },
-          { id: 'h3', gameType: 'LUDO', gameName: 'Ludo World Arena', isWinner: true, isDraw: false, durationSeconds: 580, createdAt: new Date(Date.now() - 86400000).toISOString() },
-        ]);
+        if (history.length === 0) {
+          setHistory([
+            { id: 'h1', gameType: 'CHESS', gameName: 'Chess Grandmaster', isWinner: true, isDraw: false, durationSeconds: 245, createdAt: new Date(Date.now() - 3600000).toISOString() },
+            { id: 'h2', gameType: 'WORDLE_DUEL', gameName: 'Wordle Duel', isWinner: false, isDraw: false, durationSeconds: 120, createdAt: new Date(Date.now() - 7200000).toISOString() },
+            { id: 'h3', gameType: 'LUDO', gameName: 'Ludo World Arena', isWinner: true, isDraw: false, durationSeconds: 580, createdAt: new Date(Date.now() - 86400000).toISOString() },
+          ]);
+        }
       }
     } finally {
       setLoading(false);

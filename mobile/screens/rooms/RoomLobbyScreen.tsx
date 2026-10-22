@@ -364,11 +364,36 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
             </Text>
           </View>
         </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 }}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={{ color: theme.colors.textMuted, fontSize: 14 }}>
-            Connecting to match lobby...
-          </Text>
+        <View style={{ flex: 1, padding: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 }}>
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+            <Text style={{ color: theme.colors.textMuted, fontSize: 13 }}>
+              Connecting to room #{roomCode}...
+            </Text>
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', marginTop: 16 }}>
+            {[1, 2, 3, 4].map((slot) => (
+              <View
+                key={slot}
+                style={{
+                  width: '48%',
+                  height: 140,
+                  backgroundColor: theme.colors.surfaceElevated,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border,
+                  borderStyle: 'dashed',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                }}
+              >
+                <Icon name="users" size={32} color={theme.colors.textMuted} />
+                <Text style={{ color: theme.colors.textMuted, fontSize: 12, marginTop: 8 }}>
+                  Slot {slot}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </SafeAreaView>
     );

@@ -82,7 +82,10 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   }, [searchQuery, activeTab, onBack]);
 
   // Load all social data
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (silent = false) => {
+    if (!silent && friends.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const [friendsData, requestsData, suggestedData] = await Promise.all([
         FriendsService.fetchFriends(),
@@ -99,10 +102,32 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [friends.length]);
 
   useEffect(() => {
-    loadData();
+    // 1. Immediately populate from local cache
+    let isMounted = true;
+    Promise.all([
+      FriendsService.getCachedFriends(),
+      FriendsService.getCachedRequests(),
+      FriendsService.getCachedSuggestedFriends(),
+    ]).then(([cachedFriends, cachedRequests, cachedSuggested]) => {
+      if (!isMounted) return;
+      if (cachedFriends && cachedFriends.length > 0) {
+        setFriends(cachedFriends);
+        setIsLoading(false);
+      }
+      if (cachedRequests) {
+        setIncomingRequests(cachedRequests.incoming || []);
+        setOutgoingRequests(cachedRequests.outgoing || []);
+      }
+      if (cachedSuggested && cachedSuggested.length > 0) {
+        setSuggestedPlayers(cachedSuggested);
+      }
+    }).catch(() => null);
+
+    // 2. Refresh from server in the background
+    loadData(true);
 
     // Connect socket and listen for real-time presence & friend events
     MobileSocketService.connect();
@@ -437,14 +462,7 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
           />
         }
       >
-        {isLoading && !isRefreshing ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={[styles.loadingText, { color: theme.colors.textMuted }]}>
-              Syncing social graph...
-            </Text>
-          </View>
-        ) : activeTab === 'feeds' ? (
+        {activeTab === 'feeds' ? (
           /* ============================================================ */
           /* 0. FEEDS TAB                                                 */
           /* ============================================================ */

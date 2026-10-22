@@ -64,8 +64,36 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const sheetChevronColor = isDark ? '#4B5565' : '#94A3B8';
   const sheetIconColor = isDark ? '#94A3B8' : '#64748B';
 
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [profile, setProfile] = useState<UserProfile | null>(() => {
+    if (isOwnProfile && authUser) {
+      return {
+        id: authUser.id,
+        username: authUser.username,
+        displayName: authUser.displayName,
+        avatarUrl: authUser.avatarUrl,
+        bio: authUser.bio,
+        bannerUrl: null,
+        isOnline: true,
+        lastSeen: new Date().toISOString(),
+        createdAt: authUser.createdAt || new Date().toISOString(),
+        stats: {
+          totalMatches: (authUser.stats?.friendsCount || 0) + (authUser.stats?.winsCount || 0),
+          matchesPlayed: 0,
+          totalWins: authUser.stats?.winsCount || 0,
+          matchesWon: authUser.stats?.winsCount || 0,
+          totalLosses: 0,
+          matchesLost: 0,
+          winRate: 0,
+          friendsCount: authUser.stats?.friendsCount || 0,
+        },
+        achievements: [],
+        isOwnProfile: true,
+        relationship: 'SELF',
+      };
+    }
+    return null;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(!isOwnProfile);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -86,9 +114,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [newPostImage, setNewPostImage] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
 
-  const loadProfile = useCallback(async () => {
+  const loadProfile = useCallback(async (silent = false) => {
     try {
       setErrorMsg(null);
+      if (!silent && !profile) setIsLoading(true);
       let data: UserProfile;
       if (isOwnProfile) {
         data = await ProfileService.fetchMyProfile();
@@ -97,16 +126,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
       }
       setProfile(data);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to load profile');
+      if (!profile) setErrorMsg(err.message || 'Failed to load profile');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [isOwnProfile, userId]);
+  }, [isOwnProfile, userId, profile]);
 
   const loadUserPosts = useCallback(async () => {
     try {
-      setIsLoadingPosts(true);
+      if (userPosts.length === 0) setIsLoadingPosts(true);
       const allFeeds = await FeedService.getFeeds();
       const targetUserId = userId || authUser?.id;
       const filtered = allFeeds.filter(
@@ -118,10 +147,22 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
     } finally {
       setIsLoadingPosts(false);
     }
-  }, [userId, authUser?.id, isOwnProfile]);
+  }, [userId, authUser?.id, isOwnProfile, userPosts.length]);
 
   useEffect(() => {
-    loadProfile();
+    let isMounted = true;
+    const targetId = userId || 'me';
+
+    // 1. Immediately read cached profile from local storage if state not yet set
+    ProfileService.getCachedProfile(targetId).then((cached) => {
+      if (isMounted && cached) {
+        setProfile(cached);
+        setIsLoading(false);
+      }
+    }).catch(() => null);
+
+    // 2. Refresh profile in background
+    loadProfile(true);
     loadUserPosts();
 
     const unsubNewPost = FeedService.onNewPost((newPost) => {
@@ -385,10 +426,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <View style={styles.navIconButtonPlaceholder} />
         </View>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
-            Loading Player Profile...
-          </Text>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -426,7 +464,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: theme.colors.primary }]}
-            onPress={loadProfile}
+            onPress={() => loadProfile()}
           >
             <Text style={[styles.retryButtonText, { color: theme.colors.background }]}>
               Try Again
@@ -824,12 +862,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({
             )}
 
             {/* Posts Stream */}
-            {isLoadingPosts ? (
+            {isLoadingPosts && userPosts.length === 0 ? (
               <View style={styles.postsLoadingBox}>
                 <ActivityIndicator size="small" color={theme.colors.primary} />
-                <Text style={[styles.postsLoadingText, { color: theme.colors.textMuted }]}>
-                  Loading posts...
-                </Text>
               </View>
             ) : userPosts.length === 0 ? (
               <View style={[styles.emptyPostsBox, { borderBottomColor: theme.colors.divider }]}>

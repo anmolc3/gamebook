@@ -42,7 +42,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const loadNotifications = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setIsRefreshing(true);
-    } else {
+    } else if (notifications.length === 0) {
       setIsLoading(true);
     }
     setError(null);
@@ -55,12 +55,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [notifications.length]);
 
-  // Fetch when modal opens
+  // Fetch when modal opens: show cached notifications first, then revalidate in background
   useEffect(() => {
     if (visible) {
-      loadNotifications();
+      NotificationService.getCachedNotifications().then((cached) => {
+        if (cached && cached.length > 0) {
+          setNotifications(cached);
+          setIsLoading(false);
+        }
+      }).catch(() => null);
+
+      loadNotifications(false);
     }
   }, [visible, loadNotifications]);
 
@@ -222,10 +229,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             >
               {isLoading && notifications.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <ActivityIndicator size="large" color={theme.colors.primary} />
-                  <Text style={[styles.emptySubtitle, { color: theme.colors.textMuted, marginTop: 12 }]}>
-                    Loading notifications...
-                  </Text>
+                  <ActivityIndicator size="small" color={theme.colors.primary} />
                 </View>
               ) : error && notifications.length === 0 ? (
                 <View style={styles.emptyContainer}>

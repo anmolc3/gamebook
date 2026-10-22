@@ -24,6 +24,8 @@ export interface AuthUserData {
   };
 }
 
+const USER_STORAGE_KEY = '@gameapp_auth_user';
+
 export class MobileAuthService {
   static async setStoredToken(token: string): Promise<void> {
     await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
@@ -35,6 +37,23 @@ export class MobileAuthService {
 
   static async clearStoredToken(): Promise<void> {
     await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
+
+  static async setStoredUser(user: AuthUserData): Promise<void> {
+    await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  }
+
+  static async getStoredUser(): Promise<AuthUserData | null> {
+    try {
+      const stored = await AsyncStorage.getItem(USER_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  static async clearStoredUser(): Promise<void> {
+    await AsyncStorage.removeItem(USER_STORAGE_KEY);
   }
 
   static async register(data: {

@@ -29,13 +29,27 @@ export interface FeedPostItem {
   createdAt: string;
 }
 
+import { CacheService } from './cache.service';
+
+const CACHE_FEEDS_KEY = '@gameapp:cache:feeds';
+
 export class FeedService {
+  static async getCachedFeeds(): Promise<FeedPostItem[] | null> {
+    return await CacheService.get<FeedPostItem[]>(CACHE_FEEDS_KEY);
+  }
+
   /**
    * Fetch all feed posts from real backend API
    */
   static async getFeeds(): Promise<FeedPostItem[]> {
-    const res = await apiGet<{ success: boolean; posts: FeedPostItem[] }>('/feeds');
-    return res.posts || [];
+    return CacheService.dedupe('getFeeds', async () => {
+      const res = await apiGet<{ success: boolean; posts: FeedPostItem[] }>('/feeds');
+      const posts = res.posts || [];
+      if (posts.length > 0) {
+        await CacheService.set(CACHE_FEEDS_KEY, posts, 1000 * 60 * 15);
+      }
+      return posts;
+    });
   }
 
   /**

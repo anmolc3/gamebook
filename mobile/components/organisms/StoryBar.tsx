@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../atoms/Avatar';
+import { StoryGradientRing } from '../atoms/StoryGradientRing';
 import { PlusIcon } from '../../icons';
 
 export interface StoryTrayItem {
@@ -55,26 +56,26 @@ export const StoryBar: React.FC<StoryBarProps> = ({
           activeOpacity={0.8}
           style={styles.storyItem}
         >
-          <View
-            style={[
-              styles.avatarRing,
-              {
-                borderColor: theme.colors.border,
-                borderStyle: 'dashed',
-              },
-            ]}
-          >
-            <Avatar displayName="You" size="md" />
+          <View style={styles.ringWrapper}>
+            <StoryGradientRing
+              size={64}
+              strokeWidth={2.4}
+              gap={2.6}
+              isActive={false}
+              isDashed={true}
+            >
+              <Avatar displayName="You" size={52} fallbackToOtter={true} />
+            </StoryGradientRing>
             <View
               style={[
                 styles.addBadge,
                 {
-                  backgroundColor: theme.colors.primary,
-                  borderColor: theme.colors.surface,
+                  backgroundColor: theme.colors.accentPink || theme.colors.primary,
+                  borderColor: theme.colors.background,
                 },
               ]}
             >
-              <PlusIcon size={12} color={theme.colors.textOnPrimary} strokeWidth={3} />
+              <PlusIcon size={11} color="#FFFFFF" strokeWidth={3} />
             </View>
           </View>
           <Text
@@ -91,9 +92,6 @@ export const StoryBar: React.FC<StoryBarProps> = ({
         {/* Friends & Self Active Stories */}
         {trays.map((tray) => {
           const isUnread = !tray.allViewed;
-          const ringColor = isUnread
-            ? theme.colors.primary
-            : theme.colors.border;
 
           return (
             <TouchableOpacity
@@ -102,16 +100,20 @@ export const StoryBar: React.FC<StoryBarProps> = ({
               activeOpacity={0.8}
               style={styles.storyItem}
             >
-              <View
-                style={[
-                  styles.avatarRing,
-                  {
-                    borderColor: ringColor,
-                    borderWidth: isUnread ? 2.5 : 1.5,
-                  },
-                ]}
-              >
-                <Avatar displayName={tray.displayName || tray.username} size="md" />
+              <View style={styles.ringWrapper}>
+                <StoryGradientRing
+                  size={64}
+                  strokeWidth={2.4}
+                  gap={2.6}
+                  isActive={isUnread}
+                >
+                  <Avatar
+                    displayName={tray.displayName || tray.username}
+                    avatarUrl={tray.avatarUrl}
+                    size={52}
+                    fallbackToOtter={true}
+                  />
+                </StoryGradientRing>
               </View>
               <Text
                 style={[
@@ -125,7 +127,7 @@ export const StoryBar: React.FC<StoryBarProps> = ({
                 ]}
                 numberOfLines={1}
               >
-                {tray.isSelf ? 'You' : tray.displayName.split(' ')[0]}
+                {tray.isSelf ? 'You' : (tray.displayName || tray.username).split(' ')[0]}
               </Text>
             </TouchableOpacity>
           );
@@ -149,26 +151,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 64,
   },
-  avatarRing: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 2,
+  ringWrapper: {
     position: 'relative',
   },
   addBadge: {
     position: 'absolute',
-    bottom: -2,
-    right: -2,
+    bottom: -1,
+    right: -1,
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 10,
   },
   username: {
     fontSize: 11,

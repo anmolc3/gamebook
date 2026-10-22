@@ -7,7 +7,7 @@ import { PresetAvatar } from './AvatarPresets';
 interface AvatarProps {
   displayName: string;
   avatarUrl?: string | null;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | number;
   status?: PresenceType;
   style?: ViewStyle;
   fallbackToOtter?: boolean;
@@ -29,7 +29,7 @@ export const Avatar: React.FC<AvatarProps> = ({
   fallbackToOtter = false,
 }) => {
   const { theme } = useTheme();
-  const dimension = SIZE_MAP[size];
+  const dimension = typeof size === 'number' ? size : (SIZE_MAP[size] || 48);
   const initials = displayName
     ? displayName
         .split(' ')

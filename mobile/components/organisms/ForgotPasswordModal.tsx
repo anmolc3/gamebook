@@ -23,6 +23,7 @@ export interface ForgotPasswordModalProps {
   onClose: () => void;
   onPasswordResetSuccess?: (usernameOrEmail: string) => void;
   initialIdentifier?: string;
+  forceDark?: boolean;
 }
 
 export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
@@ -30,8 +31,10 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
   onClose,
   onPasswordResetSuccess,
   initialIdentifier,
+  forceDark = false,
 }) => {
   const { theme } = useTheme();
+  const isDark = forceDark || theme.mode === 'dark';
 
   // Wizard step: 'request' | 'verify' | 'success'
   const [step, setStep] = useState<'request' | 'verify' | 'success'>('request');
@@ -256,10 +259,10 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
               style={[
                 styles.content,
                 {
-                  backgroundColor: theme.colors.background,
+                  backgroundColor: isDark ? '#121212' : theme.colors.background,
                   borderTopLeftRadius: theme.radius.sheet,
                   borderTopRightRadius: theme.radius.sheet,
-                  borderColor: theme.colors.border,
+                  borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border,
                 },
                 theme.shadows.modal,
               ]}
@@ -269,7 +272,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                 <View
                   style={[
                     styles.grabHandle,
-                    { backgroundColor: theme.colors.border },
+                    { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.2)' : theme.colors.border },
                   ]}
                 />
               </View>
@@ -281,8 +284,8 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                     style={[
                       styles.headerIconBox,
                       {
-                        backgroundColor: theme.colors.surfaceElevated,
-                        borderColor: theme.colors.border,
+                        backgroundColor: isDark ? '#1E293B' : theme.colors.surfaceElevated,
+                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border,
                       },
                     ]}
                   >
@@ -290,7 +293,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                   </View>
                   <View style={styles.headerTextCol}>
                     <Text
-                      style={[styles.title, { color: theme.colors.textPrimary }]}
+                      style={[styles.title, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}
                       numberOfLines={1}
                     >
                       {step === 'success'
@@ -300,7 +303,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                         : 'Reset Password'}
                     </Text>
                     <Text
-                      style={[styles.subtitle, { color: theme.colors.textSecondary }]}
+                      style={[styles.subtitle, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}
                       numberOfLines={1}
                     >
                       {step === 'success'
@@ -333,7 +336,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                     <Text
                       style={[
                         styles.description,
-                        { color: theme.colors.textSecondary },
+                        { color: isDark ? '#8E9BAE' : theme.colors.textSecondary },
                       ]}
                     >
                       Enter your registered email address or account username. We'll send a secure 6-digit verification code to reset your password.
@@ -344,6 +347,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       placeholder="e.g. alex_rivera or alex@example.com"
                       leftIcon="user"
                       value={emailOrUsername}
+                      forceDark={isDark}
                       onChangeText={(text) => {
                         setEmailOrUsername(text);
                         if (identifierError) setIdentifierError(null);
@@ -418,6 +422,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       placeholder="Enter 6-digit code..."
                       leftIcon="shield"
                       value={resetCode}
+                      forceDark={isDark}
                       onChangeText={handleCodeChange}
                       keyboardType="number-pad"
                       maxLength={6}
@@ -432,6 +437,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       placeholder="Enter new password..."
                       leftIcon="lock"
                       value={newPassword}
+                      forceDark={isDark}
                       onChangeText={handlePasswordChange}
                       secureTextEntry
                       autoCapitalize="none"
@@ -446,6 +452,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
                       placeholder="Repeat new password..."
                       leftIcon="lock"
                       value={confirmPassword}
+                      forceDark={isDark}
                       onChangeText={handleConfirmPasswordChange}
                       secureTextEntry
                       autoCapitalize="none"

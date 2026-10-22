@@ -9,13 +9,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   BackHandler,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, getThemeGradients } from '../theme';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../features/auth/AuthContext';
 import {
-  AppHeader,
   StoryAvatar,
   GameCard,
   StatCard,
@@ -25,6 +25,7 @@ import {
   CreateStoryModal,
   SocialFeedSection,
 } from '../components';
+import { NotificationIcon } from '../components/atoms/NotificationIcon';
 import { StoryTrayItem } from '../components/organisms/StoryBar';
 import { StoryService } from '../services/story.service';
 import { GameService } from '../services/game.service';
@@ -42,6 +43,117 @@ export interface ThemeShowcaseScreenProps {
   onPressStoryTray?: (tray: StoryTrayItem) => void;
   onOpenConversation?: (peer: any) => void;
 }
+
+const DEFAULT_STORY_TRAYS: StoryTrayItem[] = [
+  {
+    userId: 'otter_official_story',
+    username: 'otter',
+    displayName: 'Otter',
+    avatarUrl: null, // null -> displays Otter mascot fallback!
+    allViewed: false,
+    stories: [
+      {
+        id: 'otter_welcome_story',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Welcome to Otter Stories! 🦦✨ Play games & share moments with friends.',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        hasViewed: false,
+      },
+    ],
+  },
+  {
+    userId: 'maya_story',
+    username: 'maya',
+    displayName: 'Maya',
+    avatarUrl: 'neon_blue_masked_anime_avatar',
+    allViewed: false,
+    stories: [
+      {
+        id: 'maya_s1',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Just set a new record in Sudoku Duel! 🔥 Challenge me!',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        hasViewed: false,
+      },
+    ],
+  },
+  {
+    userId: 'alex_story',
+    username: 'alex',
+    displayName: 'Alex',
+    avatarUrl: 'fiery_rabbit_streetwear_mascot',
+    allViewed: true, // viewed state test
+    stories: [
+      {
+        id: 'alex_s1',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Late night Ludo championship! 🎲 GG to all.',
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        expiresAt: new Date(Date.now() + 80000000).toISOString(),
+        hasViewed: true,
+      },
+    ],
+  },
+  {
+    userId: 'kai_story',
+    username: 'kai',
+    displayName: 'Kai',
+    avatarUrl: 'golden_crown_panda_gaming_emblem',
+    allViewed: false,
+    stories: [
+      {
+        id: 'kai_s1',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Speed Math tournament starting soon! Join up! ⚡',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        hasViewed: false,
+      },
+    ],
+  },
+  {
+    userId: 'sam_story',
+    username: 'sam',
+    displayName: 'Sam',
+    avatarUrl: null, // null -> tests default avatar/otter fallback
+    allViewed: false,
+    stories: [
+      {
+        id: 'sam_s1',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Exploring all the arenas! 🎮',
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 86400000).toISOString(),
+        hasViewed: false,
+      },
+    ],
+  },
+  {
+    userId: 'zara_story',
+    username: 'zara',
+    displayName: 'Zara',
+    avatarUrl: 'superhero_kid_over_sunset_cityscape',
+    allViewed: true, // viewed state test
+    stories: [
+      {
+        id: 'zara_s1',
+        mediaUrl: '',
+        mediaType: 'TEXT',
+        caption: 'Victory in Imposter Secret Crew! 👑',
+        createdAt: new Date(Date.now() - 7200000).toISOString(),
+        expiresAt: new Date(Date.now() + 76000000).toISOString(),
+        hasViewed: true,
+      },
+    ],
+  },
+];
 
 export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   onPressProfile,
@@ -61,18 +173,23 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>([]);
+  const [storyTrays, setStoryTrays] = useState<StoryTrayItem[]>(DEFAULT_STORY_TRAYS);
   const [isCreateStoryVisible, setIsCreateStoryVisible] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadStoryFeed = useCallback(() => {
     StoryService.getStoryFeed()
       .then((trays) => {
-        if (trays && Array.isArray(trays)) {
-          setStoryTrays(trays);
+        if (trays && Array.isArray(trays) && trays.length > 0) {
+          const hasOtter = trays.some((t) => t.username === 'otter' || t.displayName === 'Otter');
+          setStoryTrays(hasOtter ? trays : [DEFAULT_STORY_TRAYS[0], ...trays]);
+        } else {
+          setStoryTrays(DEFAULT_STORY_TRAYS);
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        setStoryTrays((prev) => (prev.length > 0 ? prev : DEFAULT_STORY_TRAYS));
+      })
       .finally(() => {
         setIsRefreshing(false);
       });
@@ -84,6 +201,17 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
   }, [loadStoryFeed]);
 
   useEffect(() => {
+    StoryService.getCachedStoryFeed().then((cached) => {
+      if (cached && cached.length > 0) {
+        const hasOtter = cached.some((t) => t.username === 'otter' || t.displayName === 'Otter');
+        setStoryTrays(hasOtter ? cached : [DEFAULT_STORY_TRAYS[0], ...cached]);
+      } else {
+        setStoryTrays(DEFAULT_STORY_TRAYS);
+      }
+    }).catch(() => {
+      setStoryTrays(DEFAULT_STORY_TRAYS);
+    });
+
     loadStoryFeed();
   }, [loadStoryFeed]);
 
@@ -133,18 +261,24 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
         backgroundColor={theme.colors.background}
       />
 
-      {/* Marvie Top App Header with Animated Notification Bell */}
-      <AppHeader
-        userName={user?.displayName || 'Player'}
-        avatarUrl={user?.avatarUrl}
-        hasUnreadNotifications={unreadNotifCount > 0}
-        unreadNotifCount={unreadNotifCount}
-        onPressNotifications={() => {
-          setUnreadNotifCount(0);
-          setNotificationsModalVisible(true);
-        }}
-        onPressProfile={onPressProfile}
-      />
+      {/* Simplified Top Bar: Only Notification Icon at top-right with safe-area spacing */}
+      <View style={styles.topBar}>
+        <TouchableOpacity
+          onPress={() => {
+            setUnreadNotifCount(0);
+            setNotificationsModalVisible(true);
+          }}
+          activeOpacity={0.7}
+          accessibilityLabel="Notifications"
+          style={styles.notifBtn}
+        >
+          <NotificationIcon
+            size={30}
+            hasUnread={unreadNotifCount > 0}
+            unreadCount={unreadNotifCount}
+          />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -177,16 +311,16 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
           </View>
         )}
 
-        {/* Real Active Stories Rail */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: theme.colors.textPrimary }]}>
-              Active Stories
-            </Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storyRail}>
+        {/* Story Profile Circles Rail — Heading & extra top spacing removed */}
+        <View style={styles.storiesContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.storyRailContent}
+          >
             <StoryAvatar
               name="Your Story"
+              avatarUrl={user?.avatarUrl}
               isAddStory
               onPress={() => setIsCreateStoryVisible(true)}
             />
@@ -413,6 +547,28 @@ export const ThemeShowcaseScreen: React.FC<ThemeShowcaseScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingTop: Platform.OS === 'android' ? 10 : 6,
+    paddingBottom: 4,
+  },
+  notifBtn: {
+    padding: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  storiesContainer: {
+    paddingTop: 4,
+    paddingBottom: 6,
+    marginBottom: 8,
+  },
+  storyRailContent: {
+    paddingRight: 16,
+    alignItems: 'center',
   },
   scroll: {
     paddingHorizontal: 16,

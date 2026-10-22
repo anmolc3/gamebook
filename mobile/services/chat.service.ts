@@ -79,6 +79,10 @@ export interface ChatMessage {
   groupTitle?: string;
 }
 
+import { CacheService } from './cache.service';
+
+const CACHE_CONVERSATIONS_KEY = '@gameapp:cache:conversations';
+
 export class ChatService {
   private static async getAuthHeaders(): Promise<Record<string, string>> {
     const token = await MobileAuthService.getStoredToken();
@@ -88,17 +92,33 @@ export class ChatService {
     };
   }
 
+  static async getCachedConversations(): Promise<ConversationItem[] | null> {
+    return await CacheService.get<ConversationItem[]>(CACHE_CONVERSATIONS_KEY);
+  }
+
+  static async getCachedMessages(conversationId: string): Promise<ChatMessage[] | null> {
+    return await CacheService.get<ChatMessage[]>(`@gameapp:cache:messages_${conversationId}`);
+  }
+
+  static async setCachedMessages(conversationId: string, messages: ChatMessage[]): Promise<void> {
+    await CacheService.set(`@gameapp:cache:messages_${conversationId}`, messages, 1000 * 60 * 60 * 24);
+  }
+
   static async fetchConversations(): Promise<ConversationItem[]> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
-      method: 'GET',
-      headers,
+    return CacheService.dedupe('fetchConversations', async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(`${API_BASE_URL}/chat/conversations`, {
+        method: 'GET',
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch conversations');
+      }
+      const data = json.data || [];
+      await CacheService.set(CACHE_CONVERSATIONS_KEY, data, 1000 * 60 * 15);
+      return data;
     });
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch conversations');
-    }
-    return json.data || [];
   }
 
   static async getOrCreateConversation(recipientId: string): Promise<any> {
@@ -227,19 +247,25 @@ export class ChatService {
   }
 
   static async fetchMessages(conversationId: string, limit = 50): Promise<ChatMessage[]> {
-    const headers = await this.getAuthHeaders();
-    const res = await fetch(
-      `${API_BASE_URL}/chat/conversations/${conversationId}/messages?limit=${limit}`,
-      {
-        method: 'GET',
-        headers,
+    return CacheService.dedupe(`fetchMessages_${conversationId}`, async () => {
+      const headers = await this.getAuthHeaders();
+      const res = await fetch(
+        `${API_BASE_URL}/chat/conversations/${conversationId}/messages?limit=${limit}`,
+        {
+          method: 'GET',
+          headers,
+        }
+      );
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Failed to fetch messages');
       }
-    );
-    const json = await res.json();
-    if (!res.ok) {
-      throw new Error(json.error?.message || 'Failed to fetch messages');
-    }
-    return json.data || [];
+      const data = json.data || [];
+      if (data.length > 0) {
+        await this.setCachedMessages(conversationId, data);
+      }
+      return data;
+    });
   }
 
   static async sendMessage(

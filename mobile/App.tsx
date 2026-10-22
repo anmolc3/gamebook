@@ -45,6 +45,7 @@ import { SuggestedFriendsModal } from './components/organisms/SuggestedFriendsMo
 import { SoloService } from './services/solo.service';
 import { MarvieBottomNav, NavTab } from './components/organisms/MarvieBottomNav';
 import { GameControllerLogo } from './components/atoms/GameControllerLogo';
+import { AuthScreen } from './screens/auth/AuthScreen';
 import { LoginScreen } from './screens/auth/LoginScreen';
 import { RegisterScreen } from './screens/auth/RegisterScreen';
 import { GameDiscoveryScreen } from './screens/discovery/GameDiscoveryScreen';
@@ -58,6 +59,7 @@ import { MobileSocketService } from './services/socket.service';
 import { CallProvider } from './features/call/CallContext';
 import { CallModal } from './components/organisms/CallModal';
 import { GameAlertModal } from './components/organisms/GameAlertModal';
+import { OtterMascotAnimation } from './components/organisms/OtterMascotAnimation';
 
 interface ConversationPeer {
   id: string;
@@ -754,20 +756,17 @@ function MainNavigator() {
           { backgroundColor: theme.colors.background },
         ]}
       >
-        <GameControllerLogo size={76} />
-        <ActivityIndicator size="small" color={theme.colors.primary} style={{ marginTop: 20 }} />
+        <OtterMascotAnimation width={180} />
       </View>
     );
   }
 
   if (!isAuthenticated) {
-    if (authScreen === 'register') {
-      return (
-        <RegisterScreen onNavigateToLogin={() => setAuthScreen('login')} />
-      );
-    }
     return (
-      <LoginScreen onNavigateToRegister={() => setAuthScreen('register')} />
+      <AuthScreen
+        initialMode={authScreen === 'register' ? 'register' : 'login'}
+        onModeChange={(mode) => setAuthScreen(mode)}
+      />
     );
   }
 

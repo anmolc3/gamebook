@@ -11,24 +11,49 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-export async function apiGet<T>(endpoint: string): Promise<T> {
-  const headers = await getAuthHeaders();
+const inFlightGets = new Map<string, Promise<any>>();
+
+export async function apiGet<T>(endpoint: string, options?: { timeoutMs?: number; skipDedupe?: boolean }): Promise<T> {
   const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
-  const res = await fetch(url, {
-    method: 'GET',
-    headers,
+  
+  if (!options?.skipDedupe && inFlightGets.has(url)) {
+    return inFlightGets.get(url) as Promise<T>;
+  }
+
+  const fetchPromise = (async () => {
+    const headers = await getAuthHeaders();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options?.timeoutMs || 15000);
+
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      let json: any;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        throw new Error(res.status === 404 ? `Service endpoint not found (404): ${endpoint}` : `Server error (${res.status})`);
+      }
+      if (!res.ok) {
+        throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
+      }
+      return json as T;
+    } finally {
+      clearTimeout(timeout);
+    }
+  })().finally(() => {
+    inFlightGets.delete(url);
   });
-  const text = await res.text();
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(res.status === 404 ? `Service endpoint not found (404): ${endpoint}` : `Server error (${res.status})`);
+
+  if (!options?.skipDedupe) {
+    inFlightGets.set(url, fetchPromise);
   }
-  if (!res.ok) {
-    throw new Error(json.error?.message || json.error || `HTTP ${res.status}`);
-  }
-  return json;
+
+  return fetchPromise;
 }
 
 export async function apiPost<T>(endpoint: string, body?: any): Promise<T> {

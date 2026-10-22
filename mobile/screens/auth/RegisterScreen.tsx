@@ -161,11 +161,8 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? '#000000' : theme.colors.background }]}>
-      <StatusBar
-        barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={isDark ? '#000000' : theme.colors.background}
-      />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoid}
@@ -179,33 +176,27 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
           {/* Top Bar with Circular Back Button */}
           <View style={styles.topBar}>
             <TouchableOpacity
-              style={[
-                styles.backButton,
-                {
-                  backgroundColor: isDark ? '#121212' : theme.colors.surface,
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border,
-                },
-              ]}
+              style={styles.backButton}
               onPress={onNavigateToLogin}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel="Back to Login"
             >
-              <Icon name="chevronLeft" size={20} color={isDark ? '#FFFFFF' : theme.colors.textPrimary} strokeWidth={2.4} />
+              <Icon name="chevronLeft" size={20} color="#FFFFFF" strokeWidth={2.4} />
             </TouchableOpacity>
           </View>
 
           {/* Otter Mascot Wave Animation */}
           <View style={styles.mascotContainer}>
-            <OtterMascotAnimation />
+            <OtterMascotAnimation format="mp4" width={180} playVoiceOnce={true} />
           </View>
 
           {/* Heading */}
           <View style={styles.header}>
-            <Text style={[styles.titleText, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
+            <Text style={styles.titleText}>
               Create Your <Text style={styles.titleAccent}>Account</Text>
             </Text>
-            <Text style={[styles.subtitleText, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}>
+            <Text style={styles.subtitleText}>
               Join the gaming community and start your journey.
             </Text>
           </View>
@@ -214,6 +205,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
           <View style={styles.formContainer}>
             <InputField
               minimal
+              forceDark
               placeholder="Username"
               leftIcon="user"
               value={username}
@@ -228,6 +220,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
             <InputField
               minimal
+              forceDark
               placeholder="Email Address"
               leftIcon="mail"
               value={email}
@@ -243,6 +236,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
             <InputField
               minimal
+              forceDark
               placeholder="Password"
               leftIcon="lock"
               value={password}
@@ -257,6 +251,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
             <InputField
               minimal
+              forceDark
               placeholder="Confirm Password"
               leftIcon="lock"
               value={confirmPassword}
@@ -279,23 +274,11 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 style={[
                   styles.checkbox,
                   termsAccepted && styles.checkboxActive,
-                  {
-                    backgroundColor: termsAccepted
-                      ? '#FF2A6D'
-                      : isDark
-                      ? '#121212'
-                      : theme.colors.surface,
-                    borderColor: termsAccepted
-                      ? '#FF2A6D'
-                      : isDark
-                      ? 'rgba(255, 255, 255, 0.15)'
-                      : theme.colors.border,
-                  },
                 ]}
               >
                 {termsAccepted && <Icon name="check" size={13} color="#FFFFFF" strokeWidth={3} />}
               </View>
-              <Text style={[styles.termsText, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}>
+              <Text style={styles.termsText}>
                 I agree to the{' '}
                 <Text style={styles.termsHighlight} onPress={handleOpenTerms}>
                   Terms of Service
@@ -320,20 +303,14 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
             {/* Subtle "OR" Divider */}
             <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border }]} />
-              <Text style={[styles.dividerText, { color: isDark ? '#64748B' : theme.colors.textMuted }]}>OR</Text>
-              <View style={[styles.dividerLine, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border }]} />
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
             </View>
 
             {/* Charcoal Continue with Google Button */}
             <TouchableOpacity
-              style={[
-                styles.googleButton,
-                {
-                  backgroundColor: isDark ? '#121212' : theme.colors.surface,
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : theme.colors.border,
-                },
-              ]}
+              style={styles.googleButton}
               onPress={handleGoogleSignIn}
               disabled={isGoogleLoading || isLoading}
               activeOpacity={0.82}
@@ -345,7 +322,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
               ) : (
                 <>
                   <Icon name="google" size={19} />
-                  <Text style={[styles.googleButtonText, { color: isDark ? '#FFFFFF' : theme.colors.textPrimary }]}>
+                  <Text style={styles.googleButtonText}>
                     Continue with Google
                   </Text>
                 </>
@@ -354,7 +331,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
             {/* Footer Switching Option */}
             <View style={styles.footer}>
-              <Text style={[styles.footerText, { color: isDark ? '#8E9BAE' : theme.colors.textSecondary }]}>
+              <Text style={styles.footerText}>
                 Already have an account?{' '}
               </Text>
               <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.7}>
