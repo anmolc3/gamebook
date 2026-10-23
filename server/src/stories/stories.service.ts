@@ -1,5 +1,6 @@
 import { prisma } from '../database/prisma';
 import { emitToUser } from '../sockets/socket.server';
+import { PushNotificationService } from '../notifications/push.service';
 
 export interface CreateStoryDto {
   mediaUrl: string;
@@ -41,25 +42,38 @@ export class StoriesService {
       },
     });
 
-    // Notify online friends via socket
-    try {
-      const friends = await prisma.friendship.findMany({
-        where: { userId },
-        select: { friendId: true },
-      });
-
-      friends.forEach((f) => {
-        emitToUser(f.friendId, 'story:new', {
-          storyId: story.id,
-          userId,
-          username: story.user.username,
-          displayName: story.user.profile?.displayName || story.user.username,
-          avatarUrl: story.user.profile?.avatarUrl,
-          createdAt: story.createdAt.toISOString(),
+    // Notify online friends via socket (if privacy is not PRIVATE)
+    if (data.privacy !== 'PRIVATE') {
+      try {
+        const friendships = await prisma.friendship.findMany({
+          where: { userId },
+          select: { friendId: true },
         });
-      });
-    } catch (err) {
-      console.error('[StoriesService] Failed to emit friend story notifications:', err);
+
+        const blocks = await prisma.blockedUser.findMany({
+          where: {
+            OR: [{ blockerId: userId }, { blockedId: userId }],
+          },
+        });
+        const blockedIds = new Set(
+          blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId))
+        );
+
+        const eligibleFriends = friendships.filter((f) => !blockedIds.has(f.friendId));
+
+        eligibleFriends.forEach((f) => {
+          emitToUser(f.friendId, 'story:new', {
+            storyId: story.id,
+            userId,
+            username: story.user.username,
+            displayName: story.user.profile?.displayName || story.user.username,
+            avatarUrl: story.user.profile?.avatarUrl,
+            createdAt: story.createdAt.toISOString(),
+          });
+        });
+      } catch (err) {
+        console.error('[StoriesService] Failed to emit friend story notifications:', err);
+      }
     }
 
     return story;
@@ -71,18 +85,34 @@ export class StoriesService {
   static async getFeed(currentUserId: string) {
     const now = new Date();
 
-    // 1. Get friend IDs
+    // 1. Get blocked user IDs in either direction
+    const blocks = await prisma.blockedUser.findMany({
+      where: {
+        OR: [{ blockerId: currentUserId }, { blockedId: currentUserId }],
+      },
+    });
+    const blockedIds = new Set(
+      blocks.map((b) => (b.blockerId === currentUserId ? b.blockedId : b.blockerId))
+    );
+
+    // 2. Get friend IDs (excluding any blocked users)
     const friendships = await prisma.friendship.findMany({
       where: { userId: currentUserId },
       select: { friendId: true },
     });
-    const allowedUserIds = [currentUserId, ...friendships.map((f) => f.friendId)];
+    const allowedUserIds = [currentUserId, ...friendships.map((f) => f.friendId)].filter(
+      (id) => !blockedIds.has(id)
+    );
 
-    // 2. Query unexpired stories
+    // 3. Query unexpired stories (respecting privacy: PRIVATE only visible to self)
     const activeStories = await prisma.story.findMany({
       where: {
         userId: { in: allowedUserIds },
         expiresAt: { gt: now },
+        OR: [
+          { userId: currentUserId },
+          { privacy: 'FRIENDS' },
+        ],
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -115,7 +145,7 @@ export class StoriesService {
       },
     });
 
-    // 3. Group stories by user for tray format
+    // 4. Group stories by user for tray format
     const userStoryMap = new Map<string, any>();
 
     for (const story of activeStories) {
@@ -169,6 +199,38 @@ export class StoriesService {
    * Mark story as viewed
    */
   static async viewStory(viewerId: string, storyId: string) {
+    const story = await prisma.story.findUnique({
+      where: { id: storyId },
+      select: { id: true, userId: true, expiresAt: true, privacy: true },
+    });
+
+    if (!story) {
+      throw new Error('Story not found');
+    }
+
+    if (new Date(story.expiresAt) <= new Date()) {
+      throw new Error('Story has expired');
+    }
+
+    if (story.userId !== viewerId) {
+      if (story.privacy === 'PRIVATE') {
+        throw new Error('Unauthorized to view private story');
+      }
+
+      const isBlocked = await prisma.blockedUser.findFirst({
+        where: {
+          OR: [
+            { blockerId: viewerId, blockedId: story.userId },
+            { blockerId: story.userId, blockedId: viewerId },
+          ],
+        },
+      });
+
+      if (isBlocked) {
+        throw new Error('Cannot view story of a blocked user');
+      }
+    }
+
     const existing = await prisma.storyView.findUnique({
       where: {
         storyId_viewerId: { storyId, viewerId },
@@ -195,11 +257,34 @@ export class StoriesService {
   static async replyStory(userId: string, storyId: string, content: string) {
     const story = await prisma.story.findUnique({
       where: { id: storyId },
-      select: { userId: true },
+      select: { userId: true, expiresAt: true, privacy: true },
     });
 
     if (!story) {
       throw new Error('Story not found');
+    }
+
+    if (new Date(story.expiresAt) <= new Date()) {
+      throw new Error('Story has expired');
+    }
+
+    if (story.userId !== userId) {
+      if (story.privacy === 'PRIVATE') {
+        throw new Error('Cannot reply to private story');
+      }
+
+      const isBlocked = await prisma.blockedUser.findFirst({
+        where: {
+          OR: [
+            { blockerId: userId, blockedId: story.userId },
+            { blockerId: story.userId, blockedId: userId },
+          ],
+        },
+      });
+
+      if (isBlocked) {
+        throw new Error('Cannot reply to story of a blocked user');
+      }
     }
 
     const reply = await prisma.storyReply.create({
@@ -220,15 +305,37 @@ export class StoriesService {
       },
     });
 
+    const senderName = reply.user.profile?.displayName || reply.user.username;
+
     // Notify story author in real-time
     emitToUser(story.userId, 'story:reply', {
       storyId,
       replyId: reply.id,
       senderId: userId,
-      senderName: reply.user.profile?.displayName || reply.user.username,
+      senderName,
       content,
       createdAt: reply.createdAt.toISOString(),
     });
+
+    if (story.userId !== userId) {
+      const preview = content.length > 80 ? content.slice(0, 77) + '…' : content;
+      PushNotificationService.createAndDeliver({
+        userId: story.userId,
+        type: 'STORY_REPLY',
+        title: '📖 Story Reply',
+        body: `${senderName} replied to your story: "${preview}"`,
+        data: {
+          type: 'STORY_REPLY',
+          storyId,
+          senderId: userId,
+          senderName,
+          content,
+        },
+        channelId: 'social',
+        priority: 'high',
+        idempotencyKey: `sreply:${reply.id}:${story.userId}`,
+      }).catch(() => null);
+    }
 
     return reply;
   }

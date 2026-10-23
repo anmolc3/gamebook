@@ -279,22 +279,43 @@ export const RoomLobbyScreen: React.FC<RoomLobbyScreenProps> = ({
     }
   };
 
+  const isLeaveAlertShowingRef = useRef<boolean>(false);
+
   const handleLeaveRoom = () => {
-    Alert.alert('Leave Lobby', 'Are you sure you want to leave this game lobby?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Leave',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await RoomService.leaveRoom(roomCode);
-          } catch (err) {
-            console.warn('Leave room error:', err);
-          }
-          onBack();
+    if (isLeaveAlertShowingRef.current) return;
+    isLeaveAlertShowingRef.current = true;
+    Alert.alert(
+      'Leave Lobby',
+      'Are you sure you want to leave this game lobby?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            isLeaveAlertShowingRef.current = false;
+          },
         },
-      },
-    ]);
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            isLeaveAlertShowingRef.current = false;
+            try {
+              await RoomService.leaveRoom(roomCode);
+            } catch (err) {
+              console.warn('Leave room error:', err);
+            }
+            onBack();
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          isLeaveAlertShowingRef.current = false;
+        },
+      }
+    );
   };
 
   useEffect(() => {

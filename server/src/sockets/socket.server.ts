@@ -88,6 +88,33 @@ export function emitToAll(event: string, payload: any): void {
   }
 }
 
+export function isUserInConversation(conversationId: string, userId: string): boolean {
+  if (!io) return false;
+  const room = io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+  if (!room || room.size === 0) return false;
+  for (const socketId of room) {
+    const s = io.sockets.sockets.get(socketId);
+    if (s && s.data?.userId === userId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function getUsersInConversation(conversationId: string): Set<string> {
+  const users = new Set<string>();
+  if (!io) return users;
+  const room = io.sockets.adapter.rooms.get(`conversation:${conversationId}`);
+  if (!room) return users;
+  for (const socketId of room) {
+    const s = io.sockets.sockets.get(socketId);
+    if (s && s.data?.userId) {
+      users.add(s.data.userId);
+    }
+  }
+  return users;
+}
+
 /**
  * Cleanly handles real-time socket disconnection, call termination, presence removal,
  * and room updates when an account is deleted.
@@ -278,18 +305,21 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
       }
     });
 
-    // Read receipt acknowledgment (2 blue ticks)
-    socket.on('chat:messages_read', async (data: { conversationId: string }, cb?: any) => {
+    // Read receipt acknowledgment (sent/delivered/read receipts)
+    const handleMessagesRead = async (data: { conversationId: string; messageIds?: string[] }, cb?: any) => {
       if (userId && data?.conversationId) {
         try {
           const { ChatService } = require('../chat/chat.service');
-          const res = await ChatService.markAsRead(userId, data.conversationId);
-          if (typeof cb === 'function') cb(res);
+          const res = await ChatService.markAsRead(userId, data.conversationId, data.messageIds);
+          if (typeof cb === 'function') cb({ success: true, ...res });
         } catch (err: any) {
           if (typeof cb === 'function') cb({ success: false, error: err.message });
         }
       }
-    });
+    };
+
+    socket.on('chat:messages_read', handleMessagesRead);
+    socket.on('group:messages:read', handleMessagesRead);
 
     // Multiplayer Game Room Subscriptions & Lobby Synchronizations
     socket.on('room:join', (data: { roomCode: string }, cb?: any) => {
@@ -378,6 +408,15 @@ export function initializeSockets(server: HttpServer): SocketIOServer {
         } catch (chatErr) {
           console.warn('[Socket] Optional chat invite delivery note:', chatErr);
         }
+
+        // Ensure persistent in-app notification & push is always recorded (idempotent)
+        PushNotificationService.notifyGameInvite(
+          data.recipientId,
+          inviterName,
+          data.gameName || data.gameType,
+          normalizedCode,
+          { inviterId: userId, gameType: data.gameType }
+        ).catch(() => null);
 
         if (typeof cb === 'function') cb({ success: true, payload });
       } catch (err: any) {

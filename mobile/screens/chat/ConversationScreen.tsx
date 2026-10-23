@@ -21,6 +21,7 @@ import {
   Vibration,
   Switch,
   BackHandler,
+  AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,6 +32,7 @@ import { GameLogo } from '../../components/atoms/GameLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useCall } from '../../features/call/CallContext';
 import { ChatService, ChatMessage, GroupMetaItem } from '../../services/chat.service';
+import { CacheService } from '../../services/cache.service';
 import { MobileSocketService } from '../../services/socket.service';
 import { ImagePickerService } from '../../services/imagePicker.service';
 import { RoomService, SupportedGameType } from '../../services/room.service';
@@ -227,14 +229,16 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
   const [conversationId, setConversationId] = useState<string | null>(
     initialConversationId || null
   );
+  const targetInitialId = initialConversationId || (isGroup ? peerId : null);
+  const cachedInitialMessages = targetInitialId ? ChatService.getCachedMessagesSync(targetInitialId) : null;
   const [groupDetails, setGroupDetails] = useState<GroupMetaItem | null>(groupMeta || null);
   const [isGroupDetailsModalVisible, setIsGroupDetailsModalVisible] = useState(false);
   const [peerOnline, setPeerOnline] = useState(false);
   const [peerLastSeen, setPeerLastSeen] = useState<string | null>(null);
   const presenceText = usePresenceStatus(peerOnline, peerLastSeen);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => cachedInitialMessages || []);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => !cachedInitialMessages || cachedInitialMessages.length === 0);
   const [isSending, setIsSending] = useState(false);
   const [isPeerTyping, setIsPeerTyping] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -477,11 +481,24 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       if (targetConvId) {
         // Join socket room
         MobileSocketService.joinConversation(targetConvId);
-        // Load fresh messages in background
-        const msgs = await ChatService.fetchMessages(targetConvId, 60);
-        setMessages(msgs);
-        // Mark unread messages as read
-        await ChatService.markAsRead(targetConvId);
+        // Instant socket read receipt notification
+        MobileSocketService.sendMessagesRead(targetConvId);
+        // Load fresh messages in background without blocking screen interactivity
+        ChatService.fetchMessages(targetConvId, 60)
+          .then((msgs) => {
+            if (msgs && msgs.length > 0) {
+              setMessages((prev) => {
+                const pendingOptimistic = prev.filter((m) => m.id.startsWith('temp-'));
+                if (pendingOptimistic.length === 0) return msgs;
+                const newIds = new Set(msgs.map((m) => m.id));
+                const filteredPending = pendingOptimistic.filter((m) => !newIds.has(m.id));
+                return [...msgs, ...filteredPending];
+              });
+            }
+          })
+          .catch(() => null);
+        // Background HTTP markAsRead as safety fallback
+        ChatService.markAsRead(targetConvId).catch(() => null);
       }
     } catch (err: any) {
       console.warn('Failed to load conversation:', err);
@@ -494,6 +511,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     MobileSocketService.connect();
     initializeConversation();
 
+    // Re-verify read state when returning from background while conversation is open
+    const appStateSub = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active' && conversationId) {
+        MobileSocketService.sendMessagesRead(conversationId);
+        ChatService.markAsRead(conversationId).catch(() => null);
+      }
+    });
+
     // Listen to real-time incoming messages
     const unsubMsg = MobileSocketService.onMessageReceived((msg) => {
       if (conversationId && msg.conversationId === conversationId) {
@@ -505,8 +530,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         // If message is from peer or group member, acknowledge delivery and read
         if (msg.senderId !== authUser?.id) {
           MobileSocketService.sendDeliveryConfirmation(conversationId, [msg.id]);
-          MobileSocketService.sendMessagesRead(conversationId);
-          ChatService.markAsRead(conversationId).catch(() => null);
+          MobileSocketService.sendMessagesRead(conversationId, [msg.id]);
         }
       }
     });
@@ -528,19 +552,44 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       }
     });
 
-    // Listen to read receipts (2 blue ticks)
+    // Listen to read receipts (2 blue ticks or group read status updates)
     const unsubRead = MobileSocketService.onMessagesRead((data) => {
       if (conversationId && data.conversationId === conversationId) {
         setMessages((prev) =>
           prev.map((m) => {
             if (m.isOwnMessage) {
+              const update = data.messageUpdates?.find((u) => u.messageId === m.id);
+              if (update) {
+                return {
+                  ...m,
+                  readCount: update.readCount,
+                  totalRecipients: update.totalRecipients,
+                  isAllRead: update.isAllRead,
+                  status: update.status,
+                };
+              }
+
               if (
                 !data.messageId ||
                 m.id === data.messageId ||
                 (data.messageIds && data.messageIds.includes(m.id)) ||
                 data.isAllRead
               ) {
-                return { ...m, status: data.status || 'READ' };
+                if (isGroup && !data.isAllRead && data.status !== 'READ') {
+                  const newReadCount = (m.readCount || 0) + 1;
+                  const isAll = m.totalRecipients ? newReadCount >= m.totalRecipients : false;
+                  return {
+                    ...m,
+                    readCount: newReadCount,
+                    isAllRead: isAll,
+                    status: isAll ? 'READ' : m.status,
+                  };
+                }
+                return {
+                  ...m,
+                  status: data.status || 'READ',
+                  isAllRead: data.isAllRead ?? (data.status === 'READ'),
+                };
               }
             }
             return m;
@@ -657,6 +706,7 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       unsubMemberRemoved();
       unsubMemberLeft();
       unsubRoleUpdated();
+      appStateSub.remove();
     };
   }, [conversationId, peerId, isGroup, authUser?.id, initializeConversation, onBack]);
 
@@ -1032,11 +1082,12 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
     setForwardMessage(null);
   };
 
-  // Send standard or View Once message
+  // Send standard or View Once message with safe optimistic update
   const handleSendMessage = async () => {
     const trimmed = inputText.trim();
     if ((!trimmed && !pendingImage) || !conversationId || isSending) return;
 
+    let tempId = '';
     try {
       const textToSend = trimmed;
       const imageToSend = pendingImage;
@@ -1077,6 +1128,55 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
       const contentToSend =
         textToSend || (imageToSend ? (viewOnceFlag ? '① Photo' : 'Photo') : '');
 
+      // 1. Immediately reflect the message in the UI and memory cache (optimistic)
+      tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const optimisticMsg: ChatMessage = {
+        id: tempId,
+        conversationId,
+        senderId: authUser?.id || '',
+        senderName: authUser?.displayName || 'Me',
+        content: contentToSend,
+        type: 'TEXT',
+        status: peerOnline ? 'DELIVERED' : 'SENT',
+        metadata,
+        createdAt: new Date().toISOString(),
+        isOwnMessage: true,
+      };
+
+      setMessages((prev) => {
+        const next = [...prev, optimisticMsg];
+        ChatService.setCachedMessages(conversationId, next).catch(() => null);
+        return next;
+      });
+
+      // Update cached conversations preview immediately
+      const cachedConvs = ChatService.getCachedConversationsSync();
+      if (cachedConvs) {
+        const idx = cachedConvs.findIndex((c) => c.id === conversationId);
+        if (idx !== -1) {
+          const updatedConvs = [...cachedConvs];
+          updatedConvs[idx] = {
+            ...updatedConvs[idx],
+            updatedAt: optimisticMsg.createdAt,
+            lastMessage: {
+              id: tempId,
+              content: contentToSend,
+              type: 'TEXT',
+              status: optimisticMsg.status,
+              senderId: authUser?.id || '',
+              senderName: authUser?.displayName || 'Me',
+              createdAt: optimisticMsg.createdAt,
+              metadata,
+            },
+          };
+          const [moved] = updatedConvs.splice(idx, 1);
+          CacheService.set('@gameapp:cache:conversations', [moved, ...updatedConvs], 1000 * 60 * 15).catch(() => null);
+        }
+      }
+
+      setIsSending(false);
+
+      // 2. Persist to server in background
       const newMsg = await ChatService.sendMessage(
         conversationId,
         contentToSend,
@@ -1084,12 +1184,22 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
         metadata
       );
 
+      // 3. Reconcile optimistic message with authoritative server response
       setMessages((prev) => {
-        if (prev.some((m) => m.id === newMsg.id)) return prev;
-        return [...prev, { ...newMsg, isOwnMessage: true }];
+        let updated: ChatMessage[];
+        if (prev.some((m) => m.id === newMsg.id)) {
+          updated = prev.filter((m) => m.id !== tempId);
+        } else {
+          updated = prev.map((m) => (m.id === tempId ? { ...newMsg, isOwnMessage: true } : m));
+        }
+        ChatService.setCachedMessages(conversationId, updated).catch(() => null);
+        return updated;
       });
     } catch (err: any) {
       console.warn('Failed to send message:', err);
+      if (tempId) {
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      }
       Alert.alert('Send Failed', err.message || 'Could not send message');
     } finally {
       setIsSending(false);
@@ -1292,7 +1402,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
               </Text>
               {isOwn && (
                 <View style={styles.statusTick}>
-                  <MessageReceiptTicks status={item.status} size={14} />
+                  <MessageReceiptTicks
+                    status={item.status}
+                    size={14}
+                    isGroup={isGroup}
+                    readCount={item.readCount}
+                    totalRecipients={item.totalRecipients}
+                    isAllRead={item.isAllRead}
+                  />
                 </View>
               )}
             </View>
@@ -1351,7 +1468,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                 </Text>
                 {isOwn && (
                   <View style={styles.statusTick}>
-                    <MessageReceiptTicks status={item.status} size={13} />
+                    <MessageReceiptTicks
+                      status={item.status}
+                      size={13}
+                      isGroup={isGroup}
+                      readCount={item.readCount}
+                      totalRecipients={item.totalRecipients}
+                      isAllRead={item.isAllRead}
+                    />
                   </View>
                 )}
               </View>
@@ -1461,7 +1585,14 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                   {formatMessageTime(item.createdAt)}
                 </Text>
                 <View style={styles.statusTick}>
-                  <MessageReceiptTicks status={item.status} size={13} />
+                  <MessageReceiptTicks
+                    status={item.status}
+                    size={13}
+                    isGroup={isGroup}
+                    readCount={item.readCount}
+                    totalRecipients={item.totalRecipients}
+                    isAllRead={item.isAllRead}
+                  />
                 </View>
               </View>
             </View>
@@ -1536,6 +1667,10 @@ export const ConversationScreen: React.FC<ConversationScreenProps> = ({
                     size={13}
                     greyColor="rgba(255,255,255,0.7)"
                     blueColor="#34B7F1"
+                    isGroup={isGroup}
+                    readCount={item.readCount}
+                    totalRecipients={item.totalRecipients}
+                    isAllRead={item.isAllRead}
                   />
                 </View>
               )}

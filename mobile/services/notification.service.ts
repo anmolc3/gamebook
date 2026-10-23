@@ -11,29 +11,56 @@ const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
   (Constants as any).appOwnership === 'expo';
 
-// Dynamically require expo-notifications only outside Expo Go (or non-Android)
-// to prevent Expo SDK 53+ fatal error:
-// "expo-notifications: Android Push notifications functionality provided by expo-notifications was removed from Expo Go"
 let Notifications: typeof NotificationsType | null = null;
-if (!isExpoGo) {
-  try {
-    Notifications = require('expo-notifications');
-  } catch (err) {
-    console.warn('[Notifications] Could not load expo-notifications module:', err);
-  }
+try {
+  Notifications = require('expo-notifications');
+} catch (err) {
+  console.warn('[Notifications] Could not load expo-notifications module:', err);
+}
+
+// ─── Active conversation tracker for smart foreground notification handling ───
+let currentActiveConversationId: string | null = null;
+let currentActivePeerId: string | null = null;
+
+export function setActiveConversation(conversationId: string | null, peerId: string | null = null): void {
+  currentActiveConversationId = conversationId;
+  currentActivePeerId = peerId;
+}
+
+export function getActiveConversation(): { conversationId: string | null; peerId: string | null } {
+  return { conversationId: currentActiveConversationId, peerId: currentActivePeerId };
 }
 
 // ─── Configure foreground notification behaviour ───────────────────────────────
-// Show alerts even when the app is in the foreground
 if (Notifications?.setNotificationHandler) {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const data = notification?.request?.content?.data as any;
+      const conversationId = data?.conversationId;
+      const senderId = data?.senderId;
+
+      // If user is actively viewing this conversation, suppress the notification alert
+      if (
+        (conversationId && currentActiveConversationId && conversationId === currentActiveConversationId) ||
+        (senderId && currentActivePeerId && senderId === currentActivePeerId)
+      ) {
+        return {
+          shouldShowAlert: false,
+          shouldPlaySound: false,
+          shouldSetBadge: false,
+          shouldShowBanner: false,
+          shouldShowList: false,
+        };
+      }
+
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
   });
 }
 
@@ -99,37 +126,47 @@ export class NotificationService {
    * and register it with the server. Safe to call multiple times.
    */
   static async initialize(): Promise<string | null> {
-    if (isExpoGo) {
-      console.log('[Notifications] Push notifications are not supported in Expo Go (SDK 53+). Use an EAS development build for push testing.');
-      return null;
-    }
-
     if (!Notifications) {
       return null;
     }
 
     // Create Android notification channels first
     if (Platform.OS === 'android') {
-      await this.createAndroidChannels();
+      try {
+        await this.createAndroidChannels();
+      } catch (channelErr) {
+        console.warn('[Notifications] Failed to create Android channels:', channelErr);
+      }
+    }
+
+    // Request notification permission from the system
+    try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        console.log('[Notifications] Notification permission was denied.');
+        return null;
+      }
+    } catch (permErr) {
+      console.warn('[Notifications] Permission request error:', permErr);
+    }
+
+    // In Expo Go on Android, remote push tokens (FCM) are not supported by Expo (SDK 53+ limitation).
+    // Local system drawer notifications and channels work, but remote push requires a development build or APK.
+    if (isExpoGo) {
+      console.log('[Notifications] Running in Expo Go: system drawer notifications and channels active; remote push tokens require a development build / APK.');
+      return null;
     }
 
     // Push token registration only works on physical devices
     if (!Device.isDevice) {
       console.log('[Notifications] Push token registration skipped on simulator/emulator.');
-      return null;
-    }
-
-    // Request permission
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      console.log('[Notifications] Push notification permission was denied.');
       return null;
     }
 
@@ -245,25 +282,37 @@ export class NotificationService {
   }
 
   private static recentNotifMap = new Map<string, number>();
+  private static inAppBannerListeners = new Set<(banner: { title: string; body: string; data?: any }) => void>();
+
+  static addInAppBannerListener(listener: (banner: { title: string; body: string; data?: any }) => void): () => void {
+    this.inAppBannerListeners.add(listener);
+    return () => {
+      this.inAppBannerListeners.delete(listener);
+    };
+  }
+
+  static setActiveConversation = setActiveConversation;
+  static getActiveConversation = getActiveConversation;
 
   /**
-   * Immediately present a notification in the device notification area / drawer.
-   * Debounces duplicate notifications within 3.5 seconds to prevent multi-notification spam.
+   * Dispatches an in-app floating toast banner for instant visual feedback inside the app.
+   * Debounces duplicate banners within 3.5 seconds using messageId/event key to prevent spam.
+   * Does NOT schedule an OS-level notification (OS notifications are owned by Push / FCM).
    */
-  static async displayLocalNotification(
+  static displayInAppBanner(
     title: string,
     body: string,
-    data?: any,
-    channelId: string = CHANNELS.MESSAGES
-  ): Promise<void> {
-    if (!Notifications) return;
-    const cleanTitle = (title || 'New Message').replace(/^💬\s*/, '').trim() || 'New Message';
+    data?: any
+  ): void {
+    const cleanTitle = (title || '').replace(/^💬\s*/, '').trim() || 'Notification';
     const cleanBody = (body || '').replace(/^💬\s*/, '').trim();
-    const notifKey = `${cleanTitle}:::${cleanBody}:::${data?.messageId || data?.conversationId || ''}`;
+    const notifKey = data?.messageId
+      ? `msg:${data.messageId}`
+      : `${cleanTitle}:::${cleanBody}:::${data?.conversationId || ''}`;
     const now = Date.now();
     const lastTimestamp = this.recentNotifMap.get(notifKey);
     if (lastTimestamp && now - lastTimestamp < 3500) {
-      return; // Suppress duplicate notification
+      return; // Suppress duplicate banner
     }
     this.recentNotifMap.set(notifKey, now);
 
@@ -274,10 +323,39 @@ export class NotificationService {
       }
     }
 
+    this.inAppBannerListeners.forEach((cb) => {
+      try {
+        cb({ title: cleanTitle, body: cleanBody, data });
+      } catch (err) {
+        console.warn('[Notifications] Error in banner listener:', err);
+      }
+    });
+  }
+
+  /**
+   * Immediately present a notification:
+   * 1. Fires in-app banner for instant visual feedback inside the app.
+   * 2. Only schedules OS-level system notification if explicitly requested (e.g. offline local tasks).
+   * Note: Remote events (chat messages, invites, social notifications) are delivered by FCM / Expo Push,
+   * so scheduling a local notification here would create duplicate entries in the Android notification shade.
+   */
+  static async displayLocalNotification(
+    title: string,
+    body: string,
+    data?: any,
+    channelId: string = CHANNELS.MESSAGES,
+    forceScheduleOS = false
+  ): Promise<void> {
+    this.displayInAppBanner(title, body, data);
+
+    if (!forceScheduleOS || !Notifications) return;
+
     try {
       if (Platform.OS === 'android') {
         await this.createAndroidChannels();
       }
+      const cleanTitle = (title || '').replace(/^💬\s*/, '').trim() || 'Notification';
+      const cleanBody = (body || '').replace(/^💬\s*/, '').trim();
       await Notifications.scheduleNotificationAsync({
         content: {
           title: cleanTitle,
@@ -290,7 +368,7 @@ export class NotificationService {
         trigger: null,
       });
     } catch (err) {
-      console.warn('[Notifications] Failed to display local notification:', err);
+      console.warn('[Notifications] Failed to schedule local notification:', err);
     }
   }
 
@@ -382,6 +460,7 @@ export class NotificationService {
   private static unreadListeners = new Set<(count: number) => void>();
   private static cachedNotifications: AppNotification[] = [];
   private static cachedUnreadCount: number = 0;
+  private static lastClearedAt: number = 0;
   private static socketSubscribed = false;
 
   static initRealtimeListeners(): void {
@@ -390,6 +469,10 @@ export class NotificationService {
 
     MobileSocketService.onNotificationReceived((newNotif: any) => {
       if (!newNotif || !newNotif.id) return;
+      // Do not accept notifications created before the last clear
+      if (newNotif.createdAt && new Date(newNotif.createdAt).getTime() <= this.lastClearedAt) {
+        return;
+      }
 
       const existsIndex = this.cachedNotifications.findIndex((n) => n.id === newNotif.id);
       if (existsIndex >= 0) {
@@ -401,6 +484,7 @@ export class NotificationService {
           this.notifyUnreadListeners(this.cachedUnreadCount);
         }
       }
+      CacheService.set('@gameapp:cache:notifications', this.cachedNotifications, 1000 * 60 * 15).catch(() => null);
 
       this.notifListeners.forEach((cb) => {
         try {
@@ -409,6 +493,14 @@ export class NotificationService {
           console.warn('[NotificationService] Error in notif listener:', e);
         }
       });
+    });
+
+    MobileSocketService.onNotificationsCleared(() => {
+      this.lastClearedAt = Date.now();
+      this.cachedNotifications = [];
+      this.cachedUnreadCount = 0;
+      this.notifyUnreadListeners(0);
+      CacheService.set('@gameapp:cache:notifications', []).catch(() => null);
     });
 
     MobileSocketService.onUnreadNotificationCount((data: { unreadCount: number }) => {
@@ -447,6 +539,20 @@ export class NotificationService {
   }
 
   /**
+   * Synchronous memory cache lookup (0ms instantaneous return)
+   */
+  static getCachedNotificationsSync(): AppNotification[] {
+    return this.cachedNotifications || [];
+  }
+
+  /**
+   * Synchronous unread count lookup (0ms instantaneous return)
+   */
+  static getCachedUnreadCountSync(): number {
+    return this.cachedUnreadCount || 0;
+  }
+
+  /**
    * Get cached notifications from memory or storage immediately
    */
   static async getCachedNotifications(): Promise<AppNotification[]> {
@@ -455,8 +561,12 @@ export class NotificationService {
     }
     const stored = await CacheService.get<AppNotification[]>('@gameapp:cache:notifications');
     if (stored && stored.length > 0) {
-      this.cachedNotifications = stored;
-      return stored;
+      // Filter out items older than lastClearedAt
+      const valid = this.lastClearedAt
+        ? stored.filter((n) => new Date(n.createdAt).getTime() > this.lastClearedAt)
+        : stored;
+      this.cachedNotifications = valid;
+      return valid;
     }
     return [];
   }
@@ -465,18 +575,32 @@ export class NotificationService {
    * Load existing notifications from the backend API.
    */
   static async fetchNotifications(limit: number = 40): Promise<AppNotification[]> {
+    const fetchStartTime = Date.now();
     return CacheService.dedupe('fetchNotifications', async () => {
       try {
         this.initRealtimeListeners();
         const res = await apiGet<{ success: boolean; data: AppNotification[] }>(
           `/notifications?limit=${limit}`
         );
+        // If a Clear All was executed after or during this fetch, discard results immediately
+        if (this.lastClearedAt >= fetchStartTime) {
+          this.cachedNotifications = [];
+          this.cachedUnreadCount = 0;
+          this.notifyUnreadListeners(0);
+          return [];
+        }
+
         if (res && res.data && Array.isArray(res.data)) {
-          this.cachedNotifications = res.data;
-          this.cachedUnreadCount = res.data.filter((n) => !n.isRead).length;
+          // Drop any notifications created prior to lastClearedAt
+          const filtered = this.lastClearedAt
+            ? res.data.filter((n) => new Date(n.createdAt).getTime() > this.lastClearedAt)
+            : res.data;
+
+          this.cachedNotifications = filtered;
+          this.cachedUnreadCount = filtered.filter((n) => !n.isRead).length;
           this.notifyUnreadListeners(this.cachedUnreadCount);
-          await CacheService.set('@gameapp:cache:notifications', res.data, 1000 * 60 * 15);
-          return res.data;
+          await CacheService.set('@gameapp:cache:notifications', filtered, 1000 * 60 * 15);
+          return filtered;
         }
         return [];
       } catch (err) {
@@ -511,11 +635,14 @@ export class NotificationService {
    * Mark all unread notifications as read.
    */
   static async markAllAsRead(): Promise<void> {
+    // Optimistic update
+    this.cachedNotifications = this.cachedNotifications.map((n) => ({ ...n, isRead: true }));
+    this.cachedUnreadCount = 0;
+    this.notifyUnreadListeners(0);
+    await CacheService.set('@gameapp:cache:notifications', this.cachedNotifications, 1000 * 60 * 15);
+
     try {
       await apiPut('/notifications/mark-read');
-      this.cachedNotifications = this.cachedNotifications.map((n) => ({ ...n, isRead: true }));
-      this.cachedUnreadCount = 0;
-      this.notifyUnreadListeners(0);
     } catch (err) {
       console.warn('[NotificationService] markAllAsRead failed:', err);
       throw err;
@@ -526,13 +653,16 @@ export class NotificationService {
    * Mark a single notification as read.
    */
   static async markAsRead(id: string): Promise<void> {
+    // Optimistic update
+    this.cachedNotifications = this.cachedNotifications.map((n) =>
+      n.id === id ? { ...n, isRead: true } : n
+    );
+    this.cachedUnreadCount = Math.max(0, this.cachedNotifications.filter((n) => !n.isRead).length);
+    this.notifyUnreadListeners(this.cachedUnreadCount);
+    await CacheService.set('@gameapp:cache:notifications', this.cachedNotifications, 1000 * 60 * 15);
+
     try {
       await apiPatch(`/notifications/${id}/read`);
-      this.cachedNotifications = this.cachedNotifications.map((n) =>
-        n.id === id ? { ...n, isRead: true } : n
-      );
-      this.cachedUnreadCount = Math.max(0, this.cachedNotifications.filter((n) => !n.isRead).length);
-      this.notifyUnreadListeners(this.cachedUnreadCount);
     } catch (err) {
       console.warn('[NotificationService] markAsRead failed:', err);
       throw err;
@@ -541,13 +671,17 @@ export class NotificationService {
 
   /**
    * Clear all notifications.
+   * Immediately clears memory cache, disk cache, and updates unread badge before network call.
    */
   static async clearAll(): Promise<void> {
+    this.lastClearedAt = Date.now();
+    this.cachedNotifications = [];
+    this.cachedUnreadCount = 0;
+    this.notifyUnreadListeners(0);
+    await CacheService.set('@gameapp:cache:notifications', []);
+
     try {
       await apiDelete('/notifications');
-      this.cachedNotifications = [];
-      this.cachedUnreadCount = 0;
-      this.notifyUnreadListeners(0);
     } catch (err) {
       console.warn('[NotificationService] clearAll failed:', err);
       throw err;
@@ -558,11 +692,13 @@ export class NotificationService {
    * Delete a single notification.
    */
   static async deleteNotification(id: string): Promise<void> {
+    this.cachedNotifications = this.cachedNotifications.filter((n) => n.id !== id);
+    this.cachedUnreadCount = this.cachedNotifications.filter((n) => !n.isRead).length;
+    this.notifyUnreadListeners(this.cachedUnreadCount);
+    await CacheService.set('@gameapp:cache:notifications', this.cachedNotifications, 1000 * 60 * 15);
+
     try {
       await apiDelete(`/notifications/${id}`);
-      this.cachedNotifications = this.cachedNotifications.filter((n) => n.id !== id);
-      this.cachedUnreadCount = this.cachedNotifications.filter((n) => !n.isRead).length;
-      this.notifyUnreadListeners(this.cachedUnreadCount);
     } catch (err) {
       console.warn('[NotificationService] deleteNotification failed:', err);
       throw err;

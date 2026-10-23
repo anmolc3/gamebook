@@ -77,6 +77,9 @@ export interface ChatMessage {
   isOwnMessage: boolean;
   isGroup?: boolean;
   groupTitle?: string;
+  readCount?: number;
+  totalRecipients?: number;
+  isAllRead?: boolean;
 }
 
 import { CacheService } from './cache.service';
@@ -90,6 +93,14 @@ export class ChatService {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+  }
+
+  static getCachedConversationsSync(): ConversationItem[] | null {
+    return CacheService.getSync<ConversationItem[]>(CACHE_CONVERSATIONS_KEY);
+  }
+
+  static getCachedMessagesSync(conversationId: string): ChatMessage[] | null {
+    return CacheService.getSync<ChatMessage[]>(`@gameapp:cache:messages_${conversationId}`);
   }
 
   static async getCachedConversations(): Promise<ConversationItem[] | null> {
@@ -297,11 +308,12 @@ export class ChatService {
     return json.data;
   }
 
-  static async markAsRead(conversationId: string): Promise<any> {
+  static async markAsRead(conversationId: string, messageIds?: string[]): Promise<any> {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${API_BASE_URL}/chat/conversations/${conversationId}/read`, {
       method: 'PUT',
       headers,
+      body: JSON.stringify({ messageIds }),
     });
     const json = await res.json();
     if (!res.ok) {

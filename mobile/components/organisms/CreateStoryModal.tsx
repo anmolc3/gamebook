@@ -79,7 +79,7 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
   const [selectedPhoto, setSelectedPhoto] = useState<string>(STORY_PHOTO_PRESETS[0].url);
   const [caption, setCaption] = useState<string>('');
   const [selectedMood, setSelectedMood] = useState<string>(MOODS[0].id);
-  const [privacy, setPrivacy] = useState<'PUBLIC' | 'FRIENDS'>('PUBLIC');
+  const [privacy, setPrivacy] = useState<'FRIENDS' | 'PRIVATE'>('FRIENDS');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [customPhotoInput, setCustomPhotoInput] = useState<string>('');
   const [cropperImageUri, setCropperImageUri] = useState<string | null>(null);
@@ -104,7 +104,12 @@ export const CreateStoryModal: React.FC<CreateStoryModalProps> = ({
 
     try {
       setIsSubmitting(true);
-      await StoryService.createStory(photoToUse, 'IMAGE', caption.trim() || undefined);
+      await StoryService.createStory(
+        photoToUse,
+        'IMAGE',
+        caption.trim() || undefined,
+        privacy
+      );
       setCaption('');
       setCustomPhotoInput('');
       onStoryCreated();

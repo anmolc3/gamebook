@@ -25,6 +25,7 @@ import { GameControllerLogo } from '../../components/atoms/GameControllerLogo';
 import { useAuth } from '../../features/auth/AuthContext';
 import { useCall } from '../../features/call/CallContext';
 import { ChatService, ConversationItem } from '../../services/chat.service';
+import { CacheService } from '../../services/cache.service';
 import { MobileSocketService } from '../../services/socket.service';
 import { FriendsService, FriendUser } from '../../services/friends.service';
 import { CreateGroupModal } from '../../components/organisms/CreateGroupModal';
@@ -92,11 +93,18 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
   // Filter Chips in Chats
   const [filterChip, setFilterChip] = useState<ChatFilterType>('ALL');
 
-  const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [friends, setFriends] = useState<FriendUser[]>([]);
+  const [conversations, setConversations] = useState<ConversationItem[]>(() => {
+    return ChatService.getCachedConversationsSync() || [];
+  });
+  const [friends, setFriends] = useState<FriendUser[]>(() => {
+    return FriendsService.getCachedFriendsSync() || [];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<TextInput>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => {
+    const cached = ChatService.getCachedConversationsSync();
+    return !cached || cached.length === 0;
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Archive, Favorites & Locked state
@@ -347,18 +355,22 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
       );
     });
 
-    // Real-time message read receipts (2 blue ticks)
-    const unsubRead = MobileSocketService.onMessagesRead(({ conversationId, status }) => {
+    // Real-time message read receipts (2 blue ticks or cleared unread badges)
+    const unsubRead = MobileSocketService.onMessagesRead(({ conversationId, status, readBy }) => {
       setConversations((prev) =>
         prev.map((c) => {
-          if (c.id === conversationId && c.lastMessage && c.lastMessage.senderId === authUser?.id) {
-            return {
-              ...c,
-              lastMessage: {
-                ...c.lastMessage,
+          if (c.id === conversationId) {
+            let updated = { ...c };
+            if (readBy && readBy === authUser?.id) {
+              updated.unreadCount = 0;
+            }
+            if (updated.lastMessage && updated.lastMessage.senderId === authUser?.id) {
+              updated.lastMessage = {
+                ...updated.lastMessage,
                 status: status || 'READ',
-              },
-            };
+              };
+            }
+            return updated;
           }
           return c;
         })
@@ -539,6 +551,18 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
     return (
       <TouchableOpacity
         onPress={() => {
+          if (item.unreadCount > 0) {
+            setConversations((prev) =>
+              prev.map((c) => (c.id === item.id ? { ...c, unreadCount: 0 } : c))
+            );
+            const cached = ChatService.getCachedConversationsSync();
+            if (cached) {
+              const updatedCached = cached.map((c) =>
+                c.id === item.id ? { ...c, unreadCount: 0 } : c
+              );
+              CacheService.set('@gameapp:cache:conversations', updatedCached, 1000 * 60 * 15).catch(() => null);
+            }
+          }
           if (isGroup) {
             onSelectConversation(
               item.id,
@@ -634,7 +658,11 @@ export const ChatListScreen: React.FC<ChatListScreenProps> = ({
           <View style={styles.previewContainer}>
             {isOwnLastMessage && item.lastMessage && item.lastMessage.type !== 'SYSTEM' && (
               <View style={styles.deliveryStatusTick}>
-                <MessageReceiptTicks status={item.lastMessage.status} size={14} />
+                <MessageReceiptTicks
+                  status={item.lastMessage.status}
+                  size={14}
+                  isGroup={item.isGroup}
+                />
               </View>
             )}
             {previewIconName && (

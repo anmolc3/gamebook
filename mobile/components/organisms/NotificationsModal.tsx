@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,11 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Animated,
+  PanResponder,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Icon } from '../../icons';
@@ -16,12 +21,16 @@ import { NotificationIcon } from '../atoms/NotificationIcon';
 import { GameLogo } from '../atoms/GameLogo';
 import { NotificationService, AppNotification } from '../../services/notification.service';
 
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
 export type InAppNotification = AppNotification;
 
 interface NotificationsModalProps {
   visible: boolean;
   onClose: () => void;
-  onAcceptInvite?: (gameType?: string) => void;
+  onAcceptInvite?: (gameType?: string, roomCode?: string) => void;
   onSelectNotification?: (notif: AppNotification) => void;
 }
 
@@ -32,14 +41,22 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onSelectNotification,
 }) => {
   const { theme } = useTheme();
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => {
+    return NotificationService.getCachedNotificationsSync();
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const cached = NotificationService.getCachedNotificationsSync();
+    return !cached || cached.length === 0;
+  });
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState<boolean>(false);
 
+  const fetchSeqRef = useRef<number>(0);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const loadNotifications = useCallback(async (isRefresh = false) => {
+    const currentSeq = ++fetchSeqRef.current;
     if (isRefresh) {
       setIsRefreshing(true);
     } else if (notifications.length === 0) {
@@ -48,24 +65,37 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     setError(null);
     try {
       const data = await NotificationService.fetchNotifications(50);
-      setNotifications(data);
+      // Guard against stale in-flight responses if user cleared or refreshed since
+      if (fetchSeqRef.current === currentSeq) {
+        setNotifications(data);
+      }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load notifications');
+      if (fetchSeqRef.current === currentSeq) {
+        setError(err?.message || 'Failed to load notifications');
+      }
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (fetchSeqRef.current === currentSeq) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   }, [notifications.length]);
 
   // Fetch when modal opens: show cached notifications first, then revalidate in background
   useEffect(() => {
     if (visible) {
-      NotificationService.getCachedNotifications().then((cached) => {
-        if (cached && cached.length > 0) {
-          setNotifications(cached);
-          setIsLoading(false);
-        }
-      }).catch(() => null);
+      const cached = NotificationService.getCachedNotificationsSync();
+      if (cached && cached.length > 0) {
+        setNotifications(cached);
+        setIsLoading(false);
+      } else {
+        NotificationService.getCachedNotifications().then((stored) => {
+          if (stored && stored.length > 0) {
+            setNotifications(stored);
+            setIsLoading(false);
+          }
+        }).catch(() => null);
+      }
 
       loadNotifications(false);
     }
@@ -89,24 +119,43 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   }, []);
 
   const handleMarkAllRead = async () => {
+    const previous = notifications;
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     try {
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       await NotificationService.markAllAsRead();
     } catch (err) {
       console.warn('Failed to mark all as read:', err);
+      setNotifications(previous);
     }
   };
 
   const handleClearAll = async () => {
+    if (isClearing || notifications.length === 0) return;
+
+    // Immediately cancel/ignore any in-flight fetches
+    fetchSeqRef.current++;
+
+    const previousNotifications = notifications;
+    // 1. Immediately remove from visible UI
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setNotifications([]);
+    setIsClearing(true);
+
+    // 2. Persist operation through backend in background
     try {
-      setNotifications([]);
       await NotificationService.clearAll();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Failed to clear notifications:', err);
+      // Rollback on server failure
+      setNotifications(previousNotifications);
+      setError(err?.message || 'Failed to clear notifications');
+    } finally {
+      setIsClearing(false);
     }
   };
 
   const handleItemPress = async (notif: AppNotification) => {
+    if (isClearing) return;
     if (!notif.isRead) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
@@ -117,7 +166,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     if (notif.type === 'GAME_INVITE' && onAcceptInvite) {
       onClose();
       const gameType = notif.data?.gameType;
-      onAcceptInvite(gameType);
+      const roomCode = notif.data?.roomCode;
+      onAcceptInvite(gameType, roomCode);
       return;
     }
 
@@ -163,25 +213,111 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
     return undefined;
   };
 
+  const scrollOffsetRef = useRef(0);
+  const slideAnim = useRef(new Animated.Value(240)).current;
+
+  useEffect(() => {
+    if (visible) {
+      slideAnim.setValue(240);
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 240,
+        mass: 0.8,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, slideAnim]);
+
+  const handleClose = useCallback(() => {
+    Animated.timing(slideAnim, {
+      toValue: 400,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => {
+      onClose();
+    });
+  }, [slideAnim, onClose]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const isSwipeDown =
+          gestureState.dy > 8 &&
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) * 1.2;
+        if (!isSwipeDown) return false;
+        return evt.nativeEvent.locationY <= 90 || scrollOffsetRef.current <= 0;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dy > 0) {
+          slideAnim.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 100 || (gestureState.dy > 40 && gestureState.vy > 0.5)) {
+          Animated.timing(slideAnim, {
+            toValue: 500,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            onClose();
+          });
+        } else {
+          Animated.spring(slideAnim, {
+            toValue: 0,
+            damping: 24,
+            stiffness: 240,
+            mass: 0.8,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          damping: 24,
+          stiffness: 240,
+          mass: 0.8,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent
-      onRequestClose={onClose}
+      statusBarTranslucent
+      onRequestClose={handleClose}
     >
       <View style={styles.backdrop}>
-        <SafeAreaView style={styles.safeArea}>
-          <View
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={handleClose}
+          accessibilityLabel="Close notifications modal"
+          accessibilityRole="button"
+        />
+        <SafeAreaView style={styles.safeArea} pointerEvents="box-none">
+          <Animated.View
+            {...panResponder.panHandlers}
             style={[
               styles.sheetContainer,
               {
                 backgroundColor: theme.colors.surface,
                 borderColor: theme.colors.border,
+                transform: [{ translateY: slideAnim }],
               },
               theme.shadows.card,
             ]}
           >
+            {/* Drag Handle */}
+            <View style={styles.handleContainer}>
+              <View style={[styles.handleBar, { backgroundColor: theme.colors.textMuted }]} />
+            </View>
             {/* Header */}
             <View style={[styles.headerRow, { borderBottomColor: theme.colors.divider }]}>
               <View style={styles.headerTitleWrap}>
@@ -204,13 +340,6 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                     </Text>
                   </TouchableOpacity>
                 )}
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={[styles.closeBtn, { backgroundColor: theme.colors.surfaceElevated }]}
-                  activeOpacity={0.7}
-                >
-                  <Icon name="close" size={16} color={theme.colors.textPrimary} />
-                </TouchableOpacity>
               </View>
             </View>
 
@@ -218,6 +347,10 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.list}
+              onScroll={(e) => {
+                scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+              }}
+              scrollEventThrottle={16}
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -266,118 +399,119 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   const isMissedCall = notif.type === 'MISSED_CALL';
 
                   return (
-                    <TouchableOpacity
-                      key={notif.id}
-                      onPress={() => handleItemPress(notif)}
-                      activeOpacity={0.75}
-                      style={[
-                        styles.notifItem,
-                        {
-                          backgroundColor: notif.isRead
-                            ? theme.colors.surface
-                            : theme.colors.surfaceElevated,
-                          borderBottomColor: theme.colors.divider,
-                        },
-                      ]}
-                    >
-                      {notif.type === 'GAME_INVITE' && gameType ? (
-                        <GameLogo
-                          gameType={gameType}
-                          size={38}
-                          borderRadius={8}
-                          fallbackIcon="gamepad"
-                        />
-                      ) : (
-                        <View
-                          style={[
-                            styles.iconWrap,
-                            {
-                              backgroundColor: notif.isRead
-                                ? theme.colors.surfaceElevated
-                                : isMention
-                                ? (theme.colors.cardTintAmber || '#F59E0B20')
-                                : isMissedCall
-                                ? '#EF444420'
-                                : theme.colors.cardTintMint,
-                            },
-                          ]}
-                        >
-                          <Icon
-                            name={getTypeIcon(notif.type) as any}
-                            size={18}
-                            color={
-                              notif.isRead
-                                ? theme.colors.textMuted
-                                : isMention
-                                ? (theme.colors.warning || '#D97706')
-                                : isMissedCall
-                                ? '#EF4444'
-                                : theme.colors.primary
-                            }
-                            strokeWidth={2.2}
+                    <View key={notif.id}>
+                      <TouchableOpacity
+                        onPress={() => !isClearing && handleItemPress(notif)}
+                        activeOpacity={0.75}
+                        style={[
+                          styles.notifItem,
+                          {
+                            backgroundColor: notif.isRead
+                              ? theme.colors.surface
+                              : theme.colors.surfaceElevated,
+                            borderBottomColor: theme.colors.divider,
+                          },
+                        ]}
+                      >
+                        {notif.type === 'GAME_INVITE' && gameType ? (
+                          <GameLogo
+                            gameType={gameType}
+                            size={38}
+                            borderRadius={8}
+                            fallbackIcon="gamepad"
                           />
-                        </View>
-                      )}
-
-                      <View style={styles.contentWrap}>
-                        <View style={styles.topMetaRow}>
-                          <Text
+                        ) : (
+                          <View
                             style={[
-                              styles.notifTitle,
+                              styles.iconWrap,
                               {
-                                color: theme.colors.textPrimary,
-                                fontWeight: notif.isRead ? '600' : '800',
+                                backgroundColor: notif.isRead
+                                  ? theme.colors.surfaceElevated
+                                  : isMention
+                                  ? (theme.colors.cardTintAmber || '#F59E0B20')
+                                  : isMissedCall
+                                  ? '#EF444420'
+                                  : theme.colors.cardTintMint,
                               },
                             ]}
-                            numberOfLines={1}
                           >
-                            {notif.title}
-                          </Text>
-                          <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
-                            {NotificationService.formatTimeAgo(notif.createdAt)}
-                          </Text>
-                        </View>
-
-                        <Text
-                          style={[styles.bodyText, { color: theme.colors.textSecondary }]}
-                          numberOfLines={2}
-                        >
-                          {getNotificationBody(notif)}
-                        </Text>
-
-                        {actionText && (
-                          <View style={styles.actionBtnRow}>
-                            <View
-                              style={[
-                                styles.itemActionBtn,
-                                {
-                                  backgroundColor: isMissedCall
-                                    ? '#EF4444'
-                                    : theme.colors.primary,
-                                },
-                              ]}
-                            >
-                              <Text style={styles.itemActionText}>{actionText}</Text>
-                            </View>
+                            <Icon
+                              name={getTypeIcon(notif.type) as any}
+                              size={18}
+                              color={
+                                notif.isRead
+                                  ? theme.colors.textMuted
+                                  : isMention
+                                  ? (theme.colors.warning || '#D97706')
+                                  : isMissedCall
+                                  ? '#EF4444'
+                                  : theme.colors.primary
+                              }
+                              strokeWidth={2.2}
+                            />
                           </View>
                         )}
-                      </View>
 
-                      {!notif.isRead && (
-                        <View
-                          style={[
-                            styles.unreadIndicatorDot,
-                            {
-                              backgroundColor: isMention
-                                ? '#F59E0B'
-                                : isMissedCall
-                                ? '#EF4444'
-                                : '#3B82F6',
-                            },
-                          ]}
-                        />
-                      )}
-                    </TouchableOpacity>
+                        <View style={styles.contentWrap}>
+                          <View style={styles.topMetaRow}>
+                            <Text
+                              style={[
+                                styles.notifTitle,
+                                {
+                                  color: theme.colors.textPrimary,
+                                  fontWeight: notif.isRead ? '600' : '800',
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {notif.title}
+                            </Text>
+                            <Text style={[styles.timeText, { color: theme.colors.textMuted }]}>
+                              {NotificationService.formatTimeAgo(notif.createdAt)}
+                            </Text>
+                          </View>
+
+                          <Text
+                            style={[styles.bodyText, { color: theme.colors.textSecondary }]}
+                            numberOfLines={2}
+                          >
+                            {getNotificationBody(notif)}
+                          </Text>
+
+                          {actionText && (
+                            <View style={styles.actionBtnRow}>
+                              <View
+                                style={[
+                                  styles.itemActionBtn,
+                                  {
+                                    backgroundColor: isMissedCall
+                                      ? '#EF4444'
+                                      : theme.colors.primary,
+                                  },
+                                ]}
+                              >
+                                <Text style={styles.itemActionText}>{actionText}</Text>
+                              </View>
+                            </View>
+                          )}
+                        </View>
+
+                        {!notif.isRead && (
+                          <View
+                            style={[
+                              styles.unreadIndicatorDot,
+                              {
+                                backgroundColor: isMention
+                                  ? '#F59E0B'
+                                  : isMissedCall
+                                  ? '#EF4444'
+                                  : '#3B82F6',
+                              },
+                            ]}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   );
                 })
               )}
@@ -385,15 +519,24 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
             {/* Footer */}
             {notifications.length > 0 && (
-              <View style={[styles.footerRow, { borderTopColor: theme.colors.divider }]}>
-                <TouchableOpacity onPress={handleClearAll} activeOpacity={0.7}>
-                  <Text style={[styles.clearAllText, { color: theme.colors.textMuted }]}>
+              <View style={styles.footerRow}>
+                <TouchableOpacity
+                  onPress={handleClearAll}
+                  activeOpacity={0.7}
+                  disabled={isClearing}
+                >
+                  <Text
+                    style={[
+                      styles.clearAllText,
+                      { color: isClearing ? theme.colors.border : theme.colors.textMuted },
+                    ]}
+                  >
                     Clear all notifications
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
-          </View>
+          </Animated.View>
         </SafeAreaView>
       </View>
     </Modal>
@@ -408,6 +551,17 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     maxHeight: '85%',
+  },
+  handleContainer: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  handleBar: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.35,
   },
   sheetContainer: {
     borderTopLeftRadius: 28,
@@ -552,7 +706,7 @@ const styles = StyleSheet.create({
   footerRow: {
     paddingVertical: 14,
     alignItems: 'center',
-    borderTopWidth: 1,
+    borderTopWidth: 0,
   },
   clearAllText: {
     fontSize: 13,

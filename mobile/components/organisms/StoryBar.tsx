@@ -59,12 +59,12 @@ export const StoryBar: React.FC<StoryBarProps> = ({
           <View style={styles.ringWrapper}>
             <StoryGradientRing
               size={64}
-              strokeWidth={2.4}
-              gap={2.6}
+              strokeWidth={2.2}
+              gap={2.4}
               isActive={false}
               isDashed={true}
             >
-              <Avatar displayName="You" size={52} fallbackToOtter={true} />
+              <Avatar displayName="You" size={50} fallbackToOtter={true} />
             </StoryGradientRing>
             <View
               style={[
@@ -103,14 +103,14 @@ export const StoryBar: React.FC<StoryBarProps> = ({
               <View style={styles.ringWrapper}>
                 <StoryGradientRing
                   size={64}
-                  strokeWidth={2.4}
-                  gap={2.6}
+                  strokeWidth={2.2}
+                  gap={2.4}
                   isActive={isUnread}
                 >
                   <Avatar
                     displayName={tray.displayName || tray.username}
                     avatarUrl={tray.avatarUrl}
-                    size={52}
+                    size={50}
                     fallbackToOtter={true}
                   />
                 </StoryGradientRing>

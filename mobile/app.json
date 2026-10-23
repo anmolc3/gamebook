@@ -27,6 +27,7 @@
       "package": "com.socialgaming.arena",
       "versionCode": 1,
       "softwareKeyboardLayoutMode": "resize",
+      "usesCleartextTraffic": true,
       "permissions": [
         "POST_NOTIFICATIONS",
         "NOTIFICATIONS",

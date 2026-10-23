@@ -22,46 +22,49 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
   const { theme, effectiveMode } = useTheme();
   const isDark = (theme?.mode || effectiveMode) !== 'light';
 
+  const isAvailable = Boolean(hasUnread || (typeof unreadCount === 'number' && unreadCount > 0));
+
   // ─── Shake animation ─────────────────────────────────────────────────────────
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let animLoop: Animated.CompositeAnimation | null = null;
 
-    if (hasUnread) {
-      // Energetic bell-ring shake: fast rattle then rest
+    if (isAvailable) {
+      // Energetic, authentic bell shake: rapid oscillation with decreasing amplitude then pause
       animLoop = Animated.loop(
         Animated.sequence([
-          // First ring
-          Animated.timing(shakeAnim, { toValue: -1.2, duration: 60, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 1.2, duration: 60, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: -1.0, duration: 55, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 1.0, duration: 55, useNativeDriver: true }),
-          // Second ring
-          Animated.timing(shakeAnim, { toValue: -0.8, duration: 50, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 0.8, duration: 50, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: -0.5, duration: 45, useNativeDriver: true }),
-          Animated.timing(shakeAnim, { toValue: 0.5, duration: 45, useNativeDriver: true }),
-          // Settle
-          Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
-          // Long calm pause before next ring
-          Animated.delay(3200),
+          Animated.timing(shakeAnim, { toValue: -1, duration: 45, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 1, duration: 45, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -0.85, duration: 45, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0.85, duration: 45, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -0.6, duration: 40, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0.6, duration: 40, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -0.3, duration: 40, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0.3, duration: 40, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+          Animated.delay(1200),
         ])
       );
       animLoop.start();
     } else {
       shakeAnim.stopAnimation();
-      Animated.timing(shakeAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start();
+      Animated.timing(shakeAnim, { toValue: 0, duration: 120, useNativeDriver: true }).start();
     }
 
     return () => {
       animLoop?.stop();
     };
-  }, [hasUnread, shakeAnim]);
+  }, [isAvailable, shakeAnim]);
 
   const rotation = shakeAnim.interpolate({
-    inputRange: [-1.2, 0, 1.2],
-    outputRange: ['-18deg', '0deg', '18deg'],
+    inputRange: [-1, 0, 1],
+    outputRange: ['-20deg', '0deg', '20deg'],
+  });
+
+  const translateX = shakeAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-3, 0, 3],
   });
 
   // ─── Badge dot (pulsing scale) ────────────────────────────────────────────────
@@ -69,7 +72,7 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
 
   useEffect(() => {
     let pulseLoop: Animated.CompositeAnimation | null = null;
-    if (hasUnread) {
+    if (isAvailable) {
       pulseLoop = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.35, duration: 650, useNativeDriver: true }),
@@ -82,7 +85,7 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
       pulseAnim.setValue(1);
     }
     return () => pulseLoop?.stop();
-  }, [hasUnread, pulseAnim]);
+  }, [isAvailable, pulseAnim]);
 
   // ─── Sizing ───────────────────────────────────────────────────────────────────
   const dotSize = Math.max(8, Math.round(size * 0.3));
@@ -102,14 +105,17 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
 
   return (
     <View style={[styles.container, { width: size, height: size }, style]}>
-      {/* Bell / Otter icon with shake */}
+      {/* Bell / Otter icon with shake and wobble */}
       <Animated.View
         style={{
           width: size,
           height: size,
           justifyContent: 'center',
           alignItems: 'center',
-          transform: [{ rotate: rotation }],
+          transform: [
+            { translateX },
+            { rotate: rotation },
+          ],
         }}
       >
         <Image
@@ -121,7 +127,7 @@ export const NotificationIcon: React.FC<NotificationIconProps> = ({
       </Animated.View>
 
       {/* Pulsing Red Badge Dot */}
-      {hasUnread && (
+      {isAvailable && (
         <Animated.View
           style={[
             styles.badge,

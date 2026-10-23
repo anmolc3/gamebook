@@ -46,14 +46,25 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   const { user: authUser } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabType>('feeds');
-  const [friends, setFriends] = useState<FriendUser[]>([]);
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>([]);
-  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>([]);
+  const [friends, setFriends] = useState<FriendUser[]>(() => {
+    return FriendsService.getCachedFriendsSync() || [];
+  });
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequestItem[]>(() => {
+    return FriendsService.getCachedRequestsSync()?.incoming || [];
+  });
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequestItem[]>(() => {
+    return FriendsService.getCachedRequestsSync()?.outgoing || [];
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchedPlayer[]>([]);
-  const [suggestedPlayers, setSuggestedPlayers] = useState<SuggestedPlayer[]>([]);
+  const [suggestedPlayers, setSuggestedPlayers] = useState<SuggestedPlayer[]>(() => {
+    return FriendsService.getCachedSuggestedFriendsSync() || [];
+  });
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const cached = FriendsService.getCachedFriendsSync();
+    return !cached || cached.length === 0;
+  });
   const [isSearching, setIsSearching] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -185,17 +196,28 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
     }, 300);
   };
 
-  // Actions
+  // Actions - Safe optimistic updates
   const handleSendRequest = async (targetUserId: string) => {
+    // Optimistic update
+    setSearchResults((prev) =>
+      prev.map((p) => (p.id === targetUserId ? { ...p, relationship: 'REQUEST_SENT' } : p))
+    );
+    setSuggestedPlayers((prev) =>
+      prev.map((p) => (p.id === targetUserId ? { ...p, relationship: 'REQUEST_SENT' } : p))
+    );
+
     try {
       setActionLoadingId(targetUserId);
       await FriendsService.sendRequest(targetUserId);
-      // Update local state in search results
-      setSearchResults((prev) =>
-        prev.map((p) => (p.id === targetUserId ? { ...p, relationship: 'REQUEST_SENT' } : p))
-      );
-      loadData();
+      loadData(true);
     } catch (err: any) {
+      // Rollback
+      setSearchResults((prev) =>
+        prev.map((p) => (p.id === targetUserId ? { ...p, relationship: 'NONE' } : p))
+      );
+      setSuggestedPlayers((prev) =>
+        prev.map((p) => (p.id === targetUserId ? { ...p, relationship: 'NONE' } : p))
+      );
       Alert.alert('Friend Request', err.message || 'Failed to send request');
     } finally {
       setActionLoadingId(null);
@@ -203,11 +225,36 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   };
 
   const handleAcceptRequest = async (requestId: string) => {
+    // Optimistic update
+    const targetReq = incomingRequests.find((r) => r.requestId === requestId);
+    setIncomingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
+    if (targetReq) {
+      const newFriend: FriendUser = {
+        id: targetReq.user.id,
+        username: targetReq.user.username,
+        displayName: targetReq.user.displayName,
+        avatarUrl: targetReq.user.avatarUrl,
+        bio: targetReq.user.bio || null,
+        isOnline: targetReq.user.isOnline ?? false,
+        lastSeen: new Date().toISOString(),
+        totalMatches: targetReq.user.totalMatches || 0,
+        totalWins: targetReq.user.totalWins || 0,
+        winRate: targetReq.user.winRate || 0,
+        friendSince: new Date().toISOString(),
+      };
+      setFriends((prev) => [newFriend, ...prev]);
+    }
+
     try {
       setActionLoadingId(requestId);
       await FriendsService.acceptRequest(requestId);
-      loadData();
+      loadData(true);
     } catch (err: any) {
+      // Rollback on failure
+      if (targetReq) {
+        setIncomingRequests((prev) => [targetReq, ...prev]);
+        setFriends((prev) => prev.filter((f) => f.id !== targetReq.user.id));
+      }
       Alert.alert('Friend Request', err.message || 'Failed to accept request');
     } finally {
       setActionLoadingId(null);
@@ -215,11 +262,17 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   };
 
   const handleDeclineRequest = async (requestId: string) => {
+    const targetReq = incomingRequests.find((r) => r.requestId === requestId);
+    setIncomingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
+
     try {
       setActionLoadingId(requestId);
       await FriendsService.rejectRequest(requestId);
-      setIncomingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
     } catch (err: any) {
+      // Rollback on failure
+      if (targetReq) {
+        setIncomingRequests((prev) => [targetReq, ...prev]);
+      }
       Alert.alert('Friend Request', err.message || 'Failed to decline request');
     } finally {
       setActionLoadingId(null);
@@ -227,11 +280,17 @@ export const FriendsScreen: React.FC<FriendsScreenProps> = ({
   };
 
   const handleCancelRequest = async (requestId: string) => {
+    const targetReq = outgoingRequests.find((r) => r.requestId === requestId);
+    setOutgoingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
+
     try {
       setActionLoadingId(requestId);
       await FriendsService.cancelRequest(requestId);
-      setOutgoingRequests((prev) => prev.filter((r) => r.requestId !== requestId));
     } catch (err: any) {
+      // Rollback on failure
+      if (targetReq) {
+        setOutgoingRequests((prev) => [targetReq, ...prev]);
+      }
       Alert.alert('Friend Request', err.message || 'Failed to cancel request');
     } finally {
       setActionLoadingId(null);

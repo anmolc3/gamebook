@@ -24,6 +24,27 @@ export class CacheService {
   }
 
   /**
+   * Preload keys from AsyncStorage into memory cache in bulk
+   */
+  static async preload(keys: string[]): Promise<void> {
+    try {
+      const pairs = await AsyncStorage.multiGet(keys);
+      for (const [key, val] of pairs) {
+        if (val) {
+          try {
+            const parsed = JSON.parse(val);
+            if (!parsed.ttl || Date.now() - parsed.timestamp <= parsed.ttl) {
+              this.memoryCache.set(key, parsed);
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[CacheService] Failed to preload keys:', err);
+    }
+  }
+
+  /**
    * Asynchronous cache lookup: checks memory cache first, then AsyncStorage
    */
   static async get<T>(key: string): Promise<T | null> {

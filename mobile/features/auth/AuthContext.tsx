@@ -49,6 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
           }
 
+          // Preload essential non-sensitive caches into memory cache for 0ms screen loads
+          CacheService.preload([
+            '@gameapp:cache:conversations',
+            '@gameapp:cache:friends',
+            '@gameapp:cache:requests',
+            '@gameapp:cache:suggested',
+            '@gameapp:cache:stories',
+            '@gameapp:cache:notifications',
+          ]).catch(() => null);
+
           // 2. Initialize push notifications and socket asynchronously
           NotificationService.initialize().catch(() => null);
           MobileSocketService.connect();

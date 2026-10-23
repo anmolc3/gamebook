@@ -10,6 +10,10 @@ SoundService.init();
 import {
   ActivityIndicator,
   View,
+  Text,
+  TouchableOpacity,
+  Image,
+  Animated,
   StyleSheet,
   Alert,
   StatusBar,
@@ -18,7 +22,10 @@ import {
   BackHandler,
   Linking,
 } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const otterColorIcon = require('./assets/images/otter-notification.png');
+const otterBlackIcon = require('./assets/images/otter-notification-black.png');
+import { SafeAreaProvider, useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './theme';
 import { AuthProvider, useAuth } from './features/auth/AuthContext';
 import { RoomService, SupportedGameType } from './services/room.service';
@@ -120,7 +127,8 @@ export interface RouteEntry {
 }
 
 function MainNavigator() {
-  const { theme } = useTheme();
+  const { theme, effectiveMode } = useTheme();
+  const isDark = (theme?.mode || effectiveMode) !== 'light';
   const { user, isAuthenticated, isLoading, isNewlyRegistered, dismissNewRegistration } = useAuth();
   const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
   const [currentScreen, setCurrentScreen] = useState<AppScreen>('home');
@@ -393,7 +401,16 @@ function MainNavigator() {
     });
   };
 
-  // Listen globally to incoming messages & invites over socket to post system notifications
+  // Synchronize active conversation with NotificationService for foreground notification suppression
+  useEffect(() => {
+    if (currentScreen === 'conversation' && activePeer) {
+      NotificationService.setActiveConversation(activePeer.conversationId || null, activePeer.id || null);
+    } else {
+      NotificationService.setActiveConversation(null, null);
+    }
+  }, [currentScreen, activePeer]);
+
+  // Listen globally to incoming messages & invites over socket to display in-app banners and update state
   useEffect(() => {
     if (!isAuthenticated) return;
 
@@ -415,7 +432,7 @@ function MainNavigator() {
         }
       }
 
-      // Don't duplicate notification if the user is already actively chatting with this peer
+      // Don't show in-app banner if the user is already actively chatting with this peer
       if (
         currentScreen === 'conversation' &&
         activePeer &&
@@ -424,15 +441,15 @@ function MainNavigator() {
         return;
       }
 
-      const rawSender = msg.sender?.displayName || msg.sender?.username || 'New Message';
-      const senderTitle = rawSender.replace(/^💬\s*/, '').trim() || 'New Message';
+      const rawSender = msg.senderName || msg.sender?.displayName || msg.sender?.username || 'Player';
+      const senderTitle = rawSender.replace(/^💬\s*/, '').trim() || 'Player';
       const previewText = msg.metadata?.isViewOnce
         ? '📷 Sent a view-once photo'
         : msg.type === 'GAME_INVITE'
         ? `🎮 Challenged you to play ${msg.metadata?.gameName || msg.metadata?.gameType || 'a match'}! (#${msg.metadata?.roomCode || ''})`
         : msg.content || 'Sent an attachment';
 
-      NotificationService.displayLocalNotification(
+      NotificationService.displayInAppBanner(
         senderTitle,
         previewText,
         {
@@ -442,8 +459,7 @@ function MainNavigator() {
           senderName: senderTitle,
           messageId: msg.id,
           roomCode: msg.metadata?.roomCode,
-        },
-        CHANNELS.MESSAGES
+        }
       );
     });
 
@@ -454,15 +470,14 @@ function MainNavigator() {
       const inviter = invite.inviterName || 'A friend';
       const gameTitle = invite.gameName || invite.gameType || 'Multiplayer Game';
 
-      NotificationService.displayLocalNotification(
+      NotificationService.displayInAppBanner(
         `🎮 Game Invite: ${inviter}`,
         `${inviter} invited you to play ${gameTitle}! Room #${invite.roomCode}`,
         {
           type: 'GAME_INVITE',
           roomCode: invite.roomCode,
           gameType: invite.gameType,
-        },
-        CHANNELS.MESSAGES
+        }
       );
 
       Alert.alert(
@@ -491,9 +506,14 @@ function MainNavigator() {
     const unsubscribeNotif = MobileSocketService.onNotificationReceived((notif: any) => {
       if (!notif) return;
 
-      // Don't show redundant local alert if actively inside conversation with this peer
+      // Skip CHAT_MESSAGE and MENTION here because onMessageReceived already handles them
+      if (notif.type === 'CHAT_MESSAGE' || notif.type === 'MENTION') {
+        return;
+      }
+
+      // Don't show redundant in-app banner if actively inside conversation with this peer
       if (
-        (notif.type === 'CHAT_MESSAGE' || notif.type === 'MENTION') &&
+        notif.type === 'MISSED_CALL' &&
         currentScreen === 'conversation' &&
         activePeer &&
         (activePeer.id === notif.data?.senderId || activePeer.conversationId === notif.data?.conversationId)
@@ -502,11 +522,10 @@ function MainNavigator() {
       }
 
       const cleanTitle = (notif.title || 'Notification').replace(/^💬\s*/, '').trim();
-      NotificationService.displayLocalNotification(
+      NotificationService.displayInAppBanner(
         cleanTitle,
         notif.message,
-        notif.data,
-        notif.type === 'MISSED_CALL' ? CHANNELS.MESSAGES : CHANNELS.DEFAULT
+        notif.data
       );
     });
 
@@ -560,11 +579,22 @@ function MainNavigator() {
     [currentScreen, profileUserId]
   );
 
-  // Deep linking & Notification response listener (with valid back navigation path)
-  useEffect(() => {
-    if (!isAuthenticated) return;
+  const [inAppBanner, setInAppBanner] = useState<{ title: string; body: string; data?: any } | null>(null);
+  const bannerTimerRef = React.useRef<any>(null);
+  const bannerAnim = useRef(new Animated.Value(-120)).current;
 
-    const handleNotificationDataNavigation = (data: any) => {
+  const dismissBanner = useCallback(() => {
+    Animated.timing(bannerAnim, {
+      toValue: -120,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
+      setInAppBanner(null);
+    });
+  }, [bannerAnim]);
+
+  const handleNotificationDataNavigation = useCallback(
+    (data: any) => {
       if (!data) return;
       if (
         (data.type === 'CHAT_MESSAGE' || data.type === 'MENTION' || data.type === 'MISSED_CALL') &&
@@ -584,7 +614,42 @@ function MainNavigator() {
       } else if (data.type === 'FRIEND_REQUEST' || data.type === 'FRIEND_ACCEPTED') {
         navigate('friends');
       }
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    const unsubBanner = NotificationService.addInAppBannerListener((banner) => {
+      if (
+        currentScreen === 'conversation' &&
+        activePeer &&
+        (activePeer.id === banner.data?.senderId || activePeer.conversationId === banner.data?.conversationId)
+      ) {
+        return;
+      }
+      setInAppBanner(banner);
+      Animated.spring(bannerAnim, {
+        toValue: 0,
+        tension: 80,
+        friction: 9,
+        useNativeDriver: true,
+      }).start();
+
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+      bannerTimerRef.current = setTimeout(() => {
+        dismissBanner();
+      }, 4500);
+    });
+
+    return () => {
+      unsubBanner();
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
     };
+  }, [currentScreen, activePeer, bannerAnim, dismissBanner]);
+
+  // Deep linking & Notification response listener (with valid back navigation path)
+  useEffect(() => {
+    if (!isAuthenticated) return;
 
     // Check cold-start notification response
     NotificationService.getLastNotificationResponse().then((resp) => {
@@ -661,11 +726,10 @@ function MainNavigator() {
         return true;
       }
 
-      // 2. If in live match screen: return to room lobby
+      // 2. If in live match screen: return to room lobby (ludo manages its own exit confirmation)
       if (
         [
           'ticTacToe',
-          'ludo',
           'snakesAndLadders',
           'boardGame',
           'boardGame2',
@@ -1062,6 +1126,9 @@ function MainNavigator() {
             onOpenConversation={(peer) => {
               navigate('conversation', { activePeer: peer });
             }}
+            onJoinGameRoom={(roomCode) => {
+              navigate('roomLobby', { currentRoomCode: roomCode });
+            }}
           />
         )}
 
@@ -1342,6 +1409,7 @@ function MainNavigator() {
         visible={!!activeStoryTray}
         tray={activeStoryTray}
         onClose={() => setActiveStoryTray(null)}
+        onStoryDeleted={() => setActiveStoryTray(null)}
       />
 
       {/* Suggested Players Near You Onboarding Modal */}
@@ -1354,13 +1422,129 @@ function MainNavigator() {
         }}
       />
 
+      {/* Global In-App Floating Notification Banner */}
+      {inAppBanner && (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: Math.max(insets.top + 8, 38),
+            left: 14,
+            right: 14,
+            transform: [{ translateY: bannerAnim }],
+            zIndex: 999999,
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={{
+              backgroundColor: isDark
+                ? (theme.colors?.surfaceElevated || '#1E2530')
+                : '#FFFFFF',
+              borderRadius: 20,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderWidth: 0,
+              shadowColor: isDark ? '#000000' : '#0F172A',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: isDark ? 0.45 : 0.12,
+              shadowRadius: 16,
+              elevation: 10,
+            }}
+            onPress={() => {
+              const data = inAppBanner.data;
+              dismissBanner();
+              if (data) {
+                handleNotificationDataNavigation(data);
+              }
+            }}
+          >
+            {/* Otter mascot avatar with badge */}
+            <View style={{ position: 'relative', marginRight: 12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.04)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                <Image
+                  source={isDark ? otterColorIcon : otterBlackIcon}
+                  style={{ width: 36, height: 36, resizeMode: 'contain' }}
+                />
+              </View>
+              {/* Type pill indicator badge */}
+              <View
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: isDark ? '#2D3748' : '#F1F5F9',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1.5,
+                  borderColor: isDark
+                    ? (theme.colors?.surfaceElevated || '#1E2530')
+                    : '#FFFFFF',
+                }}
+              >
+                <Text style={{ fontSize: 9 }}>
+                  {inAppBanner.data?.type === 'GAME_INVITE'
+                    ? '🎮'
+                    : inAppBanner.data?.type === 'FRIEND_REQUEST'
+                    ? '👥'
+                    : inAppBanner.data?.type === 'MISSED_CALL'
+                    ? '📞'
+                    : '💬'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Notification content */}
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: isDark ? '#FFFFFF' : '#0F172A',
+                  fontWeight: '700',
+                  fontSize: 14,
+                }}
+                numberOfLines={1}
+              >
+                {inAppBanner.title}
+              </Text>
+              <Text
+                style={{
+                  color: isDark ? '#94A3B8' : '#64748B',
+                  fontSize: 12,
+                  marginTop: 2,
+                  lineHeight: 16,
+                }}
+                numberOfLines={2}
+              >
+                {inAppBanner.body}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
     </View>
   );
 }
 
 export default function App() {
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
         <AuthProvider>
           <CallProvider>

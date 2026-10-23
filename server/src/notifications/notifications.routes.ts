@@ -10,7 +10,10 @@ const router = Router();
 router.use(authenticateToken);
 
 const registerTokenSchema = z.object({
-  pushToken: z.string().min(1).startsWith('ExponentPushToken['),
+  pushToken: z.string().min(1).refine(
+    (token) => token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken['),
+    { message: 'Invalid push token format' }
+  ),
 });
 
 /**
@@ -83,7 +86,12 @@ router.get('/', async (req: AuthRequest, res: Response): Promise<void> => {
       take: Math.min(limit, 100),
     });
 
-    res.status(200).json({ success: true, data: notifications });
+    const mapped = notifications.map((n) => ({
+      ...n,
+      message: n.body,
+    }));
+
+    res.status(200).json({ success: true, data: mapped });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
   }
@@ -105,6 +113,13 @@ router.put('/mark-read', async (req: AuthRequest, res: Response): Promise<void> 
       where: { userId, isRead: false },
       data: { isRead: true },
     });
+
+    try {
+      const { emitToUser } = require('../sockets/socket.server');
+      if (typeof emitToUser === 'function') {
+        emitToUser(userId, 'notifications:unread_count', { unreadCount: 0 });
+      }
+    } catch {}
 
     res.status(200).json({ success: true, data: { markedCount: result.count } });
   } catch (err: any) {
@@ -130,6 +145,16 @@ router.patch('/:id/read', async (req: AuthRequest, res: Response): Promise<void>
       data: { isRead: true },
     });
 
+    try {
+      const { emitToUser } = require('../sockets/socket.server');
+      if (typeof emitToUser === 'function') {
+        const remainingUnread = await prisma.notification.count({
+          where: { userId, isRead: false },
+        });
+        emitToUser(userId, 'notifications:unread_count', { unreadCount: remainingUnread });
+      }
+    } catch {}
+
     res.status(200).json({ success: true, message: 'Notification marked as read' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: { message: err.message } });
@@ -151,6 +176,14 @@ router.delete('/', async (req: AuthRequest, res: Response): Promise<void> => {
     await prisma.notification.deleteMany({
       where: { userId },
     });
+
+    try {
+      const { emitToUser } = require('../sockets/socket.server');
+      if (typeof emitToUser === 'function') {
+        emitToUser(userId, 'notifications:cleared', {});
+        emitToUser(userId, 'notifications:unread_count', { unreadCount: 0 });
+      }
+    } catch {}
 
     res.status(200).json({ success: true, message: 'All notifications cleared' });
   } catch (err: any) {
@@ -174,6 +207,16 @@ router.delete('/:id', async (req: AuthRequest, res: Response): Promise<void> => 
     await prisma.notification.deleteMany({
       where: { id, userId },
     });
+
+    try {
+      const { emitToUser } = require('../sockets/socket.server');
+      if (typeof emitToUser === 'function') {
+        const remainingUnread = await prisma.notification.count({
+          where: { userId, isRead: false },
+        });
+        emitToUser(userId, 'notifications:unread_count', { unreadCount: remainingUnread });
+      }
+    } catch {}
 
     res.status(200).json({ success: true, message: 'Notification deleted' });
   } catch (err: any) {

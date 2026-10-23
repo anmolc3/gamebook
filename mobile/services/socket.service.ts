@@ -104,6 +104,11 @@ export class MobileSocketService {
     return registerListener('friend:request_accepted', callback);
   }
 
+  // Real-Time Story updates
+  static onStoryNew(callback: (data: any) => void): () => void {
+    return registerListener('story:new', callback);
+  }
+
   // Real-Time Game Room Invites Across All Games
   static sendGameInvite(
     recipientId: string,
@@ -175,9 +180,15 @@ export class MobileSocketService {
     }
   }
 
-  static sendMessagesRead(conversationId: string): void {
+  static sendMessagesRead(conversationId: string, messageIds?: string[]): void {
     if (socket) {
-      socket.emit('chat:messages_read', { conversationId });
+      socket.emit('chat:messages_read', { conversationId, messageIds });
+    }
+  }
+
+  static sendGroupReadReceipt(conversationId: string, messageIds?: string[]): void {
+    if (socket) {
+      socket.emit('group:messages:read', { conversationId, messageIds });
     }
   }
 
@@ -203,9 +214,21 @@ export class MobileSocketService {
       messageIds?: string[];
       status?: 'READ' | 'DELIVERED';
       isAllRead?: boolean;
+      messageUpdates?: Array<{
+        messageId: string;
+        readCount: number;
+        totalRecipients: number;
+        isAllRead: boolean;
+        status: 'SENT' | 'DELIVERED' | 'READ';
+      }>;
     }) => void
   ): () => void {
-    return registerListener('chat:messages_read', callback);
+    const unsub1 = registerListener('chat:messages_read', callback);
+    const unsub2 = registerListener('group:read_receipt', callback);
+    return () => {
+      unsub1();
+      unsub2();
+    };
   }
 
   static onViewOnceOpened(
@@ -522,6 +545,10 @@ export class MobileSocketService {
   // Real-time In-App Notifications
   static onNotificationReceived(callback: (notification: any) => void): () => void {
     return registerListener('notification:new', callback);
+  }
+
+  static onNotificationsCleared(callback: () => void): () => void {
+    return registerListener('notifications:cleared', callback);
   }
 
   static onUnreadNotificationCount(callback: (data: { unreadCount: number }) => void): () => void {

@@ -78,6 +78,18 @@ export class FriendsService {
     };
   }
 
+  static getCachedFriendsSync(): FriendUser[] | null {
+    return CacheService.getSync<FriendUser[]>(CACHE_FRIENDS_KEY);
+  }
+
+  static getCachedRequestsSync(): FriendRequestsPayload | null {
+    return CacheService.getSync<FriendRequestsPayload>(CACHE_REQUESTS_KEY);
+  }
+
+  static getCachedSuggestedFriendsSync(): SuggestedPlayer[] | null {
+    return CacheService.getSync<SuggestedPlayer[]>(CACHE_SUGGESTED_KEY);
+  }
+
   static async getCachedFriends(): Promise<FriendUser[] | null> {
     return await CacheService.get<FriendUser[]>(CACHE_FRIENDS_KEY);
   }

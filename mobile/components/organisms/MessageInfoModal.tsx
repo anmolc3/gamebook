@@ -180,7 +180,14 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
               <Text style={[styles.previewTime, { color: theme.colors.textMuted }]}>
                 Sent: {formatReceiptTime(message.createdAt)}
               </Text>
-              <MessageReceiptTicks status={message.status} size={15} />
+              <MessageReceiptTicks
+                status={data?.status || message.status}
+                size={15}
+                isGroup={isGroup}
+                readCount={data?.readBy.length ?? message.readCount}
+                totalRecipients={data?.totalRecipients ?? message.totalRecipients}
+                isAllRead={(data?.status || message.status) === 'READ'}
+              />
             </View>
           </View>
 

@@ -12,6 +12,7 @@ import {
   ScrollView,
   Animated,
   Easing,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, {
@@ -267,6 +268,127 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
   const prevDiceRollRef = useRef<number | null>(null);
   const localRollPendingRef = useRef<boolean>(false);
 
+  // Exit Confirmation & Back Navigation Handling
+  const isExitAlertShowingRef = useRef<boolean>(false);
+  const isLeavingRef = useRef<boolean>(false);
+
+  const isMatchOverRef = useRef<boolean>(false);
+  const isRematchModalVisibleRef = useRef<boolean>(false);
+  const winnerIdsRef = useRef<string[]>([]);
+  const selectedPlayerForStatsRef = useRef<LudoPlayerState | null>(null);
+  const isReactionPickerVisibleRef = useRef<boolean>(false);
+  const isChatModalVisibleRef = useRef<boolean>(false);
+  const isRulesModalVisibleRef = useRef<boolean>(false);
+  const isInviteModalVisibleRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    isMatchOverRef.current = isMatchOver;
+    isRematchModalVisibleRef.current = isRematchModalVisible;
+    winnerIdsRef.current = winnerIds;
+    selectedPlayerForStatsRef.current = selectedPlayerForStats;
+    isReactionPickerVisibleRef.current = isReactionPickerVisible;
+    isChatModalVisibleRef.current = isChatModalVisible;
+    isRulesModalVisibleRef.current = isRulesModalVisible;
+    isInviteModalVisibleRef.current = isInviteModalVisible;
+  });
+
+  const cleanupAndLeave = useCallback(async () => {
+    if (isLeavingRef.current) return;
+    isLeavingRef.current = true;
+    try {
+      await RoomService.leaveRoom(roomCode);
+    } catch (err) {
+      console.warn('Failed to leave room via REST:', err);
+    }
+    try {
+      MobileSocketService.leaveRoom(roomCode);
+    } catch (err) {
+      console.warn('Failed to leave room via socket:', err);
+    }
+    onLeave();
+  }, [roomCode, onLeave]);
+
+  const handleRequestLeave = useCallback(() => {
+    // Dismiss any active overlay / modal first on back press
+    if (selectedPlayerForStatsRef.current) {
+      setSelectedPlayerForStats(null);
+      return;
+    }
+    if (isReactionPickerVisibleRef.current) {
+      setIsReactionPickerVisible(false);
+      return;
+    }
+    if (isChatModalVisibleRef.current) {
+      setIsChatModalVisible(false);
+      return;
+    }
+    if (isRulesModalVisibleRef.current) {
+      setIsRulesModalVisible(false);
+      return;
+    }
+    if (isInviteModalVisibleRef.current) {
+      setIsInviteModalVisible(false);
+      return;
+    }
+
+    // If the match has already ended, allow normal back navigation without unnecessary warning
+    if (
+      isMatchOverRef.current ||
+      isRematchModalVisibleRef.current ||
+      (winnerIdsRef.current && winnerIdsRef.current.length > 0)
+    ) {
+      cleanupAndLeave();
+      return;
+    }
+
+    // Prevent accidental rapid back taps from triggering duplicate dialogs or navigation
+    if (isExitAlertShowingRef.current || isLeavingRef.current) {
+      return;
+    }
+
+    isExitAlertShowingRef.current = true;
+
+    Alert.alert(
+      'Leave Ludo Game?',
+      'Are you sure you want to leave this game? Your current match may be lost.',
+      [
+        {
+          text: 'Stay in Game',
+          style: 'cancel',
+          onPress: () => {
+            isExitAlertShowingRef.current = false;
+          },
+        },
+        {
+          text: 'Leave Game',
+          style: 'destructive',
+          onPress: () => {
+            isExitAlertShowingRef.current = false;
+            cleanupAndLeave();
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          isExitAlertShowingRef.current = false;
+        },
+      }
+    );
+  }, [cleanupAndLeave]);
+
+  // Intercept Android hardware Back button
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleRequestLeave();
+      return true;
+    });
+
+    return () => {
+      backHandler.remove();
+    };
+  }, [handleRequestLeave]);
+
   // Initialize sound engine on mount
   useEffect(() => {
     SoundService.init();
@@ -496,7 +618,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
         setRematchRequestedByMe(false);
         setRematchOfferedByPeer(false);
         Alert.alert('Rematch Declined', 'The rematch offer was declined.', [
-          { text: 'Return to Lobby', onPress: onLeave },
+          { text: 'Return to Lobby', onPress: cleanupAndLeave },
         ]);
       }
     });
@@ -1199,7 +1321,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
 
       {/* Top Header: < Classic - 4 Players [⚙️] */}
       <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : theme.colors.border }]}>
-        <TouchableOpacity style={styles.headerIconButton} onPress={onLeave} activeOpacity={0.7} accessibilityLabel="Back">
+        <TouchableOpacity style={styles.headerIconButton} onPress={handleRequestLeave} activeOpacity={0.7} accessibilityLabel="Back">
           <Icon name="chevronLeft" size={24} color={isDark ? '#FFFFFF' : theme.colors.textPrimary} />
         </TouchableOpacity>
 
@@ -1940,7 +2062,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                   </View>
                   <TouchableOpacity
                     style={styles.victorySecondaryBtn}
-                    onPress={onLeave}
+                    onPress={cleanupAndLeave}
                     activeOpacity={0.8}
                   >
                     <Icon name="home" size={18} color="#FFFFFF" />
@@ -1962,7 +2084,7 @@ export const LudoScreen: React.FC<LudoScreenProps> = ({
                   {/* Dark Secondary Back to Lobby Button */}
                   <TouchableOpacity
                     style={styles.victorySecondaryBtn}
-                    onPress={onLeave}
+                    onPress={cleanupAndLeave}
                     activeOpacity={0.8}
                   >
                     <Icon name="home" size={18} color="#FFFFFF" />

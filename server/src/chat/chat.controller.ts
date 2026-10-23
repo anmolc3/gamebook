@@ -139,7 +139,9 @@ export class ChatController {
         return;
       }
 
-      const result = await ChatService.markAsRead(userId, conversationId);
+      const { messageIds } = req.body || {};
+
+      const result = await ChatService.markAsRead(userId, conversationId, Array.isArray(messageIds) ? messageIds : undefined);
       res.status(200).json({ success: true, data: result });
     } catch (err: any) {
       res.status(400).json({

@@ -24,8 +24,8 @@ export interface StoryGradientRingProps {
 
 export const StoryGradientRing: React.FC<StoryGradientRingProps> = ({
   size = 64,
-  strokeWidth = 2.4,
-  gap = 2.6,
+  strokeWidth = 2.2,
+  gap = 2.4,
   isActive = true,
   inactiveColor,
   isDashed = false,
@@ -39,24 +39,17 @@ export const StoryGradientRing: React.FC<StoryGradientRingProps> = ({
 
   // Otter theme palette tokens (only existing theme colors)
   const pink = theme.colors.accentPink || '#FF2D78';
-  const purple = theme.colors.accentPurple || '#755FE2';
   const coral = theme.colors.accentCoral || theme.colors.primary || '#FF575F';
+  const purple = theme.colors.accentPurple || '#755FE2';
   const borderColor = inactiveColor || (isDark ? '#2E303A' : theme.colors.border || '#E4E9F3');
   const innerBg = theme.colors.background || (isDark ? '#000000' : '#FFFFFF');
 
   const C = size / 2;
+  const ringStroke = strokeWidth;
+  const R = (size - ringStroke) / 2;
 
-  // Multicolor dual-ring geometry: Outer Pink band + Inner Purple band matching Otter mockup
-  const strokeOuter = 1.8;
-  const strokeInner = 1.6;
-  const R_outer = (size - strokeOuter) / 2;
-  const R_inner = R_outer - strokeOuter / 2 - strokeInner / 2;
-
-  // Single circle inactive radius
-  const R_inactive = (size - 1.5) / 2;
-
-  // Inner avatar diameter (sits inside the inner ring with gap spacing)
-  const innerSize = Math.max(0, Math.round(size - 2 * (strokeOuter + strokeInner + gap)));
+  // Inner avatar diameter (sits inside the slim multicolor ring with gap spacing)
+  const innerSize = Math.max(0, Math.round(size - 2 * (ringStroke + gap)));
 
   return (
     <View style={[styles.container, { width: size, height: size }, style]}>
@@ -70,50 +63,27 @@ export const StoryGradientRing: React.FC<StoryGradientRingProps> = ({
         {isActive ? (
           <>
             <Defs>
-              {/* Outer band gradient: Pink transitioning through Coral around the circumference */}
+              {/* Slim multicolor gradient: Pink -> Coral -> Purple (Otter palette) */}
               <LinearGradient
-                id={`outerGrad_${ringId}`}
+                id={`multiGrad_${ringId}`}
                 x1="0%"
-                y1="0%"
+                y1="100%"
                 x2="100%"
-                y2="100%"
+                y2="0%"
               >
                 <Stop offset="0%" stopColor={pink} />
-                <Stop offset="50%" stopColor={coral} />
-                <Stop offset="100%" stopColor={pink} />
-              </LinearGradient>
-
-              {/* Inner band gradient: Purple transitioning around the circumference */}
-              <LinearGradient
-                id={`innerGrad_${ringId}`}
-                x1="100%"
-                y1="0%"
-                x2="0%"
-                y2="100%"
-              >
-                <Stop offset="0%" stopColor={purple} />
-                <Stop offset="50%" stopColor={pink} />
+                <Stop offset="45%" stopColor={coral} />
                 <Stop offset="100%" stopColor={purple} />
               </LinearGradient>
             </Defs>
 
-            {/* Outer Pink-dominant ring stroke */}
+            {/* Smooth single multicolor ring stroke */}
             <Circle
               cx={C}
               cy={C}
-              r={R_outer}
-              stroke={`url(#outerGrad_${ringId})`}
-              strokeWidth={strokeOuter}
-              fill="none"
-            />
-
-            {/* Inner Purple-dominant ring stroke */}
-            <Circle
-              cx={C}
-              cy={C}
-              r={R_inner}
-              stroke={`url(#innerGrad_${ringId})`}
-              strokeWidth={strokeInner}
+              r={R}
+              stroke={`url(#multiGrad_${ringId})`}
+              strokeWidth={ringStroke}
               fill="none"
             />
           </>
@@ -121,7 +91,7 @@ export const StoryGradientRing: React.FC<StoryGradientRingProps> = ({
           <Circle
             cx={C}
             cy={C}
-            r={R_inactive}
+            r={R}
             stroke={borderColor}
             strokeWidth={1.5}
             strokeDasharray={isDashed ? '4, 3' : undefined}

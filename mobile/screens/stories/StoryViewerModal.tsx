@@ -8,17 +8,21 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Alert,
 } from 'react-native';
 import { useTheme } from '../../theme';
 import { Avatar } from '../../components/atoms/Avatar';
-import { CloseIcon, SendIcon, TrophyIcon, HeartIcon } from '../../icons';
+import { CloseIcon, SendIcon, TrophyIcon, HeartIcon, Icon } from '../../icons';
 import { StoryTrayItem } from '../../components/organisms/StoryBar';
+import { StoryService } from '../../services/story.service';
 
 interface StoryViewerModalProps {
   visible: boolean;
   tray: StoryTrayItem | null;
   onClose: () => void;
   onReply?: (storyId: string, message: string) => void;
+  onStoryDeleted?: () => void;
 }
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
@@ -26,6 +30,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   tray,
   onClose,
   onReply,
+  onStoryDeleted,
 }) => {
   const { theme } = useTheme();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,10 +43,18 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   }, [visible, tray]);
 
-  if (!visible || !tray || tray.stories.length === 0) return null;
+  const currentStory = tray?.stories?.[currentIndex] || tray?.stories?.[0];
+  const totalStories = tray?.stories?.length || 0;
 
-  const currentStory = tray.stories[currentIndex] || tray.stories[0];
-  const totalStories = tray.stories.length;
+  // Mark story as viewed when opened
+  useEffect(() => {
+    if (visible && currentStory?.id && !tray?.isSelf && !currentStory.hasViewed) {
+      StoryService.viewStory(currentStory.id).catch(() => {});
+      currentStory.hasViewed = true;
+    }
+  }, [visible, currentStory?.id, tray?.isSelf]);
+
+  if (!visible || !tray || totalStories === 0 || !currentStory) return null;
 
   const handleNext = () => {
     if (currentIndex < totalStories - 1) {
@@ -65,13 +78,49 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     }
   };
 
+  const handleDeleteStory = () => {
+    Alert.alert(
+      'Delete Story',
+      'Are you sure you want to delete this story?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await StoryService.deleteStory(currentStory.id);
+              if (onStoryDeleted) onStoryDeleted();
+              if (totalStories <= 1) {
+                onClose();
+              } else {
+                tray.stories.splice(currentIndex, 1);
+                setCurrentIndex((i) => Math.min(i, tray.stories.length - 1));
+              }
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to delete story');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const hasMediaImage =
+    currentStory.mediaUrl &&
+    (currentStory.mediaType === 'IMAGE' ||
+      currentStory.mediaUrl.startsWith('http://') ||
+      currentStory.mediaUrl.startsWith('https://') ||
+      currentStory.mediaUrl.startsWith('data:') ||
+      currentStory.mediaUrl.startsWith('file:'));
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalBackdrop}
       >
-        <View style={[styles.storyCard, { backgroundColor: '#1E2D34' }]}>
+        <View style={[styles.storyCard, { backgroundColor: '#161922' }]}>
           {/* Top Progress Segmented Bars */}
           <View style={styles.progressBarContainer}>
             {tray.stories.map((s, idx) => (
@@ -81,7 +130,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                   styles.progressBarSegment,
                   {
                     backgroundColor:
-                      idx <= currentIndex ? theme.colors.primary : 'rgba(255,255,255,0.25)',
+                      idx <= currentIndex ? (theme.colors.accentPink || theme.colors.primary) : 'rgba(255,255,255,0.25)',
                   },
                 ]}
               />
@@ -91,7 +140,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.authorInfo}>
-              <Avatar displayName={tray.displayName || tray.username} size="sm" />
+              <Avatar
+                displayName={tray.displayName || tray.username}
+                avatarUrl={tray.avatarUrl}
+                size="sm"
+                fallbackToOtter={true}
+              />
               <View style={styles.authorText}>
                 <Text style={styles.displayName}>{tray.displayName || tray.username}</Text>
                 <Text style={styles.timeText}>
@@ -103,9 +157,26 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               </View>
             </View>
 
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
-              <CloseIcon size={22} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {tray.isSelf && (
+                <TouchableOpacity
+                  onPress={handleDeleteStory}
+                  style={styles.headerBtn}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Delete story"
+                >
+                  <Icon name="trash" size={20} color="#FF575F" />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={onClose}
+                style={styles.headerBtn}
+                activeOpacity={0.7}
+                accessibilityLabel="Close story"
+              >
+                <CloseIcon size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Story Visual Center Stage */}
@@ -122,19 +193,34 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               activeOpacity={1}
             />
 
-            {/* Celebratory Graphic Card */}
-            <View style={styles.celebrationCard}>
-              <View style={styles.trophyGlow}>
-                <TrophyIcon size={56} />
+            {/* Real Story Visual Display */}
+            {hasMediaImage ? (
+              <View style={styles.imageCard}>
+                <Image
+                  source={{ uri: currentStory.mediaUrl }}
+                  style={styles.storyFullImage}
+                  resizeMode="cover"
+                />
+                {currentStory.caption ? (
+                  <View style={styles.captionOverlay}>
+                    <Text style={styles.captionText}>{currentStory.caption}</Text>
+                  </View>
+                ) : null}
               </View>
-              <Text style={styles.matchVictoryTitle}>MATCH HIGHLIGHT</Text>
-              <Text style={styles.matchSubtitle}>24h Ephemeral Platform Reel</Text>
-              {currentStory.caption && (
-                <View style={styles.captionBubble}>
-                  <Text style={styles.captionText}>{currentStory.caption}</Text>
+            ) : (
+              <View style={styles.celebrationCard}>
+                <View style={styles.trophyGlow}>
+                  <TrophyIcon size={56} />
                 </View>
-              )}
-            </View>
+                <Text style={styles.matchVictoryTitle}>STORY HIGHLIGHT</Text>
+                <Text style={styles.matchSubtitle}>Otter 24h Community Reel</Text>
+                {currentStory.caption && (
+                  <View style={styles.captionBubble}>
+                    <Text style={styles.captionText}>{currentStory.caption}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Bottom Reply Bar (if not own story) */}
@@ -142,7 +228,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             <View style={styles.bottomReplyRow}>
               <TextInput
                 style={styles.replyInput}
-                placeholder={`Reply to ${tray.displayName.split(' ')[0]}...`}
+                placeholder={`Reply to ${(tray.displayName || tray.username).split(' ')[0]}...`}
                 placeholderTextColor="rgba(255,255,255,0.5)"
                 value={replyText}
                 onChangeText={setReplyText}
@@ -156,7 +242,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  onPress={() => onReply && onReply(currentStory.id, 'Congrats!')}
+                  onPress={() => onReply && onReply(currentStory.id, 'Congrats! 🔥')}
                   style={[styles.actionBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
                 >
                   <HeartIcon size={20} color="#FF6584" />
@@ -220,7 +306,12 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 11,
   },
-  closeBtn: {
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerBtn: {
     padding: 6,
   },
   centerStage: {
@@ -245,6 +336,29 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: '65%',
     zIndex: 5,
+  },
+  imageCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#0B0D14',
+    justifyContent: 'flex-end',
+  },
+  storyFullImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  captionOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 12,
+    marginBottom: 16,
+    borderRadius: 14,
+    zIndex: 2,
   },
   celebrationCard: {
     backgroundColor: '#161922',
@@ -312,3 +426,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+

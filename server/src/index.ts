@@ -53,17 +53,27 @@ app.get('/health', async (_req: Request, res: Response) => {
   });
 });
 
-// Mount Feature API Routes
+// Mount Feature API Routes (both /api/v1 and root for seamless client compatibility)
 app.use('/api/v1/auth', authRoutes);
+app.use('/auth', authRoutes);
 app.use('/api/v1/profiles', profileRoutes);
+app.use('/profiles', profileRoutes);
 app.use('/api/v1/friends', friendsRoutes);
+app.use('/friends', friendsRoutes);
 app.use('/api/v1/chat', chatRoutes);
+app.use('/chat', chatRoutes);
 app.use('/api/v1/rooms', roomRoutes);
+app.use('/rooms', roomRoutes);
 app.use('/api/v1/games', gameRoutes);
+app.use('/games', gameRoutes);
 app.use('/api/v1/stories', storiesRoutes);
+app.use('/stories', storiesRoutes);
 app.use('/api/v1/achievements', achievementsRoutes);
+app.use('/achievements', achievementsRoutes);
 app.use('/api/v1/notifications', notificationsRoutes);
+app.use('/notifications', notificationsRoutes);
 app.use('/api/v1/feeds', feedRoutes);
+app.use('/feeds', feedRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/upload', uploadRoutes);
 

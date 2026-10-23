@@ -270,7 +270,7 @@ export class PushNotificationService {
     messagePreview: string,
     extraData?: { conversationId?: string; senderId?: string; messageId?: string; senderName?: string }
   ): Promise<any> {
-    const cleanSender = (senderName || 'New Message').replace(/^💬\s*/, '').trim() || 'New Message';
+    const cleanSender = (senderName || 'Player').replace(/^💬\s*/, '').trim() || 'Player';
     const cleanBody = (messagePreview || '').replace(/^💬\s*/, '').trim();
     const preview = cleanBody.length > 100 ? cleanBody.slice(0, 97) + '…' : cleanBody;
     return await this.createAndDeliver({
@@ -281,7 +281,7 @@ export class PushNotificationService {
       data: {
         type: 'CHAT_MESSAGE',
         recipientId,
-        senderName,
+        senderName: cleanSender,
         senderId: extraData?.senderId,
         conversationId: extraData?.conversationId,
         messageId: extraData?.messageId,

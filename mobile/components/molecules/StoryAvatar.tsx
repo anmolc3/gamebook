@@ -11,6 +11,7 @@ export interface StoryAvatarProps {
   hasUnviewedStory?: boolean;
   isAddStory?: boolean;
   onPress: () => void;
+  onPressAdd?: () => void;
   size?: number;
 }
 
@@ -20,13 +21,14 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
   hasUnviewedStory = false,
   isAddStory = false,
   onPress,
+  onPressAdd,
   size = 64,
 }) => {
   const { theme } = useTheme();
 
   // Consistent ring stroke & gap geometry
-  const strokeWidth = 2.4;
-  const gap = 2.6;
+  const strokeWidth = 2.2;
+  const gap = 2.4;
   const innerSize = Math.max(0, Math.round(size - 2 * (strokeWidth + gap)));
 
   return (
@@ -35,7 +37,7 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
       activeOpacity={0.8}
       style={[styles.container, { width: size + 8 }]}
       accessibilityRole="button"
-      accessibilityLabel={isAddStory ? 'Add new story' : `${name}'s story`}
+      accessibilityLabel={isAddStory ? 'Your story' : `${name}'s story`}
     >
       <View style={styles.ringWrapper}>
         <StoryGradientRing
@@ -54,7 +56,11 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
         </StoryGradientRing>
 
         {isAddStory && (
-          <View
+          <TouchableOpacity
+            onPress={onPressAdd || onPress}
+            activeOpacity={0.8}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Add to story"
             style={[
               styles.plusBadge,
               {
@@ -64,7 +70,7 @@ export const StoryAvatar: React.FC<StoryAvatarProps> = ({
             ]}
           >
             <Icon name="plus" size={11} color="#FFFFFF" strokeWidth={3} />
-          </View>
+          </TouchableOpacity>
         )}
       </View>
       <Text

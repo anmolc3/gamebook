@@ -7,7 +7,13 @@ import {
   AddMembersInput,
   UpdateMemberRoleInput,
 } from './chat.validation';
-import { emitToUser, emitToConversation, isUserOnline } from '../sockets/socket.server';
+import {
+  emitToUser,
+  emitToConversation,
+  isUserOnline,
+  isUserInConversation,
+  getUsersInConversation,
+} from '../sockets/socket.server';
 import { PushNotificationService } from '../notifications/push.service';
 
 export class ChatService {
@@ -41,18 +47,35 @@ export class ChatService {
       },
     });
 
-    const conversations = await Promise.all(
-      userMemberships.map(async (m) => {
-        const conv = m.conversation;
+    const convIds = userMemberships.map((m) => m.conversation.id);
 
-        // Count unread incoming messages
-        const unreadCount = await prisma.message.count({
-          where: {
-            conversationId: conv.id,
-            senderId: { not: userId },
-            status: { in: ['SENT', 'DELIVERED'] },
+    // Count unread incoming messages accurately using normalized per-user MessageReceipt in a single query
+    const unreadMessages = await prisma.message.findMany({
+      where: {
+        conversationId: { in: convIds },
+        senderId: { not: userId },
+        NOT: {
+          receipts: {
+            some: {
+              userId,
+              status: 'READ',
+            },
           },
-        });
+        },
+      },
+      select: {
+        conversationId: true,
+      },
+    });
+
+    const unreadCountMap = new Map<string, number>();
+    for (const msg of unreadMessages) {
+      unreadCountMap.set(msg.conversationId, (unreadCountMap.get(msg.conversationId) || 0) + 1);
+    }
+
+    const conversations = userMemberships.map((m) => {
+      const conv = m.conversation;
+      const unreadCount = unreadCountMap.get(conv.id) || 0;
 
         const lastMessage = conv.messages[0] || null;
 
@@ -141,8 +164,7 @@ export class ChatService {
               }
             : null,
         };
-      })
-    );
+      });
 
     // Sort conversations with most recent activity first
     return conversations.sort(
@@ -971,20 +993,21 @@ export class ChatService {
    */
   static async getMessages(userId: string, conversationId: string, limit = 50) {
     // Verify membership
-    const membership = await prisma.conversationMember.findUnique({
-      where: {
-        conversationId_userId: { conversationId, userId },
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: {
+        members: true,
       },
     });
 
-    if (!membership) {
+    if (!conv || !conv.members.some((m) => m.userId === userId)) {
       throw new Error('You are not a member of this conversation');
     }
 
     // Client retrieving messages confirms delivery to their device
     this.confirmDelivery(userId, conversationId).catch(() => null);
 
-    // Fetch chronological messages
+    // Fetch chronological messages with receipts
     const messages = await prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'asc' },
@@ -993,22 +1016,46 @@ export class ChatService {
         sender: {
           include: { profile: true },
         },
+        receipts: {
+          select: {
+            userId: true,
+            status: true,
+            readAt: true,
+            deliveredAt: true,
+          },
+        },
       },
     });
 
-    return messages.map((m) => ({
-      id: m.id,
-      conversationId: m.conversationId,
-      senderId: m.senderId,
-      senderName: m.sender.profile?.displayName || m.sender.username,
-      senderAvatarUrl: m.sender.profile?.avatarUrl || null,
-      content: m.content,
-      type: m.type,
-      status: m.status,
-      metadata: m.metadata,
-      createdAt: m.createdAt,
-      isOwnMessage: m.senderId === userId,
-    }));
+    const otherMembersCount = conv.isGroup
+      ? Math.max(0, conv.members.filter((mem) => mem.userId !== userId).length)
+      : 1;
+
+    return messages.map((m) => {
+      const readReceipts = m.receipts.filter((r) => r.status === 'READ');
+      const readCount = readReceipts.length;
+      const isAllRead = conv.isGroup
+        ? (otherMembersCount > 0 && readCount >= otherMembersCount)
+        : (m.status === 'READ');
+
+      return {
+        id: m.id,
+        conversationId: m.conversationId,
+        senderId: m.senderId,
+        senderName: m.sender.profile?.displayName || m.sender.username,
+        senderAvatarUrl: m.sender.profile?.avatarUrl || null,
+        content: m.content,
+        type: m.type,
+        status: isAllRead ? 'READ' : m.status,
+        metadata: m.metadata,
+        createdAt: m.createdAt,
+        isOwnMessage: m.senderId === userId,
+        isGroup: conv.isGroup,
+        readCount: conv.isGroup ? readCount : (m.status === 'READ' ? 1 : 0),
+        totalRecipients: otherMembersCount,
+        isAllRead,
+      };
+    });
   }
 
   /**
@@ -1039,9 +1086,12 @@ export class ChatService {
     if (conv.isGroup) {
       // ─── Group Messaging ──────────────────────────────────────
       const otherMembers = conv.members.filter((m) => m.userId !== userId);
-      const onlineOtherMembers = otherMembers.filter((m) => isUserOnline(m.userId));
+      const activeUserIds = getUsersInConversation(conversationId);
+      const inChatMembers = otherMembers.filter((m) => activeUserIds.has(m.userId));
+      const onlineOtherMembers = otherMembers.filter((m) => activeUserIds.has(m.userId) || isUserOnline(m.userId));
+      const isAllInChat = inChatMembers.length === otherMembers.length && otherMembers.length > 0;
       const isAllOnline = onlineOtherMembers.length === otherMembers.length && otherMembers.length > 0;
-      const initialStatus = isAllOnline ? 'DELIVERED' : 'SENT';
+      const initialStatus = isAllInChat ? 'READ' : isAllOnline ? 'DELIVERED' : 'SENT';
 
       const message = await prisma.message.create({
         data: {
@@ -1054,16 +1104,21 @@ export class ChatService {
         },
       });
 
-      // Create initial receipts for members currently online
+      // Create initial receipts for members currently in chat or online
       if (onlineOtherMembers.length > 0) {
+        const now = new Date();
         await prisma.messageReceipt.createMany({
-          data: onlineOtherMembers.map((m) => ({
-            messageId: message.id,
-            conversationId,
-            userId: m.userId,
-            status: 'DELIVERED' as const,
-            deliveredAt: new Date(),
-          })),
+          data: onlineOtherMembers.map((m) => {
+            const inChat = activeUserIds.has(m.userId);
+            return {
+              messageId: message.id,
+              conversationId,
+              userId: m.userId,
+              status: inChat ? ('READ' as const) : ('DELIVERED' as const),
+              deliveredAt: now,
+              readAt: inChat ? now : null,
+            };
+          }),
           skipDuplicates: true,
         }).catch(() => null);
       }
@@ -1079,6 +1134,12 @@ export class ChatService {
         senderId: message.senderId,
         senderName,
         senderAvatarUrl: senderProfile?.avatarUrl || null,
+        sender: {
+          id: message.senderId,
+          displayName: senderName,
+          username: senderMember.user.username,
+          avatarUrl: senderProfile?.avatarUrl || null,
+        },
         content: message.content,
         type: message.type,
         status: message.status,
@@ -1120,7 +1181,7 @@ export class ChatService {
           emitToUser(mem.userId, 'chat:message_received', messagePayload);
 
           // If member was not already notified via mention, notify of new message
-          if (!mentionedUserIds.has(mem.userId)) {
+          if (!mentionedUserIds.has(mem.userId) && !activeUserIds.has(mem.userId)) {
             PushNotificationService.notifyNewMessage(
               mem.userId,
               `${conv.title || 'Group'} • ${senderName}`,
@@ -1162,8 +1223,9 @@ export class ChatService {
       }
     }
 
-    const recipientOnline = peerId ? isUserOnline(peerId) : false;
-    const initialStatus = recipientOnline ? 'DELIVERED' : 'SENT';
+    const peerInConversation = peerId ? isUserInConversation(conversationId, peerId) : false;
+    const recipientOnline = peerId ? (peerInConversation || isUserOnline(peerId)) : false;
+    const initialStatus = peerInConversation ? 'READ' : recipientOnline ? 'DELIVERED' : 'SENT';
 
     const message = await prisma.message.create({
       data: {
@@ -1177,13 +1239,15 @@ export class ChatService {
     });
 
     if (recipientOnline && peerId) {
+      const now = new Date();
       await prisma.messageReceipt.create({
         data: {
           messageId: message.id,
           conversationId,
           userId: peerId,
-          status: 'DELIVERED',
-          deliveredAt: new Date(),
+          status: peerInConversation ? 'READ' : 'DELIVERED',
+          deliveredAt: now,
+          readAt: peerInConversation ? now : null,
         },
       }).catch(() => null);
     }
@@ -1199,6 +1263,12 @@ export class ChatService {
       senderId: message.senderId,
       senderName,
       senderAvatarUrl: senderProfile?.avatarUrl || null,
+      sender: {
+        id: message.senderId,
+        displayName: senderName,
+        username: senderMember.user.username,
+        avatarUrl: senderProfile?.avatarUrl || null,
+      },
       content: message.content,
       type: message.type,
       status: message.status,
@@ -1210,52 +1280,55 @@ export class ChatService {
     if (peerId) {
       emitToUser(peerId, 'chat:message_received', messagePayload);
 
-      // Check for @mention in 1-on-1 chat
-      const mentionMatches = input.content.match(/@(\w+)/g);
-      const isMentioned =
-        mentionMatches &&
-        peerMember?.user?.username &&
-        mentionMatches.some((m) => m.slice(1).toLowerCase() === peerMember.user.username.toLowerCase());
+      // Only dispatch push notifications if peer is not actively viewing this conversation
+      if (!peerInConversation) {
+        // Check for @mention in 1-on-1 chat
+        const mentionMatches = input.content.match(/@(\w+)/g);
+        const isMentioned =
+          mentionMatches &&
+          peerMember?.user?.username &&
+          mentionMatches.some((m) => m.slice(1).toLowerCase() === peerMember.user.username.toLowerCase());
 
-      if (isMentioned) {
-        PushNotificationService.notifyMention(
-          peerId,
-          senderName,
-          input.content.trim(),
-          {
-            conversationId,
-            senderId: userId,
-            messageId: message.id,
+        if (isMentioned) {
+          PushNotificationService.notifyMention(
+            peerId,
             senderName,
-          }
-        ).catch(() => null);
-      } else if (input.type === 'GAME_INVITE' && input.metadata) {
-        const meta = input.metadata as any;
-        const roomCode: string = meta?.roomCode || '';
-        const gameName: string = meta?.gameName || 'a game';
-        PushNotificationService.notifyGameInvite(
-          peerId,
-          senderName,
-          gameName,
-          roomCode,
-          {
-            inviterId: userId,
-            gameType: meta?.gameType,
-            conversationId,
-          }
-        ).catch(() => null);
-      } else {
-        PushNotificationService.notifyNewMessage(
-          peerId,
-          senderName,
-          input.content.trim(),
-          {
-            conversationId,
-            senderId: userId,
-            messageId: message.id,
+            input.content.trim(),
+            {
+              conversationId,
+              senderId: userId,
+              messageId: message.id,
+              senderName,
+            }
+          ).catch(() => null);
+        } else if (input.type === 'GAME_INVITE' && input.metadata) {
+          const meta = input.metadata as any;
+          const roomCode = meta?.roomCode || '';
+          const gameName = meta?.gameName || 'a game';
+          PushNotificationService.notifyGameInvite(
+            peerId,
             senderName,
-          }
-        ).catch(() => null);
+            gameName,
+            roomCode,
+            {
+              inviterId: userId,
+              gameType: meta?.gameType,
+              conversationId,
+            }
+          ).catch(() => null);
+        } else {
+          PushNotificationService.notifyNewMessage(
+            peerId,
+            senderName,
+            input.content.trim(),
+            {
+              conversationId,
+              senderId: userId,
+              messageId: message.id,
+              senderName,
+            }
+          ).catch(() => null);
+        }
       }
     }
 
@@ -1294,32 +1367,37 @@ export class ChatService {
       select: { id: true, senderId: true, status: true },
     });
 
+    if (messages.length === 0) {
+      return { success: true, count: 0 };
+    }
+
     const now = new Date();
+    const msgIds = messages.map((m) => m.id);
 
-    for (const msg of messages) {
-      // Upsert receipt record for this user
-      await prisma.messageReceipt.upsert({
-        where: {
-          messageId_userId: { messageId: msg.id, userId },
-        },
-        create: {
-          messageId: msg.id,
-          conversationId,
-          userId,
-          status: 'DELIVERED',
-          deliveredAt: now,
-        },
-        update: {},
-      });
+    // Batch create delivery receipts (skipping existing)
+    await prisma.messageReceipt.createMany({
+      data: msgIds.map((id) => ({
+        messageId: id,
+        conversationId,
+        userId,
+        status: 'DELIVERED' as const,
+        deliveredAt: now,
+      })),
+      skipDuplicates: true,
+    }).catch(() => null);
 
-      if (!conv.isGroup) {
-        // 1-on-1: update message status to DELIVERED if it was SENT
+    if (!conv.isGroup) {
+      // 1-on-1: update message status to DELIVERED in one single query
+      const sentMsgIds = messages.filter((m) => m.status === 'SENT').map((m) => m.id);
+      if (sentMsgIds.length > 0) {
+        await prisma.message.updateMany({
+          where: { id: { in: sentMsgIds } },
+          data: { status: 'DELIVERED' },
+        });
+      }
+
+      for (const msg of messages) {
         if (msg.status === 'SENT') {
-          await prisma.message.update({
-            where: { id: msg.id },
-            data: { status: 'DELIVERED' },
-          });
-
           emitToUser(msg.senderId, 'chat:message_delivered', {
             conversationId,
             messageId: msg.id,
@@ -1336,39 +1414,55 @@ export class ChatService {
             status: 'DELIVERED',
           });
         }
-      } else {
-        // Group: check if all other members have received it
-        const otherMembersCount = conv.members.filter((m) => m.userId !== msg.senderId).length;
-        const receiptsCount = await prisma.messageReceipt.count({
-          where: { messageId: msg.id },
-        });
-
-        const isAllDelivered = receiptsCount >= otherMembersCount;
-        if (isAllDelivered && msg.status === 'SENT') {
-          await prisma.message.update({
-            where: { id: msg.id },
-            data: { status: 'DELIVERED' },
-          });
-        }
-
-        emitToUser(msg.senderId, 'chat:message_delivered', {
-          conversationId,
-          messageId: msg.id,
-          deliveredTo: userId,
-          deliveredAt: now.toISOString(),
-          status: isAllDelivered ? 'DELIVERED' : msg.status,
-          isAllDelivered,
-        });
-
-        emitToConversation(conversationId, 'chat:message_delivered', {
-          conversationId,
-          messageId: msg.id,
-          deliveredTo: userId,
-          deliveredAt: now.toISOString(),
-          status: isAllDelivered ? 'DELIVERED' : msg.status,
-          isAllDelivered,
-        });
       }
+      return { success: true, count: messages.length };
+    }
+
+    // Group chat: Batch count existing receipts for these messages
+    const existingReceipts = await prisma.messageReceipt.findMany({
+      where: { messageId: { in: msgIds } },
+      select: { messageId: true },
+    });
+
+    const receiptsCountByMsg = new Map<string, number>();
+    for (const r of existingReceipts) {
+      receiptsCountByMsg.set(r.messageId, (receiptsCountByMsg.get(r.messageId) || 0) + 1);
+    }
+
+    const allDeliveredIds: string[] = [];
+    for (const msg of messages) {
+      const otherMembersCount = Math.max(0, conv.members.filter((m) => m.userId !== msg.senderId).length);
+      const count = receiptsCountByMsg.get(msg.id) || 0;
+      const isAllDelivered = count >= otherMembersCount;
+
+      if (isAllDelivered && msg.status === 'SENT') {
+        allDeliveredIds.push(msg.id);
+      }
+
+      emitToUser(msg.senderId, 'chat:message_delivered', {
+        conversationId,
+        messageId: msg.id,
+        deliveredTo: userId,
+        deliveredAt: now.toISOString(),
+        status: isAllDelivered ? 'DELIVERED' : msg.status,
+        isAllDelivered,
+      });
+
+      emitToConversation(conversationId, 'chat:message_delivered', {
+        conversationId,
+        messageId: msg.id,
+        deliveredTo: userId,
+        deliveredAt: now.toISOString(),
+        status: isAllDelivered ? 'DELIVERED' : msg.status,
+        isAllDelivered,
+      });
+    }
+
+    if (allDeliveredIds.length > 0) {
+      await prisma.message.updateMany({
+        where: { id: { in: allDeliveredIds } },
+        data: { status: 'DELIVERED' },
+      });
     }
 
     return { success: true, count: messages.length };
@@ -1379,7 +1473,7 @@ export class ChatService {
    * Respects user's Read Receipts privacy toggle in 1-on-1 chats.
    * Group chats always track member read receipts.
    */
-  static async markAsRead(userId: string, conversationId: string) {
+  static async markAsRead(userId: string, conversationId: string, messageIds?: string[]) {
     const conv = await prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -1408,12 +1502,26 @@ export class ChatService {
 
     const readerReadReceipts = currentMember.user.profile?.readReceipts ?? true;
 
-    // Find all incoming messages not yet read by this user
-    const incomingMessages = await prisma.message.findMany({
-      where: {
-        conversationId,
-        senderId: { not: userId },
+    // Build filter for incoming messages not yet read by this user
+    const messageWhere: any = {
+      conversationId,
+      senderId: { not: userId },
+      NOT: {
+        receipts: {
+          some: {
+            userId,
+            status: 'READ',
+          },
+        },
       },
+    };
+
+    if (messageIds && Array.isArray(messageIds) && messageIds.length > 0) {
+      messageWhere.id = { in: messageIds };
+    }
+
+    const incomingMessages = await prisma.message.findMany({
+      where: messageWhere,
       select: {
         id: true,
         senderId: true,
@@ -1421,105 +1529,174 @@ export class ChatService {
       },
     });
 
-    const now = new Date();
-    const readMessageIds: string[] = [];
-
-    for (const msg of incomingMessages) {
-      // Upsert receipt with READ status
-      await prisma.messageReceipt.upsert({
-        where: {
-          messageId_userId: { messageId: msg.id, userId },
-        },
-        create: {
-          messageId: msg.id,
-          conversationId,
-          userId,
-          status: 'READ',
-          deliveredAt: now,
-          readAt: now,
-        },
-        update: {
-          status: 'READ',
-          readAt: now,
-        },
-      });
-
-      readMessageIds.push(msg.id);
-
-      if (!conv.isGroup) {
-        // 1-on-1 Chat: check privacy rules
-        const senderMember = conv.members.find((m) => m.userId === msg.senderId);
-        const senderReadReceipts = senderMember?.user.profile?.readReceipts ?? true;
-
-        if (readerReadReceipts && senderReadReceipts) {
-          // Both have read receipts enabled -> Update to READ (2 Blue Ticks)
-          await prisma.message.update({
-            where: { id: msg.id },
-            data: { status: 'READ' },
-          });
-
-          emitToUser(msg.senderId, 'chat:messages_read', {
-            conversationId,
-            messageId: msg.id,
-            readBy: userId,
-            readAt: now.toISOString(),
-            status: 'READ',
-          });
-        } else {
-          // Privacy enabled (turned off): ensure message status is at least DELIVERED (2 Grey Ticks)
-          if (msg.status === 'SENT') {
-            await prisma.message.update({
-              where: { id: msg.id },
-              data: { status: 'DELIVERED' },
-            });
-            emitToUser(msg.senderId, 'chat:message_delivered', {
-              conversationId,
-              messageId: msg.id,
-              deliveredTo: userId,
-              deliveredAt: now.toISOString(),
-              status: 'DELIVERED',
-            });
-          }
-        }
-      } else {
-        // Group Chat: always track receipts
-        const otherMembersCount = conv.members.filter((m) => m.userId !== msg.senderId).length;
-        const readReceiptsCount = await prisma.messageReceipt.count({
-          where: { messageId: msg.id, status: 'READ' },
-        });
-
-        const isAllRead = readReceiptsCount >= otherMembersCount;
-        if (isAllRead) {
-          await prisma.message.update({
-            where: { id: msg.id },
-            data: { status: 'READ' },
-          });
-        } else if (msg.status === 'SENT') {
-          await prisma.message.update({
-            where: { id: msg.id },
-            data: { status: 'DELIVERED' },
-          });
-        }
-
-        emitToUser(msg.senderId, 'chat:messages_read', {
-          conversationId,
-          messageId: msg.id,
-          readBy: userId,
-          readAt: now.toISOString(),
-          status: isAllRead ? 'READ' : (msg.status === 'SENT' ? 'DELIVERED' : msg.status),
-          isAllRead,
-        });
-      }
+    if (incomingMessages.length === 0) {
+      return { conversationId, markedCount: 0, messageUpdates: [] };
     }
 
-    emitToConversation(conversationId, 'chat:messages_read', {
+    const now = new Date();
+    const readMessageIds = incomingMessages.map((m) => m.id);
+
+    // 1. Batch upsert receipts: update existing to READ and create missing in 2 single queries
+    await prisma.messageReceipt.updateMany({
+      where: {
+        messageId: { in: readMessageIds },
+        userId,
+      },
+      data: {
+        status: 'READ',
+        readAt: now,
+      },
+    });
+
+    await prisma.messageReceipt.createMany({
+      data: readMessageIds.map((msgId) => ({
+        messageId: msgId,
+        conversationId,
+        userId,
+        status: 'READ' as const,
+        deliveredAt: now,
+        readAt: now,
+      })),
+      skipDuplicates: true,
+    }).catch(() => null);
+
+    if (!conv.isGroup) {
+      // 1-on-1: Check privacy rules and batch update messages in 1 query
+      const senderMember = conv.members.find((m) => m.userId !== userId);
+      const senderReadReceipts = senderMember?.user.profile?.readReceipts ?? true;
+      const targetStatus = (readerReadReceipts && senderReadReceipts) ? 'READ' : 'DELIVERED';
+
+      await prisma.message.updateMany({
+        where: { id: { in: readMessageIds } },
+        data: { status: targetStatus },
+      });
+
+      const messageUpdates = incomingMessages.map((msg) => ({
+        id: msg.id,
+        messageId: msg.id,
+        senderId: msg.senderId,
+        readCount: 1,
+        totalRecipients: 1,
+        isAllRead: targetStatus === 'READ',
+        status: targetStatus,
+      }));
+
+      const isAllReadBatch = targetStatus === 'READ';
+      const readPayload = {
+        conversationId,
+        readBy: userId,
+        readAt: now.toISOString(),
+        messageIds: readMessageIds,
+        status: targetStatus,
+        isAllRead: isAllReadBatch,
+        messageUpdates,
+        isGroup: false,
+      };
+
+      emitToConversation(conversationId, 'chat:messages_read', readPayload);
+      if (senderMember) {
+        emitToUser(senderMember.userId, 'chat:messages_read', readPayload);
+      }
+
+      return { conversationId, markedCount: readMessageIds.length, messageUpdates };
+    }
+
+    // Group Chat: Query all existing READ receipts for these messages in 1 query
+    const existingReadReceipts = await prisma.messageReceipt.findMany({
+      where: {
+        messageId: { in: readMessageIds },
+        status: 'READ',
+      },
+      select: {
+        messageId: true,
+        userId: true,
+      },
+    });
+
+    const receiptsByMsg = new Map<string, Set<string>>();
+    for (const r of existingReadReceipts) {
+      let set = receiptsByMsg.get(r.messageId);
+      if (!set) {
+        set = new Set();
+        receiptsByMsg.set(r.messageId, set);
+      }
+      set.add(r.userId);
+    }
+
+    const messagesToMarkRead: string[] = [];
+    const messagesToMarkDelivered: string[] = [];
+    const messageUpdates = incomingMessages.map((msg) => {
+      const otherMembersCount = Math.max(0, conv.members.filter((m) => m.userId !== msg.senderId).length);
+      const readSet = receiptsByMsg.get(msg.id) || new Set();
+      // Ensure current user is counted as read
+      readSet.add(userId);
+      const readCount = readSet.size;
+      const isAllRead = otherMembersCount > 0 && readCount >= otherMembersCount;
+      const finalStatus = isAllRead ? ('READ' as const) : msg.status === 'SENT' ? ('DELIVERED' as const) : msg.status;
+
+      if (isAllRead && msg.status !== 'READ') {
+        messagesToMarkRead.push(msg.id);
+      } else if (!isAllRead && msg.status === 'SENT') {
+        messagesToMarkDelivered.push(msg.id);
+      }
+
+      return {
+        id: msg.id,
+        messageId: msg.id,
+        senderId: msg.senderId,
+        readCount,
+        totalRecipients: otherMembersCount,
+        isAllRead,
+        status: finalStatus,
+      };
+    });
+
+    if (messagesToMarkRead.length > 0) {
+      await prisma.message.updateMany({
+        where: { id: { in: messagesToMarkRead } },
+        data: { status: 'READ' },
+      });
+    }
+    if (messagesToMarkDelivered.length > 0) {
+      await prisma.message.updateMany({
+        where: { id: { in: messagesToMarkDelivered } },
+        data: { status: 'DELIVERED' },
+      });
+    }
+
+    const isAllReadBatch = messageUpdates.length > 0 && messageUpdates.every((u) => u.isAllRead);
+    const batchStatus = isAllReadBatch ? ('READ' as const) : ('DELIVERED' as const);
+
+    const readPayload = {
       conversationId,
       readBy: userId,
       readAt: now.toISOString(),
       messageIds: readMessageIds,
+      status: batchStatus,
+      isAllRead: isAllReadBatch,
+      messageUpdates,
+      isGroup: conv.isGroup,
+    };
+
+    // Broadcast to conversation room (authoritative real-time sync for all members)
+    emitToConversation(conversationId, 'chat:messages_read', readPayload);
+    emitToConversation(conversationId, 'group:read_receipt', readPayload);
+
+    // Notify individual senders who might not be inside the active conversation room
+    const senders = new Set(incomingMessages.map((m) => m.senderId));
+    senders.forEach((senderId) => {
+      const senderUpdates = messageUpdates.filter((u) => u.senderId === senderId);
+      const isSenderAllRead = senderUpdates.length > 0 && senderUpdates.every((u) => u.isAllRead);
+      emitToUser(senderId, 'chat:messages_read', {
+        ...readPayload,
+        status: isSenderAllRead ? 'READ' : 'DELIVERED',
+        isAllRead: isSenderAllRead,
+        messageIds: senderUpdates.map((u) => u.id),
+        messageUpdates: senderUpdates,
+      });
     });
 
-    return { conversationId, markedCount: readMessageIds.length };
+    return { conversationId, markedCount: readMessageIds.length, messageUpdates };
   }
 
   /**
@@ -1567,8 +1744,10 @@ export class ChatService {
       }))
       .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime());
 
+    const readUserIds = new Set(readBy.map((r) => r.userId));
+
     const deliveredTo = message.receipts
-      .filter((r) => r.deliveredAt)
+      .filter((r) => r.deliveredAt && !readUserIds.has(r.userId))
       .map((r) => ({
         userId: r.userId,
         username: r.user.username,
@@ -1578,9 +1757,9 @@ export class ChatService {
       }))
       .sort((a, b) => new Date(b.timestamp!).getTime() - new Date(a.timestamp!).getTime());
 
-    const deliveredUserIds = new Set(message.receipts.map((r) => r.userId));
+    const accountedUserIds = new Set([...readUserIds, ...deliveredTo.map((r) => r.userId)]);
     const pending = conv.members
-      .filter((m) => m.userId !== message.senderId && !deliveredUserIds.has(m.userId))
+      .filter((m) => m.userId !== message.senderId && !accountedUserIds.has(m.userId))
       .map((m) => ({
         userId: m.userId,
         username: m.user.username,

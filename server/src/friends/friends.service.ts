@@ -198,7 +198,7 @@ export class FriendsService {
 
     // Push notification to recipient if they're offline
     const senderDisplayName = request.sender.profile?.displayName || request.sender.username;
-    PushNotificationService.notifyFriendRequest(targetUserId, senderDisplayName).catch(() => null);
+    PushNotificationService.notifyFriendRequest(targetUserId, senderDisplayName, request.sender.id).catch(() => null);
 
     return {
       requestId: request.id,
@@ -265,7 +265,7 @@ export class FriendsService {
 
     // Push notification to original sender if they're offline
     const acceptorName = request.receiver.profile?.displayName || request.receiver.username;
-    PushNotificationService.notifyFriendRequestAccepted(senderId, acceptorName).catch(() => null);
+    PushNotificationService.notifyFriendRequestAccepted(senderId, acceptorName, userId).catch(() => null);
 
     return {
       requestId,
